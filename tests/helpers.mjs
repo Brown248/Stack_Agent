@@ -8,8 +8,34 @@ import { fileURLToPath } from "node:url";
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const sampleDir = path.join(repoRoot, "examples", "sample-backend");
 
+const created = [];
+process.on("exit", () => {
+	if (process.env.STACK_AGENT_KEEP_TEMP) return;
+	for (const dir of created) {
+		try {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+		} catch {}
+	}
+});
+
+export function tempDir(prefix = "stack-agent-test-") {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+	created.push(dir);
+	return dir;
+}
+
+export function copyExample(name) {
+	const from = path.join(repoRoot, "examples", name);
+	const dir = tempDir(`stack-agent-${name}-`);
+	fs.cpSync(from, dir, {
+		recursive: true,
+		filter: (src) => !/[\\/]\.stack-agent[\\/](evidence|bin)([\\/]|$)/.test(src) && !/[\\/]__pycache__([\\/]|$)/.test(src),
+	});
+	return dir;
+}
+
 export function copySample() {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-test-"));
+	const dir = tempDir();
 	fs.cpSync(sampleDir, dir, {
 		recursive: true,
 		filter: (src) => !/[\\/]\.stack-agent[\\/](evidence|bin)([\\/]|$)/.test(src) && !/^data([\\/]|$)/.test(path.relative(sampleDir, src)),

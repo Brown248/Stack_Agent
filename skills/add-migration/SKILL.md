@@ -1,6 +1,6 @@
 ---
 name: add-migration
-description: Add a database schema migration safely: reversible, tested up and down against a local database, and never editing a migration that already shipped. Use for "add a migration", "ทำ migration", "add a column", "change the schema".
+description: For projects with a database. Add a schema migration safely: reversible, tested up and down against a local database, and never editing a migration that already shipped. Use for "add a migration", "ทำ migration", "add a column", "change the schema".
 ---
 
 # Add a migration
@@ -21,7 +21,7 @@ Reference setup: the Stack Agent sample backend (`examples/sample-backend`) uses
 1. Generate the migration with the repo's own generator command so the file name and ordering follow the convention (sample: `node scripts/migrate.mjs new add_price`).
 2. Write the up and down parts.
 3. Against a local or disposable database only, run: up, then down, then up again. All three must succeed. Check the schema after each step (sample: `status`, or `PRAGMA table_info(<table>)` for SQLite). Paste the commands and their last lines in your reply. For the sample, point `DB_FILE` at a scratch file, e.g. `DB_FILE=data/scratch.db node scripts/migrate.mjs up`.
-4. Update the code that reads and writes the changed tables, and its tests. Run the test suite and the verify-api skill (`node .stack-agent/bin/verify.mjs`). Both must pass with the new schema. Verify must start the server on a database migrated by the repo's runner (the sample's `verify.json` runs `migrate.mjs up` before the server, and the server refuses to start with pending migrations).
+4. Update the code that reads and writes the changed tables, and its tests. Run the test suite and the verify skill (`node .stack-agent/bin/verify.mjs`). Both must pass with the new schema. Verify must start the server on a database migrated by the repo's runner (the sample's `verify.json` runs `migrate.mjs up` before the server, and the server refuses to start with pending migrations).
 5. Run `node .stack-agent/bin/guard.mjs`. It must print `guard: ok`.
 
 ## Report

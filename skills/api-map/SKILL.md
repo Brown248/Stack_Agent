@@ -1,6 +1,6 @@
 ---
 name: api-map
-description: Read or update the repo's API map (.stack-agent/api-map.md) that says which file handles each endpoint and what it calls. Use to find where an endpoint lives before changing it, when triaging a vague bug report ("POST /orders is slow", a screenshot of an error), and after adding, removing, or moving a route.
+description: For HTTP backends (backend-http preset). Read or update the repo's API map (.stack-agent/api-map.md) that says which file handles each endpoint and what it calls. Use to find where an endpoint lives before changing it, when triaging a vague bug report ("POST /orders is slow", a screenshot of an error), and after adding, removing, or moving a route.
 ---
 
 # API map
@@ -22,7 +22,7 @@ node .stack-agent/bin/api-map.mjs
 - `missing from map`: add a row.
 - `stale in map`: the route is gone, remove the row.
 - `bad handler path`: fix the path.
-- `warning: no verify check covers`: add a check in `.stack-agent/verify.json` (see the verify-api skill).
+- `warning: no verify check covers`: add a check in `.stack-agent/verify.json` (see the verify skill).
 - `warning: still has TODO cells`: a human has not reviewed that row. Fill it only from what the code shows.
 
 The command must print `api-map: ok` before you finish.

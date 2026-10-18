@@ -79,7 +79,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 			const list = verdict.files.slice(0, 10).join(", ") + (verdict.files.length > 10 ? ", ..." : "");
 			process.stderr.write(
 				`stack-agent: code changed but ${verdict.why} (${list}). Before you finish, run the full verification ` +
-					`(\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify-api skill) and report its evidence file, ` +
+					`(\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify skill) and report its evidence file, ` +
 					`or say plainly why it cannot run here. This reminder fires once per change set.\n`,
 			);
 			process.exitCode = 2;

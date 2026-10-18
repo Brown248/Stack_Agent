@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
-import { copySample, sampleDir, write } from "./helpers.mjs";
+import { copySample, sampleDir, tempDir, write } from "./helpers.mjs";
 
 const { openDb } = await import(pathToFileURL(path.join(sampleDir, "src/db.js")));
 const { MigrationError, create, down, loadMigrations, status, up } = await import(pathToFileURL(path.join(sampleDir, "scripts/migrate.mjs")));
 
 function migrationsDir(files) {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-migrations-"));
+	const dir = tempDir("stack-agent-migrations-");
 	for (const [name, sql] of Object.entries(files)) write(dir, name, sql);
 	return dir;
 }

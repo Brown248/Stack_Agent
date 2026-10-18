@@ -40,7 +40,9 @@ export function loadConfig(configPath) {
 		if (rule.type === "pattern") {
 			if (!rule.pattern || typeof rule.pattern !== "string") throw new ConfigError(`${where}: pattern rules need a pattern string`);
 			try {
-				rule.regex = new RegExp(rule.pattern, "g" + (rule.flags ?? "").replace("g", ""));
+				if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(rule.pattern))
+					throw new ConfigError(`${where}: pattern contains a control character; in JSON a regex \\b must be written "\\\\b"`);
+				rule.regex = new RegExp(rule.pattern, "gm" + (rule.flags ?? "").replace(/[gm]/g, ""));
 			} catch (err) {
 				throw new ConfigError(`${where}: bad pattern: ${err.message}`);
 			}

@@ -1,23 +1,49 @@
 # Stack Agent
 
-Claude Code plugin ที่เปลี่ยน "ความรู้ในหัวและใน prompt" ให้เป็นระบบที่บังคับใช้ได้จริงใน backend repo ตามสรุปจาก 3 คลิป (Lauren Tan / pstack และวิธีของวิศวกร Anthropic) ได้แก่ verification ที่มีหลักฐาน, guard ที่ห้ามพลาด (hook + CI แบบ ratchet), แผนที่ API ที่ตรวจ drift ได้, skill เล็กที่มี script, judge แยกตัว และ evals
+A Claude Code plugin and template that turns your team's know-how into structure an AI agent cannot skip: verification with evidence, guard rules that ratchet, hooks that stop shortcuts, small skills with scripts, a blind judge, and evals that measure whether any of it helps.
 
-> ดู [docs/traceability.md](docs/traceability.md) ว่าแต่ละข้อในสรุปถูกทำเป็นไฟล์ไหน ตรวจสอบอย่างไร และอะไรที่ยังไม่ได้ทำพร้อมเหตุผล
+It works for any kind of project. Presets cover HTTP backends, web frontends, CLIs, and libraries, and the core works for anything you can test with a command. Install it as a plugin, or fork it and make it yours.
 
-## ทำอะไรได้บ้าง
+[ภาษาไทย](README.th.md)
 
-| ชั้น | ไฟล์ | หน้าที่ |
+## Why
+
+AI agents write code fast, but three things keep you watching every line:
+
+- They say "it should work" without running anything.
+- They take the shortest path that compiles, and the structure rots.
+- They repeat mistakes, because a rule in a prompt is easy to forget.
+
+Stack Agent moves rules out of prompts and into things that fail loudly: a verify run that must pass, a guard that fails CI, and hooks that stop the agent at the moment it reaches for a shortcut. The ideas come from Lauren Tan's talks on pstack and from how Anthropic engineers build Claude Code skills. See [docs/design-notes.md](docs/design-notes.md).
+
+## What you get
+
+| Layer | Where | What it does |
 | --- | --- | --- |
-| Verification | `scripts/verify.mjs`, skill `verify-api` | รันเทส เปิด server จริง ยิง endpoint ตาม `verify.json` แล้วเขียนหลักฐานลง `.stack-agent/evidence/` |
-| Hard constraint (CI) | `scripts/guard.mjs` | กฎห้ามพลาดแบบ regex, import ต้องห้าม, ขอบเขตโมดูล พร้อม baseline แบบ ratchet: ของเก่าผ่าน ของใหม่ต้องไม่เพิ่ม |
-| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | ดักคำสั่ง Bash/PowerShell: บล็อกการปิด git hook (`--no-verify`, `-n`, `HUSKY=0`, `core.hooksPath`), ถามก่อน force-push / ลบ branch / `reset --hard` / `clean -f` / ยกระดับ baseline / แก้ไฟล์ของ guard; รัน guard ทุกครั้งที่ Edit/Write; เตือนครั้งเดียวถ้าจะจบงานโดยไม่มีหลักฐาน verify แบบเต็ม ดักด้วยการอ่าน pattern จึงไม่ครอบคลุมทุกรูปแบบ CI คือด่านสุดท้าย |
-| Soft constraint | `.stack-agent/rules.md` (template) | วิธีเขียนที่ทีมชอบ ยืดหยุ่นได้ |
-| Feature Map → API map | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่จากโค้ด, ตรวจว่าแผนที่ตรงกับ route จริง, เตือน endpoint ที่ยังไม่มี verify check |
-| Skills | `skills/*/SKILL.md` | `add-endpoint`, `add-migration`, `verify-api`, `api-map`, `correct`, `reflect`, `sample-review`, `run-evals`, `stack-agent-init` |
-| Subagents | `agents/judge.md`, `agents/reviewer.md` | judge ให้คะแนนตาม rubric อย่างเดียว, reviewer ตรวจ diff ก่อนส่งคน ทั้งคู่ห้ามแก้ไฟล์ |
-| Evals | `evals/*` | `claude plugin eval` เทียบผลแบบมีและไม่มี plugin (Δ) |
+| Verification | `scripts/verify.mjs`, skill `verify` | Runs your tests, starts your server if you have one, runs HTTP checks and command checks, and writes evidence to `.stack-agent/evidence/`. |
+| Hard constraints (CI) | `scripts/guard.mjs` | Regex rules for any language, plus import rules for JS/TS. A baseline ratchets: existing violations pass, new ones fail. `--compare-ref` fails a PR that loosens the rules. |
+| Hard constraints (live) | `hooks/hooks.json` | Blocks hook bypasses (`--no-verify`, `HUSKY=0`, `core.hooksPath`), asks before force-push, branch deletion, `reset --hard`, or edits to the guard's own files. Runs the guard after every edit. Reminds once to verify before the agent stops. |
+| Soft constraints | `.stack-agent/rules.md` | Team preferences loaded into every session. |
+| Feature map (backends) | `scripts/api-map.mjs`, skill `api-map` | Drafts an endpoint map from code and fails when the map drifts. |
+| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `run-evals`, and for backends `add-endpoint`, `add-migration`, `api-map`. |
+| Agents | `agents/` | `judge` scores work against a rubric. `reviewer` checks a diff before a human does. Neither edits files. |
+| Evals | `evals/` | `claude plugin eval` cases that compare runs with and without the plugin. |
 
-## ติดตั้ง
+## Presets
+
+| Preset | For | Verify uses |
+| --- | --- | --- |
+| `generic` | anything (default) | your test command and one smoke command |
+| `backend-http` | APIs and web servers | a server, HTTP checks, and an API map |
+| `frontend-web` | web apps | a dev server, a page check, and an e2e command |
+| `cli` | command-line tools | command checks for `--help`, the main path, and bad input |
+| `library` | packages others import | a build and an example that uses the public API |
+
+Every preset includes two universal guard rules: no merge-conflict markers and no private keys.
+
+## Quick start
+
+### Use it as a plugin
 
 ```bash
 claude plugin marketplace add Brown248/Stack_Agent
@@ -27,46 +53,44 @@ claude plugin marketplace add Brown248/Stack_Agent
 claude plugin install stack-agent@stack-agent-marketplace
 ```
 
-ทดลองจากเครื่องโดยไม่ต้อง push ให้ใช้ path ของ repo แทน เช่น `claude plugin marketplace add D:/Stack_Agent`
+Then, in Claude Code inside your project, run `/stack-agent:stack-agent-init`. It picks a preset with you, fills in the config, and runs each check until it passes.
 
-ใน Claude Code คำสั่งของ plugin จะมี prefix เช่น `/stack-agent:stack-agent-init`
+Or set it up by hand from a clone:
 
-## เริ่มใช้กับ backend repo
-
-เปิด Claude Code ใน backend repo แล้วพิมพ์ `/stack-agent:stack-agent-init` skill จะพาทำตามลำดับในสรุป:
-
-1. **Verification:** กรอก `.stack-agent/verify.json` จนรัน `node .stack-agent/bin/verify.mjs` แล้วได้ `verify: ok`
-2. **Guard:** ใส่กฎห้ามพลาด 3–5 ข้อใน `.stack-agent/guard.config.json` แล้วรัน `--update-baseline` ครั้งแรกเพื่อบันทึกของเก่า
-3. **แผนที่ API:** `api-map.mjs --draft` ให้ AI ร่าง แล้วคนตรวจแถวที่ยังเป็น `TODO`
-4. **Skills:** ใช้ `add-endpoint`, `add-migration` และเพิ่ม skill ของงานที่ทีมทำบ่อย
-5. **Evals:** รันเมื่อมี skill ให้วัดแล้ว (`/stack-agent:run-evals`)
-
-รายละเอียดทีละขั้นอยู่ใน [docs/adoption.md](docs/adoption.md)
-
-`init.mjs` คัดลอก script ไปไว้ที่ `.stack-agent/bin/` ของ repo ปลายทาง เพื่อให้ CI รันได้โดยไม่ต้องมี plugin และเพิ่ม `.github/workflows/stack-agent.yml` ให้ถ้ายังไม่มี
-
-## ข้อกำหนด
-
-- Node.js 22 ขึ้นไปในเครื่องและใน CI (script ไม่มี dependency) ทดสอบจริงแล้วบน Node 25.9 / Windows 11 ส่วน Node 22/24 บน Linux และ Windows ตั้งไว้ใน CI แล้วแต่ยังไม่ได้รันจริง
-- Claude Code v2.1.269 ขึ้นไปสำหรับ `claude plugin eval`
-- กฎแบบ `forbidden-import` และ `module-boundary` อ่าน import ของ JS/TS เท่านั้น ส่วนกฎแบบ `pattern` ใช้ได้กับทุกภาษา
-
-## โครงสร้าง repo
-
-```
-.claude-plugin/   plugin.json, marketplace.json
-agents/           judge.md, reviewer.md
-hooks/            hooks.json
-skills/           9 skills
-scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs, hooks/, lib/
-templates/        config ตั้งต้นที่ init.mjs คัดลอกไปให้ repo ปลายทาง
-examples/         sample-backend: backend ตัวอย่างที่ติดตั้งครบ ใช้เป็น fixture ของเทสและ evals
-evals/            4 eval cases + scaffold.mjs
-tests/            node:test 93 เทส ครอบคลุมทุก script และ hook
-docs/             traceability.md, adoption.md
+```bash
+node path/to/Stack_Agent/scripts/init.mjs . --preset cli
 ```
 
-## พัฒนา plugin นี้
+`init.mjs` copies the tools into `.stack-agent/bin/` so CI runs them without the plugin. It adds config templates and a GitHub Actions workflow only where none exist. Re-running it is safe. `--check` reports what is still unfinished.
+
+### Fork it
+
+Fork or clone the repo, then change anything: add a preset, a guard rule, a skill, or an eval case. Point your team at your fork with `claude plugin marketplace add <you>/<your-fork>`. See [docs/customizing.md](docs/customizing.md).
+
+## Daily use
+
+1. The agent changes code. The hook runs the guard on each edit and reports violations with the fix.
+2. Before it finishes, it runs `node .stack-agent/bin/verify.mjs` and reports the evidence file. If it tries to stop without one, the Stop hook reminds it once.
+3. CI runs the guard and `--compare-ref` on every pull request, plus the API map check in projects that have one.
+4. When you correct the agent twice for the same thing, run `/stack-agent:correct` to turn it into a rule.
+5. Spot-check recent commits with `/stack-agent:sample-review` instead of reviewing every PR first.
+
+The full setup walkthrough is in [docs/adoption.md](docs/adoption.md).
+
+## Examples
+
+- [`examples/sample-backend`](examples/sample-backend): a Node HTTP API on `node:sqlite` with modules, a migration runner, an API map, and a deliberate legacy violation that shows the ratchet.
+- [`examples/sample-cli`](examples/sample-cli): a Python CLI with command checks and a "core stays pure" guard rule. It shows that the project itself does not need to be Node.
+
+## Requirements and limits
+
+- Node.js 22 or newer, only to run the tools. The project can use any language.
+- `forbidden-import` and `module-boundary` rules read JS/TS imports only. Use `pattern` rules for other languages.
+- The hooks match command patterns. They catch common shortcuts, not every possible one. CI is the gate that always holds.
+- `claude plugin eval` needs Claude Code 2.1.269 or newer. Cases that let the agent use Bash need Linux, macOS, or WSL2, because native Windows has no sandbox for them.
+- Tested on Windows 11 with Node 25. CI is set up for Linux and Windows on Node 22 and 24.
+
+## Developing Stack Agent
 
 ```bash
 npm test
@@ -76,8 +100,8 @@ npm test
 claude plugin validate . --strict
 ```
 
-กติกาสำหรับคน/AI ที่แก้ repo นี้อยู่ใน `.claude/CLAUDE.md`
+Rules for working on this repo are in [.claude/CLAUDE.md](.claude/CLAUDE.md).
 
-## สิ่งที่ตั้งใจยังไม่ทำ
+## License
 
-ตามสรุป: ยังไม่ทำ auto-merge และ outer loop (ดึงงานจาก Slack/Linear อัตโนมัติ) เพราะ repo ที่จะใช้มีทีมอื่นใช้ร่วมด้วย เริ่มจาก AI ทำแล้วคนรีวิวก่อน เหตุผลของแต่ละข้ออยู่ใน [docs/traceability.md](docs/traceability.md)
+[MIT](LICENSE)

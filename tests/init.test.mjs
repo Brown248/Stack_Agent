@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { copySample, repoRoot, runNode, write } from "./helpers.mjs";
+import { copySample, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
 const initScript = path.join(repoRoot, "scripts", "init.mjs");
-const emptyDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-init-"));
+const emptyDir = () => tempDir("stack-agent-init-");
 
 test("init copies tools and templates, and is safe to rerun", () => {
 	const dir = emptyDir();

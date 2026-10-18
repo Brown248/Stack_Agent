@@ -20,5 +20,6 @@ jobs:
       - name: Guard config and baseline were not loosened in this PR
         if: github.event_name == 'pull_request'
         run: node .stack-agent/bin/guard.mjs --compare-ref "origin/${{ github.base_ref }}"
-      - name: API map drift
+      - name: API map drift (only when the project has an API map)
+        if: hashFiles('.stack-agent/api-map.json') != ''
         run: node .stack-agent/bin/api-map.mjs

@@ -17,9 +17,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: npm test
-      - name: Sample backend passes its own guard, map, and verify
+      - name: Examples pass their own guard, map, and verify
         run: |
           node scripts/guard.mjs --root examples/sample-backend
           node scripts/api-map.mjs --root examples/sample-backend
           node scripts/verify.mjs --root examples/sample-backend
+          node scripts/guard.mjs --root examples/sample-cli
+          node scripts/verify.mjs --root examples/sample-cli

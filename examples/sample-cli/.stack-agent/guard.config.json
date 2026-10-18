@@ -1,0 +1,33 @@
+{
+  "baseline": ".stack-agent/guard-baseline.json",
+  "ignore": ["__pycache__"],
+  "rules": [
+    {
+      "id": "no-merge-conflict-markers",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "^(<{7}|>{7})( .*)?$",
+      "flags": "m",
+      "message": "an unresolved merge conflict marker was committed",
+      "fix": "resolve the conflict and delete the <<<<<<< / >>>>>>> lines"
+    },
+    {
+      "id": "no-private-keys",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "-----BEGIN ((RSA|EC|DSA|OPENSSH) )?PRIVATE KEY-----",
+      "message": "a private key is in the repository",
+      "fix": "remove it, rotate the key, and load it from a secret store or an untracked env file"
+    },
+    {
+      "id": "core-is-pure",
+      "type": "pattern",
+      "files": ["wordfreq/core.py"],
+      "pattern": "\\b(print|input|sys\\.exit|open)\\(",
+      "message": "core.py must stay pure: no printing, prompting, exiting, or file access",
+      "fix": "return a value or raise ValueError from core.py, and do the I/O in wordfreq/cli.py"
+    }
+  ]
+}

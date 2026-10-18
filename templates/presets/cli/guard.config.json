@@ -1,0 +1,33 @@
+{
+  "baseline": ".stack-agent/guard-baseline.json",
+  "ignore": [],
+  "rules": [
+    {
+      "id": "no-merge-conflict-markers",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "^(<{7}|>{7})( .*)?$",
+      "flags": "m",
+      "message": "an unresolved merge conflict marker was committed",
+      "fix": "resolve the conflict and delete the <<<<<<< / >>>>>>> lines"
+    },
+    {
+      "id": "no-private-keys",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "-----BEGIN ((RSA|EC|DSA|OPENSSH) )?PRIVATE KEY-----",
+      "message": "a private key is in the repository",
+      "fix": "remove it, rotate the key, and load it from a secret store or an untracked env file"
+    },
+    {
+      "id": "edit-me-first-project-rule",
+      "type": "pattern",
+      "files": ["EDIT ME: glob of the files this rule covers, e.g. src/**"],
+      "pattern": "EDIT ME: a regex for the mistake that must never ship",
+      "message": "EDIT ME: what is wrong, in one sentence",
+      "fix": "EDIT ME: what to use or do instead, naming the file or function"
+    }
+  ]
+}

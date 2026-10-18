@@ -10,16 +10,39 @@ const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests
                       [--check NAME...] [--reuse] [--json]
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
 
+const CHECK_TYPES = ["http", "command"];
+
+export function checkType(check) {
+	return check.type ?? (check.command !== undefined ? "command" : "http");
+}
+
 export function loadVerifyConfig(file) {
 	const config = readJson(file, "verify config");
 	if (!config.test?.command && !config.checks?.length) throw new ConfigError("verify config needs test.command or checks[]");
-	if (config.checks?.length) {
-		if (!config.baseUrl) throw new ConfigError("verify config needs baseUrl when checks[] is set");
-		const names = new Set();
-		for (const c of config.checks) {
-			if (!c.name || !c.method || !c.path || typeof c.expectStatus !== "number") throw new ConfigError(`check ${JSON.stringify(c.name ?? "?")} needs name, method, path, expectStatus`);
-			if (names.has(c.name)) throw new ConfigError(`duplicate check name ${c.name}`);
-			names.add(c.name);
+	if (config.checks !== undefined && !Array.isArray(config.checks)) throw new ConfigError("checks must be an array");
+	const names = new Set();
+	for (const c of config.checks ?? []) {
+		const where = `check ${JSON.stringify(c.name ?? "?")}`;
+		if (!c.name) throw new ConfigError(`${where} needs a name`);
+		if (names.has(c.name)) throw new ConfigError(`duplicate check name ${c.name}`);
+		names.add(c.name);
+		const type = checkType(c);
+		if (!CHECK_TYPES.includes(type)) throw new ConfigError(`${where}: type must be one of ${CHECK_TYPES.join(", ")}`);
+		if (type === "http") {
+			if (!c.method || !c.path || typeof c.expectStatus !== "number") throw new ConfigError(`${where}: http checks need method, path, expectStatus`);
+			if (!config.baseUrl) throw new ConfigError("verify config needs baseUrl when it has http checks");
+		}
+		if (type === "command") {
+			if (!c.command || typeof c.command !== "string") throw new ConfigError(`${where}: command checks need a command string`);
+			if (c.expectExit !== undefined && !Number.isInteger(c.expectExit)) throw new ConfigError(`${where}: expectExit must be an integer`);
+			if (c.needsServer !== undefined && typeof c.needsServer !== "boolean") throw new ConfigError(`${where}: needsServer must be true or false`);
+			if (c.expectOutputMatches !== undefined) {
+				try {
+					new RegExp(c.expectOutputMatches, c.expectOutputFlags ?? "m");
+				} catch (err) {
+					throw new ConfigError(`${where}: bad expectOutputMatches: ${err.message}`);
+				}
+			}
 		}
 	}
 	return config;
@@ -46,27 +69,39 @@ function spawnTree(command, root, env) {
 	return spawn(command, { cwd: root, shell: true, detached: process.platform !== "win32", env: childEnv(env), windowsHide: true });
 }
 
-function collect(child, max = 8000) {
-	let text = "";
+export const OUTPUT_LIMIT = 8 * 1024 * 1024;
+
+function collect(child, limit = OUTPUT_LIMIT) {
+	let head = "";
+	let rest = "";
+	let truncated = false;
 	const add = (d) => {
-		text += String(d);
-		if (text.length > max * 2) text = text.slice(-max);
+		const chunk = String(d);
+		if (head.length < limit / 2) {
+			const room = limit / 2 - head.length;
+			head += chunk.slice(0, room);
+			rest += chunk.slice(room);
+		} else rest += chunk;
+		if (rest.length > limit) {
+			rest = rest.slice(-limit / 2);
+			truncated = true;
+		}
 	};
 	child.stdout.on("data", add);
 	child.stderr.on("data", add);
-	return () => text;
+	return () => ({ text: truncated ? head + "\n...[output truncated]...\n" + rest.slice(-limit / 2) : head + rest, truncated });
 }
 
-async function runTests(root, test) {
+async function runCommand(root, { command, env, cwd, timeoutSec }, defaultTimeoutSec) {
 	const started = Date.now();
-	const child = spawnTree(test.command, root, test.env);
+	const child = spawnTree(command, cwd ? path.resolve(root, cwd) : root, env);
 	const output = collect(child);
 	let timedOut = false;
 	const exitCode = await new Promise((resolve) => {
 		const timer = setTimeout(async () => {
 			timedOut = true;
 			await stopProcess(child);
-		}, (test.timeoutSec ?? 600) * 1000);
+		}, (timeoutSec ?? defaultTimeoutSec) * 1000);
 		child.on("close", (code) => {
 			clearTimeout(timer);
 			resolve(code);
@@ -76,7 +111,28 @@ async function runTests(root, test) {
 			resolve(null);
 		});
 	});
-	return { step: "tests", command: test.command, ok: exitCode === 0 && !timedOut, exitCode, timedOut, durationMs: Date.now() - started, output: tail(output()) };
+	const { text, truncated } = output();
+	return { exitCode, timedOut, output: text, truncated, durationMs: Date.now() - started };
+}
+
+async function runTests(root, test) {
+	const r = await runCommand(root, test, 600);
+	return { step: "tests", command: test.command, ok: r.exitCode === 0 && !r.timedOut, exitCode: r.exitCode, timedOut: r.timedOut, durationMs: r.durationMs, output: tail(r.output) };
+}
+
+async function runCommandCheck(root, check) {
+	const r = await runCommand(root, check, 120);
+	const expectExit = check.expectExit ?? 0;
+	const problems = [];
+	if (r.timedOut) problems.push(`timed out after ${check.timeoutSec ?? 120}s`);
+	else if (r.exitCode !== expectExit) problems.push(`exit ${r.exitCode}, expected ${expectExit}`);
+	if (check.expectOutputIncludes && !r.output.includes(check.expectOutputIncludes)) problems.push(`output does not include ${JSON.stringify(check.expectOutputIncludes)}`);
+	const flags = check.expectOutputFlags ?? "m";
+	if (check.expectOutputMatches && !new RegExp(check.expectOutputMatches, flags).test(r.output)) problems.push(`output does not match /${check.expectOutputMatches}/${flags}`);
+	if (check.expectOutputExcludes && r.output.includes(check.expectOutputExcludes)) problems.push(`output includes ${JSON.stringify(check.expectOutputExcludes)}`);
+	if (r.truncated && (check.expectOutputIncludes || check.expectOutputMatches || check.expectOutputExcludes))
+		problems.push(`output was over ${OUTPUT_LIMIT / 1024 / 1024} MB, so the middle was dropped before matching; make the command quieter`);
+	return { step: "check", type: "command", name: check.name, request: check.command, ok: problems.length === 0, exitCode: r.exitCode, timedOut: r.timedOut, truncated: r.truncated, problems, output: tail(r.output, 1000), durationMs: r.durationMs };
 }
 
 async function responds(url) {
@@ -146,7 +202,7 @@ export function joinUrl(baseUrl, checkPath) {
 async function runCheck(baseUrl, check) {
 	const started = Date.now();
 	const headers = { ...(check.body !== undefined ? { "content-type": "application/json" } : {}), ...check.headers };
-	const result = { step: "check", name: check.name, request: `${check.method} ${check.path}`, expectStatus: check.expectStatus };
+	const result = { step: "check", type: "http", name: check.name, request: `${check.method} ${check.path}`, expectStatus: check.expectStatus };
 	try {
 		const res = await fetch(joinUrl(baseUrl, check.path), {
 			method: check.method,
@@ -191,7 +247,8 @@ export async function runVerify({ root, config, skipTests, skipChecks, only, reu
 	if (checks.length && !skipChecks) {
 		let server;
 		try {
-			if (config.server) {
+			const wantsServer = checks.some((c) => checkType(c) === "http" || c.needsServer === true);
+			if (config.server && wantsServer) {
 				const busy = await responds(config.server.readyUrl);
 				if (busy && !reuse) {
 					steps.push({ step: "server", ok: false, reason: `something already answers at ${config.server.readyUrl}. Stop it, change the port, or pass --reuse to drive it as is.` });
@@ -203,7 +260,7 @@ export async function runVerify({ root, config, skipTests, skipChecks, only, reu
 					if (!server.ok) return steps;
 				}
 			}
-			for (const check of checks) steps.push(await runCheck(config.baseUrl, check));
+			for (const check of checks) steps.push(checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(config.baseUrl, check));
 		} finally {
 			await stopProcess(server?.child);
 		}
@@ -228,6 +285,7 @@ function summarize(steps) {
 		const mark = s.ok ? "PASS" : "FAIL";
 		if (s.step === "tests") return `${mark} tests: ${s.command} (exit ${s.exitCode}${s.timedOut ? ", timed out" : ""})${s.ok ? "" : "\n" + s.output}`;
 		if (s.step === "server") return `${mark} server: ${s.ok ? "ready" : s.reason}${s.ok || !s.log ? "" : "\n" + s.log}`;
+		if (s.type === "command") return `${mark} check ${s.name}: ${s.request} -> exit ${s.exitCode}${s.ok ? "" : " (" + s.problems.join("; ") + ")\n" + s.output}`;
 		return `${mark} check ${s.name}: ${s.request} -> ${s.status ?? "no response"}${s.ok ? "" : " (" + s.problems.join("; ") + ")"}`;
 	});
 }

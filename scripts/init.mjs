@@ -4,38 +4,62 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ConfigError, parseArgs, toPosix } from "./lib/files.mjs";
 
-const USAGE = `usage: node init.mjs [TARGET_DIR] [--check]
+const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--check] [--list-presets]
   copies the Stack Agent tools into TARGET_DIR/.stack-agent/bin (refreshed on every run),
-  adds config templates and a CI workflow only where none exist, and ignores the evidence dir.
-  --check  only report setup that is still unfinished (EDIT ME placeholders, missing files)
+  adds config templates for the chosen preset and a CI workflow only where none exist,
+  and ignores the evidence dir.
+  --preset NAME   project type: generic (default), backend-http, cli, library, frontend-web
+  --check         only report setup that is still unfinished (EDIT ME placeholders, missing files)
+  --list-presets  print the available presets
 exit codes: 0 done / setup complete, 1 setup still has placeholders, 2 usage error`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
 const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "lib/files.mjs"];
-const TEMPLATES = [
-	["templates/.stack-agent/guard.config.json", ".stack-agent/guard.config.json"],
-	["templates/.stack-agent/verify.json", ".stack-agent/verify.json"],
-	["templates/.stack-agent/api-map.json", ".stack-agent/api-map.json"],
-	["templates/.stack-agent/rules.md", ".stack-agent/rules.md"],
-	["templates/.stack-agent/rules-table.md", ".stack-agent/rules-table.md"],
+const PRESETS_DIR = path.join(pluginRoot, "templates", "presets");
+const COMMON = [
+	["templates/common/rules.md", ".stack-agent/rules.md"],
+	["templates/common/rules-table.md", ".stack-agent/rules-table.md"],
 	["templates/ci/stack-agent.yml", ".github/workflows/stack-agent.yml"],
 ];
+const ALWAYS_REQUIRED = [".stack-agent/guard.config.json", ".stack-agent/verify.json", ...COMMON.map(([, dest]) => dest)];
 const GITIGNORE_LINE = ".stack-agent/evidence/";
+const PRESET_FILES = ["guard.config.json", "verify.json", "api-map.json"];
+const PRESET_MARKER = ".stack-agent/preset";
+
+export function recordedPreset(target) {
+	const file = path.join(target, PRESET_MARKER);
+	return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : null;
+}
+
+export function listPresets() {
+	return fs
+		.readdirSync(PRESETS_DIR, { withFileTypes: true })
+		.filter((d) => d.isDirectory())
+		.map((d) => d.name)
+		.sort();
+}
+
+export function templatesFor(preset) {
+	if (!listPresets().includes(preset)) throw new ConfigError(`unknown preset ${JSON.stringify(preset)}; choose one of: ${listPresets().join(", ")}`);
+	const presetFiles = PRESET_FILES.filter((f) => fs.existsSync(path.join(PRESETS_DIR, preset, f))).map((f) => [`templates/presets/${preset}/${f}`, `.stack-agent/${f}`]);
+	return [...presetFiles, ...COMMON];
+}
 
 export function pendingSetup(target) {
 	const pending = [];
-	for (const [, dest] of TEMPLATES) {
+	const usesApiMap = fs.existsSync(path.join(target, ".stack-agent/api-map.json"));
+	for (const dest of [...ALWAYS_REQUIRED, ...(usesApiMap ? [".stack-agent/api-map.json"] : [])]) {
 		const abs = path.join(target, dest);
 		if (!fs.existsSync(abs)) pending.push(`${dest}: missing`);
 		else if (fs.readFileSync(abs, "utf8").includes("EDIT ME")) pending.push(`${dest}: still has EDIT ME placeholders`);
 	}
-	if (!fs.existsSync(path.join(target, ".stack-agent/api-map.md"))) pending.push(".stack-agent/api-map.md: missing, create it with `node .stack-agent/bin/api-map.mjs --draft`");
+	if (usesApiMap && !fs.existsSync(path.join(target, ".stack-agent/api-map.md"))) pending.push(".stack-agent/api-map.md: missing, create it with `node .stack-agent/bin/api-map.mjs --draft`");
 	if (!fs.existsSync(path.join(target, ".stack-agent/guard-baseline.json"))) pending.push(".stack-agent/guard-baseline.json: missing, record existing violations with `node .stack-agent/bin/guard.mjs --update-baseline`");
 	return pending;
 }
 
-export function init(target) {
+export function init(target, preset = "generic") {
 	const report = [];
 	for (const tool of TOOLS) {
 		const dest = path.join(target, ".stack-agent/bin", tool);
@@ -48,7 +72,7 @@ export function init(target) {
 		}
 		report.push(`${same ? "unchanged" : existed ? "updated  " : "created  "} .stack-agent/bin/${tool}`);
 	}
-	for (const [src, dest] of TEMPLATES) {
+	for (const [src, dest] of templatesFor(preset)) {
 		const abs = path.join(target, dest);
 		if (fs.existsSync(abs)) {
 			report.push(`kept     ${dest} (already exists, not overwritten)`);
@@ -57,6 +81,10 @@ export function init(target) {
 		fs.mkdirSync(path.dirname(abs), { recursive: true });
 		fs.copyFileSync(path.join(pluginRoot, src), abs);
 		report.push(`created  ${dest}`);
+	}
+	if (!recordedPreset(target)) {
+		fs.writeFileSync(path.join(target, PRESET_MARKER), preset + "\n");
+		report.push(`created  ${PRESET_MARKER} (${preset})`);
 	}
 	const gitignore = path.join(target, ".gitignore");
 	const current = fs.existsSync(gitignore) ? fs.readFileSync(gitignore, "utf8") : "";
@@ -70,13 +98,19 @@ export function init(target) {
 }
 
 function main(argv) {
-	const args = parseArgs(argv, { flags: ["check", "help"] });
+	const args = parseArgs(argv, { flags: ["check", "help", "list-presets"], options: ["preset"] });
 	if (args.help) return { code: 0, text: USAGE };
+	if (args["list-presets"]) return { code: 0, text: listPresets().join("\n") };
 	if (args._.length > 1) throw new ConfigError("give at most one target directory");
 	const target = path.resolve(args._[0] ?? process.cwd());
 	if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) throw new ConfigError(`target is not a directory: ${target}`);
-	if (path.resolve(target) === pluginRoot) throw new ConfigError("target is the Stack Agent repo itself; run this inside the backend repo");
-	const lines = args.check ? [] : init(target);
+	if (path.resolve(target) === pluginRoot) throw new ConfigError("target is the Stack Agent repo itself; run this inside the project you want to set up");
+	const recorded = recordedPreset(target);
+	const preset = args.preset ?? recorded ?? "generic";
+	templatesFor(preset);
+	if (!args.check && recorded && recorded !== preset)
+		throw new ConfigError(`this repo was set up with preset ${recorded}; mixing in ${preset} would keep ${recorded}'s configs. To switch, delete ${PRESET_MARKER} and the .stack-agent/*.json files you want replaced, then rerun`);
+	const lines = args.check ? [] : [`preset: ${preset}`, ...init(target, preset)];
 	const pending = pendingSetup(target);
 	lines.push(pending.length ? `\nsetup unfinished in ${toPosix(target)}:\n${pending.map((p) => "  - " + p).join("\n")}` : `\nsetup complete in ${toPosix(target)}`);
 	return { code: args.check && pending.length ? 1 : 0, text: lines.join("\n") };

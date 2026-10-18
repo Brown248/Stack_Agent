@@ -1,7 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEFAULT_IGNORE = ["node_modules", ".git", "dist", "build", "coverage", ".stack-agent/evidence", ".stack-agent/bin"];
+const DEFAULT_IGNORE = [
+	"node_modules",
+	".git",
+	"dist",
+	"build",
+	"coverage",
+	"__pycache__",
+	".venv",
+	"venv",
+	".tox",
+	".pytest_cache",
+	".mypy_cache",
+	"target",
+	".stack-agent/evidence",
+	".stack-agent/bin",
+];
 
 export function toPosix(p) {
 	return p.split(path.sep).join("/");

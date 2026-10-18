@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { main as apiMap } from "../scripts/api-map.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
-import { copySample, repoRoot, runNode, write } from "./helpers.mjs";
+import { copySample, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
 function setMapConfig(dir, patch) {
 	const file = path.join(dir, ".stack-agent/api-map.json");
@@ -37,7 +36,7 @@ test("api-map: a zero-length-capable pattern does not loop forever", () => {
 
 test("init recognises existing evidence ignore lines in their common spellings", () => {
 	for (const line of [".stack-agent/evidence", "/.stack-agent/evidence/", ".stack-agent/evidence/**"]) {
-		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-gi-"));
+		const dir = tempDir("stack-agent-gi-");
 		write(dir, ".gitignore", line + "\n");
 		runNode(path.join(repoRoot, "scripts/init.mjs"), [dir]);
 		assert.equal(fs.readFileSync(path.join(dir, ".gitignore"), "utf8"), line + "\n", line);

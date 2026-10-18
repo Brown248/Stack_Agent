@@ -1,0 +1,24 @@
+{
+  "test": { "command": "EDIT ME: the command that runs the test suite", "timeoutSec": 600 },
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "help",
+      "command": "EDIT ME: your-cli --help",
+      "expectExit": 0,
+      "expectOutputIncludes": "EDIT ME: a word the help text always prints, e.g. Usage"
+    },
+    {
+      "name": "main-path",
+      "command": "EDIT ME: your-cli <the most common real invocation>",
+      "expectExit": 0,
+      "expectOutputIncludes": "EDIT ME: text the correct output contains"
+    },
+    {
+      "name": "rejects-bad-input",
+      "command": "EDIT ME: your-cli --no-such-flag",
+      "expectExit": 2,
+      "expectOutputIncludes": "EDIT ME: the error message users see"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, walk } from "./lib/files.mjs";
+import { checkType } from "./verify.mjs";
 
 const USAGE = `usage: node api-map.mjs [--root DIR] [--config FILE] [--draft] [--json]
   default  compare the API map with the routes found in code (drift check)
@@ -19,13 +20,19 @@ export function loadMapConfig(file) {
 	for (const s of config.sources) {
 		requireStringArray(s.files, "sources[].files");
 		if (!s.pattern || typeof s.pattern !== "string") throw new ConfigError("each source needs a pattern string");
+		if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(s.pattern)) throw new ConfigError('source pattern contains a control character; in JSON a regex \\b must be written "\\\\b"');
 		try {
-			s.regex = new RegExp(s.pattern, "g");
+			s.regex = new RegExp(s.pattern, "gm");
 		} catch (err) {
 			throw new ConfigError(`bad source pattern: ${err.message}`);
 		}
-		s.methodGroup ??= 1;
-		s.pathGroup ??= 2;
+		if (s.method !== undefined) {
+			if (typeof s.method !== "string" || !METHODS.includes(s.method.toUpperCase())) throw new ConfigError(`source method must be one of ${METHODS.join(", ")}`);
+			s.pathGroup ??= 1;
+		} else {
+			s.methodGroup ??= 1;
+			s.pathGroup ??= 2;
+		}
 	}
 	return config;
 }
@@ -41,10 +48,10 @@ export function routesFromCode(root, config, warnings = []) {
 			source.regex.lastIndex = 0;
 			for (let m; (m = source.regex.exec(text)); ) {
 				if (m[0] === "") source.regex.lastIndex++;
-				const method = m[source.methodGroup];
+				const method = source.method ?? m[source.methodGroup];
 				const routePath = m[source.pathGroup];
 				if (typeof method !== "string" || typeof routePath !== "string")
-					throw new ConfigError(`source pattern must capture the method in group ${source.methodGroup} and the path in group ${source.pathGroup} (match in ${rel})`);
+					throw new ConfigError(source.method ? `source pattern must capture the path in group ${source.pathGroup} (match in ${rel})` : `source pattern must capture the method in group ${source.methodGroup} and the path in group ${source.pathGroup} (match in ${rel})`);
 				const line = text.slice(0, m.index).split("\n").length;
 				routes.push({ method: method.toUpperCase(), path: routePath, file: rel, line });
 			}
@@ -76,7 +83,8 @@ export function diffMap({ root, routes, rows, checks }) {
 	const missingFromMap = routes.filter((r) => !inMap.has(key(r)));
 	const staleInMap = rows.filter((r) => !inCode.has(key(r)));
 	const badHandler = rows.filter((r) => !r.handler || !fs.existsSync(path.join(root, r.handler.split(":")[0])));
-	const unverified = routes.filter((r) => !checks.some((c) => c.method.toUpperCase() === r.method && routeRegex(r.path).test(c.path.split("?")[0])));
+	const httpChecks = checks.filter((c) => checkType(c) === "http" && typeof c.method === "string" && typeof c.path === "string");
+	const unverified = routes.filter((r) => !httpChecks.some((c) => c.method.toUpperCase() === r.method && routeRegex(r.path).test(c.path.split("?")[0])));
 	return { missingFromMap, staleInMap, badHandler, unverified };
 }
 

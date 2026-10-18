@@ -1,0 +1,28 @@
+{
+  "test": { "command": "EDIT ME: the command that runs unit tests", "timeoutSec": 600 },
+  "server": {
+    "command": "EDIT ME: the command that starts the dev or preview server",
+    "env": { "PORT": "3999" },
+    "readyUrl": "http://127.0.0.1:3999/",
+    "readyTimeoutSec": 120
+  },
+  "baseUrl": "http://127.0.0.1:3999",
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "home-page",
+      "method": "GET",
+      "path": "/",
+      "expectStatus": 200,
+      "expectBodyIncludes": "EDIT ME: markup the page always serves, e.g. id=\"root\""
+    },
+    {
+      "name": "e2e",
+      "command": "EDIT ME: browser tests against the running server, e.g. npx playwright test",
+      "needsServer": true,
+      "env": { "BASE_URL": "http://127.0.0.1:3999" },
+      "expectExit": 0,
+      "timeoutSec": 900
+    }
+  ]
+}

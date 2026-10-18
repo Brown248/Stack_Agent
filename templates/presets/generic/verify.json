@@ -1,0 +1,12 @@
+{
+  "test": { "command": "EDIT ME: the command that runs the test suite", "timeoutSec": 600 },
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "smoke",
+      "command": "EDIT ME: a command that runs the real program the way a user would",
+      "expectExit": 0,
+      "timeoutSec": 120
+    }
+  ]
+}

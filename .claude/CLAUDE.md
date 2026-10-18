@@ -1,9 +1,12 @@
 # Stack Agent: working in this repo
 
-This repo is a Claude Code plugin. Read `README.md` for what it is and `docs/traceability.md` for why each file exists.
+This repo is a Claude Code plugin and a template others fork. Read `README.md` for what it is, `docs/design-notes.md` for why each piece exists, and `docs/customizing.md` for where things live.
 
-- Scripts in `scripts/` are plain Node ESM with zero dependencies. Keep it that way: target repos vendor them into `.stack-agent/bin/` and CI runs them without `npm install`.
-- Every behavior in `scripts/` has a test in `tests/`. Run `npm test` before you report a change. Run `claude plugin validate . --strict` after touching `.claude-plugin/`, `skills/`, `agents/`, or `hooks/`.
-- `examples/sample-backend` is the fixture for tests and evals. Its legacy `module-boundary` violation in `src/modules/reports/controller.js` is deliberate: it is the ratchet demo. Do not "fix" it.
+- Keep it generic. Nothing here may assume one company, codebase, or language. Project-specific choices belong in a target repo's `.stack-agent/` files or in a preset template.
+- Scripts in `scripts/` are plain Node ESM with zero dependencies. Target repos vendor them into `.stack-agent/bin/`, and CI runs them without `npm install`.
+- Every behavior in `scripts/` has a test in `tests/`. Create temp folders only through `tempDir()` or `copySample()` / `copyExample()` in `tests/helpers.mjs`, so they are cleaned up. Run `npm test` before you report a change.
+- Run `claude plugin validate . --strict` after touching `.claude-plugin/`, `skills/`, `agents/`, or `hooks/`.
+- `examples/sample-backend` (Node API) and `examples/sample-cli` (Python CLI) are fixtures for tests and evals. The legacy `module-boundary` violation in `examples/sample-backend/src/modules/reports/controller.js` is the ratchet demo. Do not fix it.
+- Docs come in English (`README.md`, `docs/*.md`) and Thai (`README.th.md`, `docs/th/*.md`). Change both together.
 - After editing a skill, rerun its eval case (see `skills/run-evals/SKILL.md`).
 - Do not commit, push, or merge unless asked.

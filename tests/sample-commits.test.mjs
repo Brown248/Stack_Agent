@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { isGuardFile, main, pickIndexes } from "../scripts/sample-commits.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
-import { git, repoRoot, runNode, write } from "./helpers.mjs";
+import { git, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
 const script = path.join(repoRoot, "scripts", "sample-commits.mjs");
 const sample = (dir, ...args) => main(["--root", dir, ...args]);
@@ -25,7 +24,7 @@ function commit(dir, rel, text, message, date) {
 
 // Two old commits (10 days ago), then eight recent ones; recent #4 touches the guard baseline, #6 the guard config.
 function makeRepo() {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-sample-"));
+	const dir = tempDir("stack-agent-sample-");
 	git(dir, "init", "-q");
 	commit(dir, "src/old1.js", "1\n", "old one", daysAgo(10));
 	commit(dir, "src/old2.js", "2\n", "old two", daysAgo(10));
@@ -115,7 +114,7 @@ test("a root commit lists its files and an empty window exits 0", () => {
 });
 
 test("a repo with no commits yet samples nothing", () => {
-	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-sample-"));
+	const dir = tempDir("stack-agent-sample-");
 	git(dir, "init", "-q");
 	assert.equal(json(dir).total, 0);
 });
@@ -126,7 +125,7 @@ test("bad arguments throw ConfigError", () => {
 });
 
 test("CLI exits 2 on bad args and outside a git repo, 0 on success", () => {
-	const notRepo = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-sample-"));
+	const notRepo = tempDir("stack-agent-sample-");
 	const outside = runNode(script, ["--root", notRepo]);
 	assert.equal(outside.code, 2);
 	assert.match(outside.stderr, /not a git repository/);

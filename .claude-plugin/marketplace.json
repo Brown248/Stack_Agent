@@ -1,12 +1,14 @@
 {
   "name": "stack-agent-marketplace",
-  "owner": { "name": "Brown248" },
+  "owner": {
+    "name": "Brown248"
+  },
   "description": "Marketplace for the stack-agent plugin.",
   "plugins": [
     {
       "name": "stack-agent",
       "source": "./",
-      "description": "Verification, ratcheting guard rules, API map, skills, judge, and evals for backend repos.",
+      "description": "Verification, ratcheting guard rules, hooks, skills, judge, and evals for any project, with presets per project type.",
       "version": "0.1.0"
     }
   ]

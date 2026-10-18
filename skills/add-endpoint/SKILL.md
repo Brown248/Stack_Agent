@@ -1,6 +1,6 @@
 ---
 name: add-endpoint
-description: Add a new HTTP endpoint to the backend the way this repo does it, with a test, a verify check, a guard-clean layout, and an updated API map. Use for "add an endpoint", "เพิ่ม endpoint", "new route", "new API".
+description: For HTTP backends (backend-http preset). Add a new HTTP endpoint the way this repo does it, with a test, a verify check, a guard-clean layout, and an updated API map. Use for "add an endpoint", "เพิ่ม endpoint", "new route", "new API".
 ---
 
 # Add an endpoint
@@ -29,7 +29,7 @@ It must print `guard: ok`. If it names a rule, follow its `fix` line. Never rais
 
 ## 5. Prove it on the running API
 
-Add checks for the new endpoint to `.stack-agent/verify.json` (success and one rejection), then follow the verify-api skill. The full `node .stack-agent/bin/verify.mjs` must print `verify: ok`.
+Add checks for the new endpoint to `.stack-agent/verify.json` (success and one rejection), then follow the verify skill. The full `node .stack-agent/bin/verify.mjs` must print `verify: ok`.
 
 ## 6. Update the map
 

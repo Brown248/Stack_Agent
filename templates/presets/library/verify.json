@@ -1,0 +1,17 @@
+{
+  "test": { "command": "EDIT ME: the command that runs the test suite", "timeoutSec": 600 },
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "build",
+      "command": "EDIT ME: the command that builds or packages the library",
+      "expectExit": 0
+    },
+    {
+      "name": "example-as-a-user",
+      "command": "EDIT ME: run an example that uses the public API the way a consumer would, e.g. node examples/basic.mjs",
+      "expectExit": 0,
+      "expectOutputIncludes": "EDIT ME: text the example prints when the library works"
+    }
+  ]
+}

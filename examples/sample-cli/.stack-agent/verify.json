@@ -1,0 +1,30 @@
+{
+  "test": { "command": "python -m unittest discover -s tests", "timeoutSec": 120 },
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "help",
+      "command": "python -m wordfreq --help",
+      "expectExit": 0,
+      "expectOutputIncludes": "usage: wordfreq"
+    },
+    {
+      "name": "main-path",
+      "command": "python -m wordfreq samples/poem.txt --top 2",
+      "expectExit": 0,
+      "expectOutputMatches": "^8\\tthe\\r?\\n2\\train"
+    },
+    {
+      "name": "rejects-missing-file",
+      "command": "python -m wordfreq samples/nope.txt",
+      "expectExit": 1,
+      "expectOutputIncludes": "cannot read samples/nope.txt"
+    },
+    {
+      "name": "rejects-bad-top",
+      "command": "python -m wordfreq samples/poem.txt --top 0",
+      "expectExit": 2,
+      "expectOutputIncludes": "n must be at least 1"
+    }
+  ]
+}
