@@ -1,0 +1,15 @@
+{
+  "name": "stack-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Claude Code plugin: verification, ratcheting guard rules, API map, skills, judge, and evals for backend repos.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "validate": "claude plugin validate . --strict",
+    "sample:guard": "node scripts/guard.mjs --root examples/sample-backend",
+    "sample:verify": "node scripts/verify.mjs --root examples/sample-backend",
+    "sample:api-map": "node scripts/api-map.mjs --root examples/sample-backend"
+  }
+}

@@ -1,0 +1,2 @@
+# local SQLite databases (scripts/migrate.mjs, src/db.js)
+data/

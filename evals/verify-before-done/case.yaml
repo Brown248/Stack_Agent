@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: verify-before-done
+description: A small behavior change should end with a passing verify run and an evidence path, not a claim.
+tags: [verification]
+context:
+  scaffold_script: scaffold.sh

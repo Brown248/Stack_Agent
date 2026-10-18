@@ -1,0 +1,14 @@
+{
+  "test": { "command": "EDIT ME: the command that runs the test suite, e.g. npm test", "timeoutSec": 600 },
+  "server": {
+    "command": "EDIT ME: the command that starts the API locally",
+    "env": { "PORT": "3999" },
+    "readyUrl": "http://127.0.0.1:3999/health",
+    "readyTimeoutSec": 60
+  },
+  "baseUrl": "http://127.0.0.1:3999",
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    { "name": "health", "method": "GET", "path": "/health", "expectStatus": 200 }
+  ]
+}

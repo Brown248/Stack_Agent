@@ -1,0 +1,47 @@
+---
+name: run-evals
+description: Run and interpret the plugin's eval suite (claude plugin eval) to test whether a skill change actually improves agent behavior, comparing runs with and without the plugin. Use for /run-evals, "ทดสอบ skill", "run the evals", or before trusting an edited skill.
+disable-model-invocation: true
+---
+
+# Run the evals
+
+Evals are unit tests for skills. Each case in `evals/<case>/` gives an organic task to a fresh agent in an empty temporary directory, then graders score the result. `claude plugin eval` runs every case with the plugin and without it, so the delta (Δ) shows whether the plugin helps.
+
+## Requirements
+
+- Claude Code v2.1.269 or later.
+- These cases let the agent use Bash, and native Windows has no sandbox, so run them from WSL2 or Linux/macOS.
+- The cases use `--scaffold` to copy the sample backend into the run directory.
+
+## Run
+
+From the Stack Agent repo root:
+
+```bash
+claude plugin eval . --scaffold --allow-tools Bash Write Edit --no-publish --runs 1
+```
+
+Then the full run (3 runs per case) before trusting a change:
+
+```bash
+claude plugin eval . --scaffold --allow-tools Bash Write Edit --no-publish --json evals/results/last-run.json
+```
+
+- `--scaffold` runs each case's `scaffold.sh`, which copies `examples/sample-backend` into the run directory and installs the tools.
+- `--allow-tools Bash Write Edit` grants the gated tools the coding cases need. The read-only case (`api-map-lookup`) needs none.
+- `--no-publish` keeps the HTML report local instead of publishing it to claude.ai.
+- `--case "add-endpoint*"` runs one case. `--max-cost-usd <n>` is a spending cap. `--trust-plugin` skips the trust prompt in CI.
+- LLM graders use haiku by default, a different model from the one doing the work. `--judge-model <id>` changes it.
+
+The exit code is 0 only when every case reaches the threshold (default 1.0).
+
+## Read the result
+
+- A case that passes with the plugin but also passes without it (Δ ≈ 0) means the skill is not what made it pass. The skill may be unnecessary, or the case is too easy.
+- A case that fails with the plugin: read `evals/results/<timestamp>/report.html` and the run's trace. Find the step the agent skipped or misread, fix that skill, and rerun only that case.
+- Graders that score by script (`regex`, `tool_used`, `file_exists`) are facts. `llm` graders are judgment, so read the trace yourself when one disagrees with what you see.
+
+## Hill-climb
+
+One skill edit, one rerun, keep or revert. Do not stack untested edits. Stop when every case passes and Δ is positive, or report the case that still fails and why.

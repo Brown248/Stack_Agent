@@ -1,0 +1,31 @@
+{
+  "baseline": ".stack-agent/guard-baseline.json",
+  "ignore": ["test/fixtures"],
+  "rules": [
+    {
+      "id": "no-sql-in-controller",
+      "type": "pattern",
+      "files": ["src/modules/*/controller.js"],
+      "pattern": "\\b(SELECT\\s.+\\sFROM|INSERT\\s+INTO|UPDATE\\s+\\w+\\s+SET|DELETE\\s+FROM)\\b",
+      "flags": "i",
+      "message": "SQL belongs in the repository layer, not in a controller",
+      "fix": "move the query into src/modules/<module>/repository.js and call it through service.js"
+    },
+    {
+      "id": "controller-no-db",
+      "type": "forbidden-import",
+      "files": ["src/modules/*/controller.js", "src/modules/*/service.js"],
+      "to": ["src/db.js"],
+      "message": "only repositories may touch the database module",
+      "fix": "call src/modules/<module>/repository.js from service.js"
+    },
+    {
+      "id": "module-boundary",
+      "type": "module-boundary",
+      "modulesRoot": "src/modules",
+      "publicEntry": ["index.js"],
+      "message": "a module may use another module only through its public index.js",
+      "fix": "export what you need from src/modules/<other>/index.js and import that file"
+    }
+  ]
+}

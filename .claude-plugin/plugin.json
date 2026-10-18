@@ -1,0 +1,8 @@
+{
+  "name": "stack-agent",
+  "version": "0.1.0",
+  "description": "Turn team know-how into enforceable structure for backend repos: verification with evidence, ratcheting guard rules, an API map with drift checks, small skills, a blind judge, and evals.",
+  "author": { "name": "Brown248" },
+  "repository": "https://github.com/Brown248/Stack_Agent",
+  "keywords": ["verification", "guard", "lint", "ratchet", "api-map", "evals", "judge", "backend"]
+}

@@ -1,0 +1,23 @@
+{
+  "baseline": ".stack-agent/guard-baseline.json",
+  "ignore": [],
+  "rules": [
+    {
+      "id": "no-sql-in-controller",
+      "type": "pattern",
+      "files": ["src/controllers/**"],
+      "pattern": "\\b(SELECT\\s.+\\sFROM|INSERT\\s+INTO|UPDATE\\s+\\w+\\s+SET|DELETE\\s+FROM)\\b",
+      "flags": "i",
+      "message": "SQL belongs in the repository layer, not in a controller",
+      "fix": "EDIT ME: name the repository file or function to call instead"
+    },
+    {
+      "id": "module-boundary",
+      "type": "module-boundary",
+      "modulesRoot": "src/modules",
+      "publicEntry": ["index.js", "index.ts"],
+      "message": "a module may use another module only through its public entry",
+      "fix": "export what you need from src/modules/<other>/index and import that file"
+    }
+  ]
+}

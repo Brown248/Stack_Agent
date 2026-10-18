@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: add-migration-column
+description: Adding a column should ship as a new reversible migration, proven up, down, and up again on a local database, without touching the applied migration, and verified on the running API.
+tags: [skills, migrations, verification]
+context:
+  scaffold_script: scaffold.sh

@@ -1,0 +1,24 @@
+name: stack-agent
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Guard (hard constraints, ratchet against the baseline)
+        run: node .stack-agent/bin/guard.mjs
+      - name: Guard config and baseline were not loosened in this PR
+        if: github.event_name == 'pull_request'
+        run: node .stack-agent/bin/guard.mjs --compare-ref "origin/${{ github.base_ref }}"
+      - name: API map drift
+        run: node .stack-agent/bin/api-map.mjs

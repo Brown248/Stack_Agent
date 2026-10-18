@@ -1,0 +1,4 @@
+node_modules/
+**/.stack-agent/evidence/
+examples/sample-backend/.stack-agent/bin/
+evals/results/

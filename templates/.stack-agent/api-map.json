@@ -1,0 +1,12 @@
+{
+  "map": ".stack-agent/api-map.md",
+  "verifyConfig": ".stack-agent/verify.json",
+  "sources": [
+    {
+      "files": ["EDIT ME: glob of files that declare routes, e.g. src/routes/**/*.ts"],
+      "pattern": "EDIT ME: regex with a method group and a path group, e.g. router\\.(get|post|put|patch|delete)\\(\\s*['\"]([^'\"]+)",
+      "methodGroup": 1,
+      "pathGroup": 2
+    }
+  ]
+}
