@@ -52,6 +52,20 @@ export function decide({ root, files, ignore, evidence, reminded }) {
 	return { block: true, fingerprint, why, files: existing };
 }
 
+export function reminderMessage({ why, files, verifyConfigChanged }) {
+	const list = files.slice(0, 10).join(", ") + (files.length > 10 ? ", ..." : "");
+	const addCheck = verifyConfigChanged
+		? ""
+		: `${VERIFY} has no new check in this change set. If the change adds or changes behavior a user can see, ` +
+			`first add a check for it there (the success case and at least one rejection case), so the evidence covers ` +
+			`the new behavior and not only the old checks. If nothing a user can see changed, say so. `;
+	return (
+		`stack-agent: code changed but ${why} (${list}). Before you finish, ${addCheck ? addCheck + "Then run" : "run"} ` +
+		`the full verification (\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify skill) and report ` +
+		`its evidence file, or say plainly why it cannot run here. This reminder fires once per change set.\n`
+	);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const input = readHookInput();
 	const root = input.stop_hook_active ? null : findUp(input.cwd ?? process.cwd(), VERIFY);
@@ -76,12 +90,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 		if (verdict.block) {
 			fs.mkdirSync(evidenceDir, { recursive: true });
 			fs.writeFileSync(markerPath, verdict.fingerprint);
-			const list = verdict.files.slice(0, 10).join(", ") + (verdict.files.length > 10 ? ", ..." : "");
-			process.stderr.write(
-				`stack-agent: code changed but ${verdict.why} (${list}). Before you finish, run the full verification ` +
-					`(\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify skill) and report its evidence file, ` +
-					`or say plainly why it cannot run here. This reminder fires once per change set.\n`,
-			);
+			process.stderr.write(reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged: files.includes(VERIFY) }));
 			process.exitCode = 2;
 		}
 	}

@@ -27,7 +27,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
 | Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 150 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 152 tests |
 | Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -51,7 +51,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 150 pass on Windows 11, Node 25 |
+| Unit and integration tests | 152 pass on Windows 11, Node 25 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -60,6 +60,38 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | CI on Linux and Windows, Node 22/24 | configured, not yet run |
 | Hooks inside a live Claude Code session | verified in real headless runs (`claude -p --plugin-dir`, Claude Code 2.1.300, haiku, $0.05 total): the `--no-verify` deny, the guard-baseline ask, the PostToolUse guard, and the Stop reminder all fired, and the reminder stayed silent the second time |
 | Guard full-scan speed | after caching glob regexes and dropping redundant file checks: synthetic repos without imports, 1k/5k/20k files, 1,535→180 ms, 2,872→639 ms, 16,698→2,239 ms; import-heavy repos (`scripts/bench-guard.mjs`) 13–17% faster. Then each import target is resolved on disk once per run instead of once per import: import-heavy 1k/5k files, median 566→254 ms and 2,859→1,312 ms (about 2.2x; a noisy machine, best runs 511→213 and 1,775→860 ms). Output is byte-identical before and after each step. A later independent rerun on a busy machine was too noisy to confirm the exact ratio (3 of 4 comparisons faster, 1.7–3x; one slower), so treat it as indicative. Output hashes were identical in every run. |
+
+## Behavioral A/B with real agents (2026-10-19)
+
+Unit tests prove the tools work. This test asks a different question: does the plugin change what a real agent does?
+
+**Method.** Headless `claude -p` runs (Claude Code 2.1.300, Sonnet, at most $1 per run), with `--plugin-dir` versus without it. Each run got a fresh copy of `examples/sample-backend` with `init.mjs` already applied, so both arms had the same `.stack-agent/` files. Permissions were `acceptEdits` plus Read/Glob/Grep/Edit/Write and `node`/`npm` shell commands. Grading was done by scripts after each run, never by the agent's own summary: an independent HTTP probe (the script starts the server itself and calls the endpoints), the test suite, the guard, the API map, whether a fresh and full verify evidence file exists, and whether `verify.json` gained a check that covers the new rule. Transcripts were parsed to see which skills and hooks were involved.
+
+**Task 1: add `DELETE /items/:id`** (the prompt asks to make sure it works). 2 runs per arm.
+
+| | With plugin | Without |
+| --- | --- | --- |
+| Correct behavior, tests pass, guard ok, map updated | 2/2 | 2/2 |
+| Fresh full verify evidence | 2/2 | 2/2 |
+| Cost per run | about $0.41 | about $0.41 |
+
+There was no measurable difference. Both arms found and used the `.stack-agent/` files (rules, map, verify config) by reading the repo. On a well-specified task, the in-repo files did the work and the plugin added nothing measurable.
+
+**Task 2: reject item names over 50 characters** (the prompt does not ask for verification).
+
+| | Without plugin | Plugin, old Stop hook | Plugin, new Stop hook |
+| --- | --- | --- | --- |
+| Runs | 3 | 6 | 7 |
+| Correct behavior (independent probe) | 3/3 | 6/6 | 7/7 |
+| Fresh full verify evidence | 0/3 | 6/6 | 7/7 |
+| `verify.json` gained a check covering the 50-character rule | 0/3 | 1/6 | 7/7 |
+| Cost per run | $0.25–0.27 | $0.27–0.38 | $0.28–0.33 |
+
+- **The Stop hook is what made agents verify.** The plugin arm always produced evidence and the bare arm never did. The hook fired in 13 of the 15 plugin runs across both tasks (in the other 2 the agent had already verified). A skill was invoked in only 1 of the 15 runs, so the skills did not drive this behavior.
+- **The old hook let unchecked evidence through.** Agents re-ran the existing checks, which passed without ever exercising the new rule. The new hook adds a sentence when `verify.json` has not changed: add a check for the new behavior, success and rejection.
+- **Attribution of the new hook:** in 4 of the 7 runs the agent added the check by itself before stopping, so the new sentence never showed. In the other 3, the sentence appeared before any `verify.json` edit, and all 3 agents then added both an accept-50 and a reject-51 check. So the sentence worked 3 out of 3 times it was shown. An ablation rerun with the old hook gave 1/3, which confirms that adding a check on its own initiative varies from run to run.
+
+**Limits.** The samples are small (2 to 7 runs per cell), so read these as indications, not statistics. Only one model was tested. The sample app is tiny, so correctness hit a ceiling in every arm. The user's other installed plugins were loaded in both arms. Runs happened back to back on one machine. Total cost was about $6.30.
 
 ## Self-review log
 

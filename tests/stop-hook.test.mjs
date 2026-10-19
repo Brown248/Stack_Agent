@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { parsePorcelainZ } from "../scripts/hooks/stop-verify.mjs";
+import { parsePorcelainZ, reminderMessage } from "../scripts/hooks/stop-verify.mjs";
 import { copySample, git, repoRoot, runNode, write } from "./helpers.mjs";
 
 const stopHook = path.join(repoRoot, "scripts", "hooks", "stop-verify.mjs");
@@ -43,4 +43,35 @@ test("a renamed file counts as changed under its new name", () => {
 	const r = run(dir);
 	assert.equal(r.code, 2, r.stderr);
 	assert.match(r.stderr, /item-service\.js/);
+});
+
+test("the reminder asks for a new verify check only when verify.json did not change", () => {
+	const base = { why: "there is no verify evidence yet", files: ["src/modules/items/service.js"] };
+	const without = reminderMessage({ ...base, verifyConfigChanged: false });
+	assert.match(without, /\.stack-agent\/verify\.json has no new check in this change set/);
+	assert.match(without, /the success case and at least one rejection case/);
+	assert.match(without, /Then run the full verification/);
+	const withCheck = reminderMessage({ ...base, verifyConfigChanged: true });
+	assert.doesNotMatch(withCheck, /has no new check/);
+	assert.match(withCheck, /Before you finish, run the full verification/);
+});
+
+test("in a real repo the hook asks for a check after a code-only change, and not once verify.json changed too", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	write(dir, "src/modules/items/service.js", fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8") + "\n");
+	const codeOnly = run(dir);
+	assert.equal(codeOnly.code, 2, codeOnly.stderr);
+	assert.match(codeOnly.stderr, /has no new check in this change set/);
+
+	const verifyFile = path.join(dir, ".stack-agent/verify.json");
+	const config = JSON.parse(fs.readFileSync(verifyFile, "utf8"));
+	config.checks.push({ name: "new-behavior", method: "GET", path: "/health", expectStatus: 200 });
+	fs.writeFileSync(verifyFile, JSON.stringify(config, null, 2));
+	write(dir, "src/modules/items/repository.js", fs.readFileSync(path.join(dir, "src/modules/items/repository.js"), "utf8") + "\n");
+	const withCheck = run(dir);
+	assert.equal(withCheck.code, 2, withCheck.stderr);
+	assert.doesNotMatch(withCheck.stderr, /has no new check/);
 });
