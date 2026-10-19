@@ -106,3 +106,36 @@ path ที่ป้องกันอยู่ใน `scripts/hooks/protected-p
 ## เพิ่มโปรเจคตัวอย่าง
 
 ตัวอย่างใช้เป็น fixture ของเทสด้วย ให้ทำตามโครงของ `examples/sample-cli`: มีซอร์สจริง มีเทสของตัวเอง มี `.stack-agent/` ที่กรอกครบ (ไม่มี `EDIT ME`) และมี `guard-baseline.json` ว่างที่สร้างด้วย `guard.mjs --update-baseline` แล้วเพิ่มไฟล์เทสแบบ `tests/sample-cli.test.mjs` ที่รัน guard และ verify ของตัวอย่าง และเพิ่มขั้นใน CI
+
+## วัดพฤติกรรมของ agent (A/B)
+
+`scripts/ab/run.mjs` รัน task เดียวกันบนสำเนาใหม่ของ `examples/sample-backend` ทั้งแบบมีและไม่มี plugin แล้วตรวจผลด้วย script (HTTP probe อิสระ, เทส, guard, API map และหลักฐานจาก verify) ไม่เชื่อสรุปของ agent เอง คำสั่งนี้เรียก `claude -p` จึงเสียเงินจริง
+
+```bash
+npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model sonnet --budget 1
+```
+
+| ตัวเลือก | ความหมาย |
+| --- | --- |
+| `--task NAME` | task ใน `scripts/ab/tasks/` (`endpoint`, `validate`) ใส่ซ้ำได้หลายตัว จำเป็นต้องมี |
+| `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`) ค่าเริ่มต้น `full,none` |
+| `--runs N` | จำนวนรอบต่อ task และ arm ค่าเริ่มต้น 1 |
+| `--model`, `--budget USD` | ต้องระบุทั้งคู่ งบเป็นเพดานต่อรอบ ส่งเป็น `--max-budget-usd` และไม่มีค่าเริ่มต้นโดยตั้งใจ |
+| `--plugin DIR`, `--out DIR` | plugin ที่จะทดสอบ (ค่าเริ่มต้นคือ repo นี้) และที่เก็บผล (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |
+| `--no-isolate` | ไม่ส่ง `--setting-sources project,local --strict-mcp-config` ปกติจะแยกให้เสมอ |
+| `--dry-run` | สร้างโปรเจคและตรวจสำเนาที่ยังไม่แก้ ไม่เรียก `claude` ไม่เสียเงิน ใช้เช็ก task ใหม่ |
+| `--json` | พิมพ์ผลเป็น JSON แทนตารางสรุป |
+
+**ค่าใช้จ่าย** วัดกับ Sonnet แล้วรอบละประมาณ $0.25 ถึง $0.45 ดังนั้น `--runs 3` กับ 2 task และ 2 arm อยู่ราว $3 ถึง $5 ลอง `--dry-run` ก่อน
+
+**การแยกสภาพแวดล้อม** plugin และ settings ของคุณเองจะปนเข้าไปทั้งสองฝั่งถ้าไม่แยก จึงใช้ `--setting-sources project,local` และ `--strict-mcp-config` (ไม่โหลด MCP server ของผู้ใช้) ทุกรอบ และ harness อ่าน event `system/init` ของทุก transcript รอบที่ผิดเงื่อนไขจะถูกตั้งเป็น `invalid` ตัดออกจากตารางสรุป แจ้งเตือนดังๆ และ exit code เป็น 1 เมื่อ arm ที่มี plugin โหลด plugin อื่นนอกจาก `stack-agent`, arm `none` โหลด plugin ใดๆ, `hooks-only` ยังเห็น skill `stack-agent:` หรือ `skills-only` ยังเห็น hook ของ Stack Agent ทำงาน plugin ที่มากับ Claude Code (`@builtin`) ไม่นับ
+
+**สิ่งที่บันทึก** ใน `<out>/results.json` ทุกรอบ: git SHA ของ plugin และ worktree สกปรกหรือไม่, เวอร์ชัน harness, `claude --version`, model, arm, task, prompt, งบ, เวลาเริ่มและจบ, ค่าใช้จ่ายและจำนวน turn, จำนวน hook feedback กับบรรทัดแรก, skill ที่ agent เรียก, ผลการแยกสภาพแวดล้อม และผลของทุก grader ส่วน transcript ดิบอยู่ที่ `<out>/runs/<task>-<arm>-<n>.jsonl` และโปรเจคของแต่ละรอบอยู่ที่ `<out>/projects/` ดูว่า agent ทำอะไรจริงๆ ด้วย:
+
+```bash
+node scripts/ab/inspect.mjs <out>/runs
+```
+
+จะแสดง skill ที่เรียก, feedback จาก Stop hook ว่ามาก่อนหรือหลังการแก้ `verify.json` ครั้งแรก, การรัน `verify.mjs` และไฟล์ที่แก้
+
+**เพิ่ม task** สร้าง `scripts/ab/tasks/<name>.mjs` ที่ export `name`, `prompt`, `probe(dir)` และ `grade(dir)` โดย `probe` คืน `{ ok, detail }` ให้เปิดเซิร์ฟเวอร์ด้วย `withServer` และเรียกด้วย `call` จาก `scripts/ab/lib.mjs` เพื่อให้ harness เป็นเจ้าของพอร์ตและฐานข้อมูล `grade` คืน `{ checks, details }` โดยค่าทุกตัวใน `checks` เป็น boolean ที่ตารางสรุปนับเป็น `3/3` เริ่มจาก `commonGrade(dir)` (เทสผ่าน, guard ผ่าน, หลักฐานสดและครบ) ตรวจ task ด้วย `--dry-run` และเพิ่มเคสใน `tests/ab.test.mjs` ว่าสำเนาที่ไม่แก้ต้องไม่ผ่านและคำตอบที่เขียนเองต้องผ่าน

@@ -106,3 +106,36 @@ Protected paths are in `scripts/hooks/protected-paths.mjs`. Every pattern has a 
 ## Add an example project
 
 Examples double as test fixtures. Copy the layout of `examples/sample-cli`: real source, its own tests, a filled `.stack-agent/` (no `EDIT ME`), and an empty `guard-baseline.json` written by `guard.mjs --update-baseline`. Then add a test file like `tests/sample-cli.test.mjs` that runs the example's guard and verify, and a CI step.
+
+## Measure agent behavior (A/B)
+
+`scripts/ab/run.mjs` runs the same task on a fresh copy of `examples/sample-backend` with and without the plugin, then grades the result with scripts (an independent HTTP probe, the tests, the guard, the API map, and the verify evidence), never with the agent's own summary. It calls `claude -p`, so it spends real money.
+
+```bash
+npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model sonnet --budget 1
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--task NAME` | Task module in `scripts/ab/tasks/` (`endpoint`, `validate`). Repeat it for several. Required. |
+| `--arms` | Comma list of `full` (the plugin as is), `none` (no plugin), `hooks-only` (a copy without `skills/`), `skills-only` (a copy without `hooks/hooks.json`). Default `full,none`. |
+| `--runs N` | Runs per task and arm. Default 1. |
+| `--model`, `--budget USD` | Both required. The budget is a per-run cap passed as `--max-budget-usd`; there is no default on purpose. |
+| `--plugin DIR`, `--out DIR` | Plugin to test (default: this repo) and where to write results (default: a new folder under the system temp dir). |
+| `--no-isolate` | Do not pass `--setting-sources project,local --strict-mcp-config`. Isolation is the default. |
+| `--dry-run` | Scaffold and grade an untouched copy of each project. Never calls `claude`, costs nothing. Use it to check a new task. |
+| `--json` | Print the results as JSON instead of the summary table. |
+
+**Cost.** Measured on Sonnet, one run costs about $0.25 to $0.45, so `--runs 3` over 2 tasks and 2 arms is roughly $3 to $5. Try `--dry-run` first.
+
+**Isolation.** Your own plugins and settings would otherwise leak into both arms. Each run therefore uses `--setting-sources project,local` and `--strict-mcp-config` (no user MCP servers), and the harness reads the `system/init` event of every transcript. A run is marked `invalid` and left out of the summary (with a loud message and exit code 1) when the plugin arms loaded any plugin other than `stack-agent`, when the `none` arm loaded any plugin, when `hooks-only` still lists `stack-agent:` skills, or when `skills-only` still shows a Stack Agent hook firing. Plugins that ship inside Claude Code (`@builtin`) are ignored.
+
+**What is recorded.** In `<out>/results.json` for every run: the plugin's git SHA and whether its worktree was dirty, the harness version, `claude --version`, model, arm, task, prompt, budget, start and end time, cost and turns, the number of hook feedback events and the first line, the skills the agent called, the isolation result, and every grader verdict. Raw transcripts are in `<out>/runs/<task>-<arm>-<n>.jsonl` and the run projects in `<out>/projects/`. To see what an agent actually did:
+
+```bash
+node scripts/ab/inspect.mjs <out>/runs
+```
+
+It lists the skills invoked, the Stop-hook feedback and whether it came before or after the first edit to `verify.json`, the `verify.mjs` runs, and the files edited.
+
+**Add a task.** Drop `scripts/ab/tasks/<name>.mjs` that exports `name`, `prompt`, `probe(dir)` and `grade(dir)`. `probe` returns `{ ok, detail }`; start the server with `withServer` and call it with `call` from `scripts/ab/lib.mjs`, so the harness owns the port and database. `grade` returns `{ checks, details }`, where every value in `checks` is a boolean that the summary counts as `3/3`; start from `commonGrade(dir)` (tests pass, guard ok, fresh and full evidence). Check the task with `--dry-run`, and add a case to `tests/ab.test.mjs` that an untouched copy fails and a hand-written solution passes.

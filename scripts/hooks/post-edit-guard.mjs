@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { compareToBaseline, loadConfig, runGuard } from "../guard.mjs";
+import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../guard.mjs";
 import { ConfigError, readJson, toPosix } from "../lib/files.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
 
@@ -16,10 +16,10 @@ if (filePath) {
 		try {
 			const config = loadConfig(path.join(root, CONFIG));
 			const baselinePath = path.resolve(root, config.baseline ?? ".stack-agent/guard-baseline.json");
-			const baseline = fs.existsSync(baselinePath) ? readJson(baselinePath, "guard baseline").counts ?? {} : {};
+			const baseline = fs.existsSync(baselinePath) ? readJson(baselinePath, "guard baseline") : {};
 			const rel = toPosix(path.relative(root, absFile));
 			const violations = runGuard({ root, config, files: [rel] });
-			const { failing } = compareToBaseline(violations, baseline, [rel]);
+			const { failing } = compareToBaseline(violations, baseline.counts ?? {}, [rel], fs.existsSync(baselinePath) ? baselineVersion(baseline) : undefined);
 			if (failing.length) {
 				const keys = new Set(failing.map((f) => `${f.rule}|${f.file}`));
 				const lines = violations

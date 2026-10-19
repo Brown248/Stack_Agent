@@ -44,7 +44,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 - Import-based rules read JS/TS and Python. Other languages use `pattern` rules. Python resolution is static: it does not follow `sys.path` changes, `importlib` calls, or installed packages, so a module not found in the repo is treated as third-party.
 - The shell hooks match patterns, so a determined workaround (an alias, or a script that writes a file without naming it) can slip past. CI with `--compare-ref` and CODEOWNERS is the gate that always holds.
 - The PostToolUse guard covers Edit/Write. Shell edits are caught by CI and the Stop hook.
-- The ratchet counts per file per rule.
+- The ratchet counts per file per rule. Import rules count each imported name (baseline version 2). Version 1 counted statements, so adding a name to an existing forbidden import passed; that gap was found while planning the A/B work and closed with a regression test (`tests/guard-widening.test.mjs`).
 - An LLM judge in Claude Code can only be another Claude model, so "a different model" means a different Claude model.
 
 ## Verification status
@@ -64,6 +64,8 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 ## Behavioral A/B with real agents (2026-10-19)
 
 Unit tests prove the tools work. This test asks a different question: does the plugin change what a real agent does?
+
+The harness behind this test is maintained in `scripts/ab/`; see [Measure agent behavior (A/B)](customizing.md#measure-agent-behavior-ab) to rerun it.
 
 **Method.** Headless `claude -p` runs (Claude Code 2.1.300, Sonnet, at most $1 per run), with `--plugin-dir` versus without it. Each run got a fresh copy of `examples/sample-backend` with `init.mjs` already applied, so both arms had the same `.stack-agent/` files. Permissions were `acceptEdits` plus Read/Glob/Grep/Edit/Write and `node`/`npm` shell commands. Grading was done by scripts after each run, never by the agent's own summary: an independent HTTP probe (the script starts the server itself and calls the endpoints), the test suite, the guard, the API map, whether a fresh and full verify evidence file exists, and whether `verify.json` gained a check that covers the new rule. Transcripts were parsed to see which skills and hooks were involved.
 

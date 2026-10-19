@@ -93,6 +93,10 @@ The first command records existing violations in `guard-baseline.json`. From the
 
 Lowering the baseline is always allowed. When `--update-baseline` sees a count go up, it refuses and exits 1. Raising a count needs `--allow-increase`, and the hook asks a human first. The very first baseline, when none exists yet, is the exception.
 
+Import rules (`forbidden-import`, `module-boundary`) count each imported name, not each statement. `import { a, b } from "x"` counts 2, so adding a name to an import that is already in the baseline fails. Default, namespace (`* as ns`), side-effect, and `from x import *` imports count 1. Destructured `require` and `await import` count each name. Pattern rules count each match.
+
+Baselines written before this rule have `"version": 1` and counted statements. The guard still reads them that way and prints a note asking you to upgrade. Run `--update-baseline` on a clean tree, in a commit of its own: it writes `"version": 2` without needing `--allow-increase`, as long as no statement was added. `--compare-ref` across the upgrade compares statement counts with the old file and lists each file whose count grew under the new unit, so a reviewer can check it. A baseline version that goes down fails `--compare-ref`.
+
 Inline exceptions need a reason, an expiry date, and an approver:
 
 ```js

@@ -44,7 +44,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 - กฎที่อ่าน import รองรับ JS/TS และ Python ภาษาอื่นใช้กฎแบบ `pattern` การหาโมดูล Python เป็นแบบ static ไม่ตามการแก้ `sys.path`, การเรียก `importlib` หรือ package ที่ติดตั้งไว้ โมดูลที่หาไม่เจอใน repo จึงถือเป็น third-party
 - hook ที่ดักคำสั่ง shell ใช้การจับ pattern ถ้าตั้งใจเลี่ยง (เช่นใช้ alias หรือ script ที่เขียนไฟล์โดยไม่ระบุชื่อไฟล์ในคำสั่ง) อาจหลุดได้ CI ที่มี `--compare-ref` และ CODEOWNERS คือด่านที่ไม่มีทางหลุด
 - guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย CI และ Stop hook
-- ratchet นับต่อไฟล์ต่อกฎ
+- ratchet นับต่อไฟล์ต่อกฎ กฎแบบ import นับทีละชื่อที่ import (baseline version 2) version 1 นับทีละบรรทัด การเพิ่มชื่อเข้าไปใน import ต้องห้ามที่มีอยู่แล้วจึงผ่านได้ ช่องโหว่นี้เจอระหว่างวางแผนงาน A/B และปิดแล้วพร้อมเทสกันถอยหลัง (`tests/guard-widening.test.mjs`)
 - judge แบบ LLM ใน Claude Code เลือกได้เฉพาะโมเดล Claude คำว่า "คนละโมเดล" จึงหมายถึงโมเดล Claude อีกตัว
 
 ## สถานะการตรวจสอบ
@@ -64,6 +64,8 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 ## ทดสอบ A/B กับ agent จริง (19 ต.ค. 2026)
 
 unit test พิสูจน์ว่าเครื่องมือทำงานได้ การทดสอบนี้ตอบอีกคำถามหนึ่ง คือ plugin ทำให้ agent จริงทำงานต่างไปหรือไม่
+
+harness ที่ใช้ในการทดสอบนี้เก็บและดูแลอยู่ที่ `scripts/ab/` ดูวิธีรันซ้ำใน [วัดพฤติกรรมของ agent (A/B)](customizing.md#วัดพฤติกรรมของ-agent-ab)
 
 **วิธีทดสอบ:** รัน `claude -p` แบบ headless (Claude Code 2.1.300, Sonnet, จำกัดรันละไม่เกิน $1) เทียบแบบใส่ `--plugin-dir` กับไม่ใส่ แต่ละรันได้สำเนาใหม่ของ `examples/sample-backend` ที่รัน `init.mjs` แล้ว ทั้งสองแบบจึงมีไฟล์ `.stack-agent/` เหมือนกัน สิทธิ์ที่ให้คือ `acceptEdits` กับ Read/Glob/Grep/Edit/Write และคำสั่ง `node`/`npm` การให้คะแนนทำด้วย script หลังจบแต่ละรัน ไม่ใช้สิ่งที่ agent สรุปเอง ได้แก่ ยิง HTTP ตรวจเอง (script เปิด server และเรียก endpoint เอง), รันเทส, guard, แผนที่ API, มีไฟล์หลักฐาน verify แบบเต็มที่ใหม่กว่าการแก้โค้ดหรือไม่ และ `verify.json` มี check ใหม่ที่ทดสอบกฎใหม่หรือไม่ แล้ว parse transcript ดูว่า skill และ hook ตัวไหนมีส่วน
 

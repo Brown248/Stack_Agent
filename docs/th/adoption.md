@@ -93,6 +93,10 @@ node .stack-agent/bin/guard.mjs
 
 การลด baseline ทำได้เสมอ แต่ถ้า `--update-baseline` เจอว่าจำนวนใดเพิ่มขึ้น มันจะไม่ยอมเขียนและ exit 1 การเพิ่มต้องใช้ `--allow-increase` ซึ่ง hook จะถามคนก่อน ยกเว้นตอนสร้าง baseline ครั้งแรกที่ยังไม่มีไฟล์
 
+กฎแบบ import (`forbidden-import`, `module-boundary`) นับทีละชื่อที่ import ไม่ใช่ทีละบรรทัด `import { a, b } from "x"` นับเป็น 2 ดังนั้นการเพิ่มชื่อเข้าไปใน import ที่อยู่ใน baseline อยู่แล้วจะ fail ส่วน default import, namespace (`* as ns`), import เพื่อ side effect และ `from x import *` นับเป็น 1 การ destructure จาก `require` และ `await import` นับทีละชื่อ กฎแบบ pattern นับทีละจุดที่ match
+
+baseline ที่เขียนก่อนกฎนี้มี `"version": 1` และนับทีละบรรทัด guard ยังอ่านแบบเดิมได้ และพิมพ์ note บอกให้อัปเกรด ให้รัน `--update-baseline` ตอนที่ไม่มีการแก้ค้าง และแยกเป็น commit ของมันเอง คำสั่งจะเขียน `"version": 2` โดยไม่ต้องใช้ `--allow-increase` ตราบใดที่ไม่มีบรรทัด import เพิ่ม `--compare-ref` ข้ามการอัปเกรดจะเทียบจำนวนบรรทัดกับไฟล์เก่า และแสดงรายชื่อไฟล์ที่ตัวเลขเพิ่มขึ้นตามหน่วยใหม่ให้คนรีวิวตรวจ ถ้า version ของ baseline ลดลง `--compare-ref` จะ fail
+
 ข้อยกเว้นรายบรรทัดต้องมีเหตุผล วันหมดอายุ และคนอนุมัติ:
 
 ```js

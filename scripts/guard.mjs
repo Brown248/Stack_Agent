@@ -92,13 +92,33 @@ export function blankComments(text) {
 	return out.join("");
 }
 
+const countList = (list) => list.split(",").filter((s) => s.trim()).length;
+
+// how many names an import statement binds, so adding a name to an existing forbidden import raises the count;
+// a default, namespace, or side-effect import counts as one
+function clauseWeight(clause) {
+	const braces = /\{([^}]*)\}/.exec(clause);
+	const rest = (braces ? clause.replace(braces[0], " ") : clause).replace(/\b(?:import|export|type|from)\b|,/g, " ").trim();
+	return Math.max(1, (braces ? countList(braces[1]) : 0) + (rest ? 1 : 0));
+}
+
 function extractImports(text) {
 	const code = blankComments(text);
 	const out = [];
-	for (const re of IMPORT_RES) {
+	IMPORT_RES.forEach((re, kind) => {
 		re.lastIndex = 0;
-		for (let m; (m = re.exec(code)); ) out.push({ spec: m[2], index: m.index + m[0].lastIndexOf(m[1] + m[2]) });
-	}
+		for (let m; (m = re.exec(code)); ) {
+			const at = m[0].lastIndexOf(m[1] + m[2]);
+			let weight;
+			if (kind === 0) weight = clauseWeight(m[0].slice(0, at));
+			else {
+				// const { a, b } = require("x") binds two names
+				const destructure = /\{([^{}]*)\}\s*=\s*(?:await\s+)?$/.exec(code.slice(Math.max(0, m.index - 400), m.index));
+				weight = destructure ? Math.max(1, countList(destructure[1])) : 1;
+			}
+			out.push({ spec: m[2], index: m.index + at, weight });
+		}
+	});
 	return out;
 }
 
@@ -175,19 +195,19 @@ function extractPythonImports(text, rel, resolve) {
 		const end = statementEnd(code, PY_IMPORT_RE.lastIndex);
 		const names = [...code.slice(PY_IMPORT_RE.lastIndex, end).matchAll(PY_NAME_RE)].map((n) => ({ name: n[1] ?? "*", index: PY_IMPORT_RE.lastIndex + n.index }));
 		if (m[1] === undefined) {
-			for (const n of names) if (n.name !== "*") out.push({ spec: n.name, specs: dottedPrefixes(n.name), target: resolve(n.name), index: n.index });
+			for (const n of names) if (n.name !== "*") out.push({ spec: n.name, specs: dottedPrefixes(n.name), target: resolve(n.name), index: n.index, weight: 1 });
 		} else {
 			const mod = m[1];
 			const modIndex = m.index + m[0].lastIndexOf(mod, m[0].length - "import".length - 1);
 			// `from pkg import name` imports pkg/name.py when that module exists, otherwise a name defined in pkg
-			let plain = false;
+			let plain = 0;
 			for (const n of names) {
 				const full = mod + (mod.endsWith(".") ? "" : ".") + n.name;
 				const target = n.name === "*" ? null : resolve(full);
-				if (target?.endsWith(".py")) out.push({ spec: full, specs: dottedPrefixes(full), target, index: n.index });
-				else plain = true;
+				if (target?.endsWith(".py")) out.push({ spec: full, specs: dottedPrefixes(full), target, index: n.index, weight: 1 });
+				else plain++;
 			}
-			if (plain) out.push({ spec: mod, specs: [...dottedPrefixes(mod), ...names.map((n) => mod + (mod.endsWith(".") ? "" : ".") + n.name)], target: resolve(mod), index: modIndex });
+			if (plain) out.push({ spec: mod, specs: [...dottedPrefixes(mod), ...names.map((n) => mod + (mod.endsWith(".") ? "" : ".") + n.name)], target: resolve(mod), index: modIndex, weight: plain });
 		}
 		PY_IMPORT_RE.lastIndex = Math.max(end, PY_IMPORT_RE.lastIndex);
 	}
@@ -229,7 +249,7 @@ function findViolations(root, rule, rel, text, aliases, imports, resolved) {
 		for (const imp of imports()) {
 			const target = "target" in imp ? imp.target : resolveImport(root, rel, imp.spec, aliases, resolved);
 			const hit = (target !== null && matchesAny(target, rule.to)) || (imp.specs ?? [imp.spec]).some((s) => matchesAny(s, rule.toSpecifiers));
-			if (hit) found.push({ index: imp.index, detail: `imports ${imp.spec}` });
+			if (hit) found.push({ index: imp.index, weight: imp.weight, detail: `imports ${imp.spec}${imp.weight > 1 ? ` (${imp.weight} names)` : ""}` });
 		}
 	} else if (rule.type === "module-boundary") {
 		const prefix = rule.modulesRoot + "/";
@@ -241,10 +261,10 @@ function findViolations(root, rule, rel, text, aliases, imports, resolved) {
 			const [mod, ...rest] = target.slice(prefix.length).split("/");
 			if (mod === own) continue;
 			if (rest.length === 1 && publicEntry.includes(rest[0])) continue;
-			found.push({ index: imp.index, detail: `imports ${imp.spec} (inside module ${mod})` });
+			found.push({ index: imp.index, weight: imp.weight, detail: `imports ${imp.spec} (inside module ${mod}${imp.weight > 1 ? `, ${imp.weight} names` : ""})` });
 		}
 	}
-	return found.map((f) => ({ line: lineOf(text, f.index), detail: f.detail }));
+	return found.map((f) => ({ line: lineOf(text, f.index), detail: f.detail, ...(f.weight > 1 && { weight: f.weight }) }));
 }
 
 function isRealDate(s) {
@@ -319,17 +339,27 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 	return violations;
 }
 
-export function countViolations(violations) {
+// version 1 counted import statements, so adding a name to an existing forbidden import went unnoticed;
+// version 2 counts each imported name. A version 1 baseline is still read with statement counting.
+export const BASELINE_VERSION = 2;
+
+export function baselineVersion(baseline) {
+	const version = baseline?.version ?? 1;
+	if (version !== 1 && version !== BASELINE_VERSION) throw new ConfigError(`guard baseline version ${JSON.stringify(version)} is not supported (this guard reads 1 and ${BASELINE_VERSION}); update the vendored tools`);
+	return version;
+}
+
+export function countViolations(violations, version = BASELINE_VERSION) {
 	const counts = {};
 	for (const v of violations) {
 		counts[v.rule] ??= {};
-		counts[v.rule][v.file] = (counts[v.rule][v.file] ?? 0) + 1;
+		counts[v.rule][v.file] = (counts[v.rule][v.file] ?? 0) + (version >= 2 ? (v.weight ?? 1) : 1);
 	}
 	return counts;
 }
 
-export function compareToBaseline(violations, baselineCounts, scopeFiles) {
-	const counts = countViolations(violations);
+export function compareToBaseline(violations, baselineCounts, scopeFiles, version = BASELINE_VERSION) {
+	const counts = countViolations(violations, version);
 	const failing = [];
 	const improvable = [];
 	for (const [rule, byFile] of Object.entries(counts)) {
@@ -363,7 +393,8 @@ function gitShow(root, ref, rel) {
 	return r.status === 0 ? r.stdout : null;
 }
 
-export function compareWithRef(root, ref, configRel, baselineRel, config, counts) {
+// counts is the current baseline; liveV1 is the current code counted per statement, used when the ref still has a version 1 baseline
+export function compareWithRef(root, ref, configRel, baselineRel, config, counts, { version = BASELINE_VERSION, liveV1 = {} } = {}) {
 	const problems = [];
 	const notes = [];
 	const verify = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], { cwd: root, encoding: "utf8" });
@@ -372,10 +403,21 @@ export function compareWithRef(root, ref, configRel, baselineRel, config, counts
 	if (oldBaseline === null) notes.push(`${baselineRel} does not exist at ${ref}; nothing to compare (first adoption)`);
 	else {
 		let old;
+		let oldVersion = 1;
 		try {
-			old = JSON.parse(oldBaseline).counts ?? {};
+			const parsed = JSON.parse(oldBaseline);
+			old = parsed.counts ?? {};
+			oldVersion = parsed.version ?? 1;
 		} catch {
 			old = {};
+		}
+		if (oldVersion > version) problems.push(`baseline version went down: ${oldVersion} -> ${version}`);
+		else if (oldVersion < version) {
+			// the two files count in different units, so compare the old statement counts with the current code counted the same way
+			notes.push(`${baselineRel} is version ${oldVersion} at ${ref} and version ${version} now; compared the current code's statement counts with it`);
+			for (const [rule, byFile] of Object.entries(counts))
+				for (const [file, n] of Object.entries(byFile)) if (n > (old[rule]?.[file] ?? 0)) notes.push(`review: ${rule} ${file} was ${old[rule]?.[file] ?? 0} statement(s) and is now ${n} imported name(s)`);
+			counts = liveV1;
 		}
 		for (const [rule, byFile] of Object.entries(counts))
 			for (const [file, n] of Object.entries(byFile)) if (n > (old[rule]?.[file] ?? 0)) problems.push(`baseline grew: ${rule} ${file} ${old[rule]?.[file] ?? 0} -> ${n}`);
@@ -404,7 +446,8 @@ function main(argv) {
 	const configPath = path.resolve(root, args.config ?? ".stack-agent/guard.config.json");
 	const config = loadConfig(configPath);
 	const baselinePath = path.resolve(root, config.baseline ?? ".stack-agent/guard-baseline.json");
-	const baseline = fs.existsSync(baselinePath) ? readJson(baselinePath, "guard baseline") : { version: 1, counts: {} };
+	const baseline = fs.existsSync(baselinePath) ? readJson(baselinePath, "guard baseline") : { version: BASELINE_VERSION, counts: {} };
+	const version = baselineVersion(baseline);
 	const scopeFiles = args.files?.map((f) => toPosix(path.relative(root, path.resolve(root, f)))).filter((f) => !f.startsWith("../") && !path.isAbsolute(f));
 	const warnings = [];
 	const violations = runGuard({ root, config, files: scopeFiles, warnings });
@@ -412,28 +455,32 @@ function main(argv) {
 	if (args["update-baseline"]) {
 		if (scopeFiles) throw new ConfigError("--update-baseline scans the whole repo, do not combine it with --files");
 		const firstBaseline = !fs.existsSync(baselinePath);
-		const { failing } = compareToBaseline(violations, baseline.counts ?? {});
+		// an old baseline is checked in its own units, so upgrading it needs no --allow-increase unless the code got worse
+		const { failing } = compareToBaseline(violations, baseline.counts ?? {}, undefined, version);
 		if (failing.length && !firstBaseline && !args["allow-increase"]) {
 			const lines = failing.map((f) => `  ${f.rule} ${f.file}: ${f.allowed} -> ${f.count}`);
 			return { code: 1, text: `refusing to raise the baseline (needs a human-approved --allow-increase):\n${lines.join("\n")}` };
 		}
 		fs.mkdirSync(path.dirname(baselinePath), { recursive: true });
-		fs.writeFileSync(baselinePath, JSON.stringify({ version: 1, counts: sortCounts(countViolations(violations)) }, null, 2) + "\n");
-		return { code: 0, text: `baseline written: ${toPosix(path.relative(root, baselinePath))} (${violations.length} known violations)` };
+		fs.writeFileSync(baselinePath, JSON.stringify({ version: BASELINE_VERSION, counts: sortCounts(countViolations(violations)) }, null, 2) + "\n");
+		const upgraded = !firstBaseline && version < BASELINE_VERSION ? `; upgraded from version ${version}, import rules now count each imported name` : "";
+		return { code: 0, text: `baseline written: ${toPosix(path.relative(root, baselinePath))} (${violations.length} known violations${upgraded})` };
 	}
 
 	const { failing, improvable } = args.strict
 		? compareToBaseline(violations, {}, scopeFiles)
-		: compareToBaseline(violations, baseline.counts ?? {}, scopeFiles);
+		: compareToBaseline(violations, baseline.counts ?? {}, scopeFiles, version);
 	const failingKeys = new Set(failing.map((f) => `${f.rule}|${f.file}`));
 	const reported = violations.filter((v) => failingKeys.has(`${v.rule}|${v.file}`));
-	const drift = args["compare-ref"] ? compareWithRef(root, args["compare-ref"], toPosix(path.relative(root, configPath)), toPosix(path.relative(root, baselinePath)), config, baseline.counts ?? {}) : { problems: [], notes: [] };
+	const drift = args["compare-ref"] ? compareWithRef(root, args["compare-ref"], toPosix(path.relative(root, configPath)), toPosix(path.relative(root, baselinePath)), config, baseline.counts ?? {}, { version, liveV1: countViolations(violations, 1) }) : { problems: [], notes: [] };
+	if (version < BASELINE_VERSION) drift.notes.push(`the baseline is version ${version}, which counts import statements, so adding a name to an existing forbidden import is not caught. Run --update-baseline to switch to version ${BASELINE_VERSION}.`);
 	const ok = failing.length === 0 && drift.problems.length === 0;
-	if (args.json) return { code: ok ? 0 : 1, text: JSON.stringify({ ok, failing, violations: reported, improvable, refProblems: drift.problems, warnings }, null, 2) };
+	if (args.json) return { code: ok ? 0 : 1, text: JSON.stringify({ ok, failing, violations: reported, improvable, refProblems: drift.problems, notes: drift.notes, warnings }, null, 2) };
 
 	const out = [];
 	for (const v of reported) out.push(`${v.file}:${v.line}  [${v.rule}] ${v.message}\n    found: ${v.detail}\n    fix:   ${v.fix}`);
-	for (const f of failing) if (f.allowed > 0) out.push(`  note: ${f.file} has ${f.count} ${f.rule} violations, baseline allows ${f.allowed}. Remove the new one(s).`);
+	const perName = new Set(version >= 2 ? config.rules.filter((r) => r.type !== "pattern").map((r) => r.id) : []);
+	for (const f of failing) if (f.allowed > 0) out.push(`  note: ${f.file} has ${f.count} ${f.rule} violations${perName.has(f.rule) ? " (each imported name counts)" : ""}, baseline allows ${f.allowed}. Remove the new one(s).`);
 	for (const i of improvable) out.push(`  improved: ${i.file} [${i.rule}] ${i.allowed} -> ${i.count}. Run --update-baseline to lock it in.`);
 	for (const p of drift.problems) out.push(`compared with ${args["compare-ref"]}: ${p}`);
 	for (const n of drift.notes) out.push(`  note: ${n}`);
