@@ -13,12 +13,30 @@ exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
 const CHECK_TYPES = ["http", "command"];
 
 export function checkType(check) {
-	return check.type ?? (check.command !== undefined ? "command" : "http");
+	return check.type ?? (check.command !== undefined || check.args !== undefined ? "command" : "http");
+}
+
+function runs(spec) {
+	return spec?.command !== undefined || spec?.args !== undefined;
+}
+
+function checkRunSpec(spec, where, missing) {
+	if (spec.command !== undefined && spec.args !== undefined) throw new ConfigError(`${where}: give command or args, not both`);
+	if (spec.args === undefined) {
+		if (!spec.command || typeof spec.command !== "string") throw new ConfigError(`${where}: ${missing}`);
+	} else if (!Array.isArray(spec.args) || spec.args.length === 0 || !spec.args.every((a) => typeof a === "string") || !spec.args[0])
+		throw new ConfigError(`${where}: args must be a non-empty array of strings`);
+}
+
+function shown(spec) {
+	return spec.args ? spec.args.join(" ") : spec.command;
 }
 
 export function loadVerifyConfig(file) {
 	const config = readJson(file, "verify config");
-	if (!config.test?.command && !config.checks?.length) throw new ConfigError("verify config needs test.command or checks[]");
+	if (!runs(config.test) && !config.checks?.length) throw new ConfigError("verify config needs test.command or checks[]");
+	if (runs(config.test)) checkRunSpec(config.test, "test", "test needs a command string or an args array");
+	if (config.server !== undefined) checkRunSpec(config.server, "server", "server needs a command string or an args array");
 	if (config.checks !== undefined && !Array.isArray(config.checks)) throw new ConfigError("checks must be an array");
 	const names = new Set();
 	for (const c of config.checks ?? []) {
@@ -33,7 +51,7 @@ export function loadVerifyConfig(file) {
 			if (!config.baseUrl) throw new ConfigError("verify config needs baseUrl when it has http checks");
 		}
 		if (type === "command") {
-			if (!c.command || typeof c.command !== "string") throw new ConfigError(`${where}: command checks need a command string`);
+			checkRunSpec(c, where, "command checks need a command string or an args array");
 			if (c.expectExit !== undefined && !Number.isInteger(c.expectExit)) throw new ConfigError(`${where}: expectExit must be an integer`);
 			if (c.needsServer !== undefined && typeof c.needsServer !== "boolean") throw new ConfigError(`${where}: needsServer must be true or false`);
 			if (c.expectOutputMatches !== undefined) {
@@ -65,8 +83,18 @@ function tail(text, max = 4000) {
 	return text.length > max ? "...\n" + text.slice(-max) : text;
 }
 
-function spawnTree(command, root, env) {
-	return spawn(command, { cwd: root, shell: true, detached: process.platform !== "win32", env: childEnv(env), windowsHide: true });
+// `command` runs through the platform shell; `args` runs the program directly, so quoting is the same on every OS.
+function spawnTree(spec, cwd, env) {
+	const options = { cwd, detached: process.platform !== "win32", env: childEnv(env), windowsHide: true };
+	return spec.args ? spawn(spec.args[0], spec.args.slice(1), { ...options, shell: false }) : spawn(spec.command, { ...options, shell: true });
+}
+
+function startFailure(spec, err) {
+	let hint = "";
+	if (spec.args && process.platform === "win32" && ["ENOENT", "EINVAL"].includes(err.code))
+		hint = ` Without a shell, Windows runs only .exe programs: npm, npx, and other .cmd or .bat scripts need "command" instead of "args", or call node with the script's path.`;
+	else if (err.code === "ENOENT") hint = " Check that it is installed and on PATH.";
+	return `could not start ${JSON.stringify(spec.args?.[0] ?? spec.command)}: ${err.code ?? err.message}.${hint}`;
 }
 
 export const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -92,11 +120,19 @@ function collect(child, limit = OUTPUT_LIMIT) {
 	return () => ({ text: truncated ? head + "\n...[output truncated]...\n" + rest.slice(-limit / 2) : head + rest, truncated });
 }
 
-async function runCommand(root, { command, env, cwd, timeoutSec }, defaultTimeoutSec) {
+async function runCommand(root, spec, defaultTimeoutSec) {
+	const { env, cwd, timeoutSec } = spec;
 	const started = Date.now();
-	const child = spawnTree(command, cwd ? path.resolve(root, cwd) : root, env);
+	let child;
+	try {
+		child = spawnTree(spec, cwd ? path.resolve(root, cwd) : root, env);
+	} catch (err) {
+		const startError = startFailure(spec, err);
+		return { exitCode: null, timedOut: false, startError, output: startError, truncated: false, durationMs: Date.now() - started };
+	}
 	const output = collect(child);
 	let timedOut = false;
+	let startError;
 	const exitCode = await new Promise((resolve) => {
 		const timer = setTimeout(async () => {
 			timedOut = true;
@@ -106,25 +142,27 @@ async function runCommand(root, { command, env, cwd, timeoutSec }, defaultTimeou
 			clearTimeout(timer);
 			resolve(code);
 		});
-		child.on("error", () => {
+		child.on("error", (err) => {
 			clearTimeout(timer);
+			startError = startFailure(spec, err);
 			resolve(null);
 		});
 	});
 	const { text, truncated } = output();
-	return { exitCode, timedOut, output: text, truncated, durationMs: Date.now() - started };
+	return { exitCode, timedOut, startError, output: startError ? [startError, text].filter(Boolean).join("\n") : text, truncated, durationMs: Date.now() - started };
 }
 
 async function runTests(root, test) {
 	const r = await runCommand(root, test, 600);
-	return { step: "tests", command: test.command, ok: r.exitCode === 0 && !r.timedOut, exitCode: r.exitCode, timedOut: r.timedOut, durationMs: r.durationMs, output: tail(r.output) };
+	return { step: "tests", command: shown(test), ...(test.args && { args: test.args }), ok: r.exitCode === 0 && !r.timedOut, exitCode: r.exitCode, timedOut: r.timedOut, durationMs: r.durationMs, output: tail(r.output) };
 }
 
 async function runCommandCheck(root, check) {
 	const r = await runCommand(root, check, 120);
 	const expectExit = check.expectExit ?? 0;
 	const problems = [];
-	if (r.timedOut) problems.push(`timed out after ${check.timeoutSec ?? 120}s`);
+	if (r.startError) problems.push(r.startError);
+	else if (r.timedOut) problems.push(`timed out after ${check.timeoutSec ?? 120}s`);
 	else if (r.exitCode !== expectExit) problems.push(`exit ${r.exitCode}, expected ${expectExit}`);
 	if (check.expectOutputIncludes && !r.output.includes(check.expectOutputIncludes)) problems.push(`output does not include ${JSON.stringify(check.expectOutputIncludes)}`);
 	const flags = check.expectOutputFlags ?? "m";
@@ -132,7 +170,7 @@ async function runCommandCheck(root, check) {
 	if (check.expectOutputExcludes && r.output.includes(check.expectOutputExcludes)) problems.push(`output includes ${JSON.stringify(check.expectOutputExcludes)}`);
 	if (r.truncated && (check.expectOutputIncludes || check.expectOutputMatches || check.expectOutputExcludes))
 		problems.push(`output was over ${OUTPUT_LIMIT / 1024 / 1024} MB, so the middle was dropped before matching; make the command quieter`);
-	return { step: "check", type: "command", name: check.name, request: check.command, ok: problems.length === 0, exitCode: r.exitCode, timedOut: r.timedOut, truncated: r.truncated, problems, output: tail(r.output, 1000), durationMs: r.durationMs };
+	return { step: "check", type: "command", name: check.name, request: shown(check), ...(check.args && { args: check.args }), ok: problems.length === 0, exitCode: r.exitCode, timedOut: r.timedOut, truncated: r.truncated, problems, output: tail(r.output, 1000), durationMs: r.durationMs };
 }
 
 async function responds(url) {
@@ -182,11 +220,19 @@ export async function stopProcess(child) {
 
 async function startServer(root, server) {
 	const log = [];
-	const child = spawnTree(server.command, root, server.env);
+	let child;
+	try {
+		child = spawnTree(server, root, server.env);
+	} catch (err) {
+		return { child, ok: false, reason: startFailure(server, err), log };
+	}
+	let failed;
+	child.on("error", (err) => (failed = startFailure(server, err)));
 	child.stdout.on("data", (d) => log.length < 200 && log.push(String(d)));
 	child.stderr.on("data", (d) => log.length < 200 && log.push(String(d)));
 	const deadline = Date.now() + (server.readyTimeoutSec ?? 30) * 1000;
 	while (Date.now() < deadline) {
+		if (failed) return { child, ok: false, reason: failed, log };
 		if (child.exitCode !== null) return { child, ok: false, reason: `server exited with code ${child.exitCode} before it was ready`, log };
 		if (await responds(server.readyUrl)) return { child, ok: true, log };
 		await delay(250);
@@ -237,7 +283,7 @@ function gitHead(root) {
 
 export async function runVerify({ root, config, skipTests, skipChecks, only, reuse }) {
 	const steps = [];
-	if (config.test?.command && !skipTests) steps.push(await runTests(root, config.test));
+	if (runs(config.test) && !skipTests) steps.push(await runTests(root, config.test));
 
 	const checks = (config.checks ?? []).filter((c) => !only?.length || only.includes(c.name));
 	if (only?.length) {
@@ -256,7 +302,7 @@ export async function runVerify({ root, config, skipTests, skipChecks, only, reu
 				}
 				if (!busy) {
 					server = await startServer(root, config.server);
-					steps.push({ step: "server", command: config.server.command, ok: server.ok, reason: server.reason, log: tail(server.log.join(""), 2000) });
+					steps.push({ step: "server", command: shown(config.server), ok: server.ok, reason: server.reason, log: tail(server.log.join(""), 2000) });
 					if (!server.ok) return steps;
 				}
 			}

@@ -22,7 +22,7 @@ The tools in `.stack-agent/bin/` are committed with your project (CI runs them f
 
 Edit `.stack-agent/verify.json` and replace every `EDIT ME`.
 
-- `test.command`: how the repo runs its tests (`npm test`, `pytest`, `go test ./...`, `cargo test`).
+- `test.command` (or `test.args`): how the repo runs its tests (`npm test`, `pytest`, `go test ./...`, `cargo test`).
 - `server` (optional): how to start the program locally, with `env` and a `readyUrl` that answers once it is up.
 - `checks[]`: what a user would do, each with a success case and at least one rejection case.
 
@@ -31,11 +31,13 @@ Two kinds of check:
 | Kind | Fields | Use for |
 | --- | --- | --- |
 | HTTP | `method`, `path`, `expectStatus`, optional `body`, `headers`, `expectJson`, `expectBodyIncludes` (needs `baseUrl`) | APIs, web pages |
-| Command | `command`, optional `expectExit` (default 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches`, `expectOutputFlags` (default `m`), `needsServer`, `cwd`, `env`, `timeoutSec` (default 120) | CLIs, libraries, scripts, e2e runners, anything |
+| Command | `command` or `args`, optional `expectExit` (default 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches`, `expectOutputFlags` (default `m`), `needsServer`, `cwd`, `env`, `timeoutSec` (default 120) | CLIs, libraries, scripts, e2e runners, anything |
 
 Command checks in detail:
 
-- The command runs through the platform shell: `cmd.exe` on Windows and `/bin/sh` elsewhere. Use double quotes for arguments (escaped as `\"` inside JSON). Single quotes are not quotes in `cmd.exe`, so `python -c 'print(1)'` silently does the wrong thing on Windows.
+- Give each command one of two ways, never both. `"command": "pytest -q"` is a string run through the platform shell: `cmd.exe` on Windows and `/bin/sh` elsewhere, so quoting differs by OS. Single quotes are not quotes in `cmd.exe`, so `python -c 'print(1)'` silently does the wrong thing on Windows.
+- `"args": ["python", "-c", "print('hi there')"]` runs the program directly, with no shell, so each item arrives as exactly one argument on every OS. Use `args` for anything with quotes, spaces inside an argument, or characters like `&`, `|`, `%`. `test` and `server` take `args` too. Evidence records the request as the args joined with spaces, plus the `args` array.
+- Without a shell there are no pipes, `&&`, globs, or `$VAR` expansion. On Windows, `args` also runs only real programs (`.exe`): `npm`, `npx`, and other `.cmd` or `.bat` scripts fail to start (verify says so and points here). Use `command` for those (`"command": "npm test"`), or call `node` with the script's path.
 - Name interpreters the way your CI and teammates have them. `python` exists on Windows and with `actions/setup-python`; stock macOS and Debian only have `python3`.
 - Output means stdout and stderr together. The expectations see the whole output up to 8 MB. Above that, the middle is dropped and the check fails with a note, so make very noisy commands quieter.
 - `expectOutputMatches` is a JavaScript regular expression, case-sensitive by default. `expectOutputFlags` sets the flags (default `m`, so `^` and `$` match each line; use `im` to ignore case).

@@ -22,7 +22,7 @@ preset ที่มี: `generic` (ค่าเริ่มต้น), `backend-
 
 แก้ `.stack-agent/verify.json` แทนที่ `EDIT ME` ทุกจุด
 
-- `test.command`: คำสั่งรันเทสของ repo เช่น `npm test`, `pytest`, `go test ./...`, `cargo test`
+- `test.command` (หรือ `test.args`): คำสั่งรันเทสของ repo เช่น `npm test`, `pytest`, `go test ./...`, `cargo test`
 - `server` (ใส่หรือไม่ก็ได้): วิธีเปิดโปรแกรมในเครื่อง พร้อม `env` และ `readyUrl` ที่ตอบเมื่อพร้อมใช้งาน
 - `checks[]`: สิ่งที่ผู้ใช้ทำจริง แต่ละเรื่องต้องมีทั้งกรณีสำเร็จ และกรณีที่ต้องถูกปฏิเสธอย่างน้อยหนึ่งกรณี
 
@@ -31,11 +31,13 @@ check มีสองแบบ:
 | แบบ | ฟิลด์ | ใช้กับ |
 | --- | --- | --- |
 | HTTP | `method`, `path`, `expectStatus` และใส่เพิ่มได้คือ `body`, `headers`, `expectJson`, `expectBodyIncludes` (ต้องมี `baseUrl`) | API, หน้าเว็บ |
-| Command | `command` และใส่เพิ่มได้คือ `expectExit` (ค่าเริ่มต้น 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches`, `expectOutputFlags` (ค่าเริ่มต้น `m`), `needsServer`, `cwd`, `env`, `timeoutSec` (ค่าเริ่มต้น 120) | CLI, library, script, ตัวรัน e2e และอื่นๆ |
+| Command | `command` หรือ `args` และใส่เพิ่มได้คือ `expectExit` (ค่าเริ่มต้น 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches`, `expectOutputFlags` (ค่าเริ่มต้น `m`), `needsServer`, `cwd`, `env`, `timeoutSec` (ค่าเริ่มต้น 120) | CLI, library, script, ตัวรัน e2e และอื่นๆ |
 
 รายละเอียดของ command check:
 
-- คำสั่งรันผ่าน shell ของระบบ คือ `cmd.exe` บน Windows และ `/bin/sh` บนระบบอื่น ให้ใช้ double quote ครอบ argument (ใน JSON เขียนเป็น `\"`) เพราะ `cmd.exe` ไม่ถือว่า single quote เป็นเครื่องหมายครอบ เช่น `python -c 'print(1)'` จะทำงานผิดบน Windows โดยไม่มีอะไรเตือน
+- ระบุคำสั่งได้สองแบบ เลือกแบบเดียวเท่านั้น `"command": "pytest -q"` เป็นข้อความที่รันผ่าน shell ของระบบ คือ `cmd.exe` บน Windows และ `/bin/sh` บนระบบอื่น การใส่ quote จึงต่างกันตาม OS เพราะ `cmd.exe` ไม่ถือว่า single quote เป็นเครื่องหมายครอบ เช่น `python -c 'print(1)'` จะทำงานผิดบน Windows โดยไม่มีอะไรเตือน
+- `"args": ["python", "-c", "print('hi there')"]` รันโปรแกรมตรงๆ โดยไม่ผ่าน shell แต่ละช่องใน array จะเป็น argument หนึ่งตัวพอดีบนทุก OS ให้ใช้ `args` กับทุกคำสั่งที่มี quote, มีเว้นวรรคอยู่ใน argument หรือมีอักขระอย่าง `&`, `|`, `%` ส่วน `test` และ `server` ก็ใช้ `args` ได้ หลักฐานจะบันทึก request เป็น args ที่ต่อกันด้วยเว้นวรรค พร้อม array `args`
+- เมื่อไม่ผ่าน shell จะใช้ pipe, `&&`, glob หรือการแทนค่า `$VAR` ไม่ได้ และบน Windows `args` รันได้เฉพาะโปรแกรมจริง (`.exe`) ส่วน `npm`, `npx` และ script `.cmd` หรือ `.bat` อื่นๆ จะเปิดไม่ขึ้น (verify จะบอกและชี้มาที่นี่) ให้ใช้ `command` กับคำสั่งพวกนี้ (`"command": "npm test"`) หรือเรียก `node` พร้อม path ของ script
 - เรียกชื่อตัวแปลภาษาให้ตรงกับที่ CI และเพื่อนร่วมทีมมี `python` มีบน Windows และเมื่อใช้ `actions/setup-python` แต่ macOS และ Debian แบบติดตั้งมาตรฐานมีแค่ `python3`
 - output คือ stdout และ stderr รวมกัน การตรวจทุกแบบเห็น output ทั้งหมดได้ถึง 8 MB ถ้าเกินจะตัดส่วนกลางออกและ check จะ fail พร้อมบอกเหตุผล ให้ลด output ของคำสั่งที่พิมพ์เยอะมาก
 - `expectOutputMatches` เป็น regex ของ JavaScript แยกตัวพิมพ์ใหญ่เล็กโดยค่าเริ่มต้น `expectOutputFlags` ใช้ตั้ง flag (ค่าเริ่มต้น `m` ทำให้ `^` และ `$` ตรงกับทุกบรรทัด ถ้าไม่สนตัวพิมพ์ใหญ่เล็กให้ใช้ `im`)

@@ -100,21 +100,30 @@ function extractImports(text) {
 	return out;
 }
 
-function resolveImport(root, fromRel, spec, aliases = {}) {
+function resolveImport(root, fromRel, spec, aliases = {}, cache = new Map()) {
 	const alias = Object.keys(aliases).find((a) => spec.startsWith(a));
 	let base;
 	if (alias) base = toPosix(path.normalize(aliases[alias] + spec.slice(alias.length)));
 	else if (spec.startsWith(".")) base = toPosix(path.normalize(path.join(path.dirname(fromRel), spec.split("?")[0])));
 	else return null;
-	for (const ext of RESOLVE_EXT) {
-		const candidate = base + ext;
-		const abs = path.join(root, candidate);
-		if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return candidate;
+	// many files import the same targets, so each base is checked on disk once per run
+	let resolved = cache.get(base);
+	if (resolved === undefined) {
+		resolved = base;
+		for (const ext of RESOLVE_EXT) {
+			const candidate = base + ext;
+			const abs = path.join(root, candidate);
+			if (fs.existsSync(abs) && fs.statSync(abs).isFile()) {
+				resolved = candidate;
+				break;
+			}
+		}
+		cache.set(base, resolved);
 	}
-	return base;
+	return resolved;
 }
 
-function findViolations(root, rule, rel, text, aliases, imports) {
+function findViolations(root, rule, rel, text, aliases, imports, resolved) {
 	const found = [];
 	if (rule.type === "pattern") {
 		rule.regex.lastIndex = 0;
@@ -124,7 +133,7 @@ function findViolations(root, rule, rel, text, aliases, imports) {
 		}
 	} else if (rule.type === "forbidden-import") {
 		for (const imp of imports()) {
-			const target = resolveImport(root, rel, imp.spec, aliases);
+			const target = resolveImport(root, rel, imp.spec, aliases, resolved);
 			const hit = (target !== null && matchesAny(target, rule.to)) || matchesAny(imp.spec, rule.toSpecifiers);
 			if (hit) found.push({ index: imp.index, detail: `imports ${imp.spec}` });
 		}
@@ -132,7 +141,7 @@ function findViolations(root, rule, rel, text, aliases, imports) {
 		const prefix = rule.modulesRoot + "/";
 		const own = rel.slice(prefix.length).split("/")[0];
 		for (const imp of imports()) {
-			const target = resolveImport(root, rel, imp.spec, aliases);
+			const target = resolveImport(root, rel, imp.spec, aliases, resolved);
 			if (target === null || !target.startsWith(prefix)) continue;
 			const [mod, ...rest] = target.slice(prefix.length).split("/");
 			if (mod === own) continue;
@@ -182,6 +191,7 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 	const violations = [];
 	const ruleIds = new Set(config.rules.map((r) => r.id));
 	const latest = addDays(today, config.maxAllowDays);
+	const resolved = new Map();
 	if (!files && warnings) for (const r of config.rules) if (!all.some((f) => matchesAny(f, r.files) && !matchesAny(f, r.exclude))) warnings.push(`rule ${r.id} matches no files; check its files globs`);
 	for (const rel of all) {
 		const abs = path.join(root, rel);
@@ -204,7 +214,7 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 		let imports;
 		const importsOf = () => (imports ??= /import|export|require/.test(text) ? extractImports(text) : []);
 		for (const rule of rules) {
-			for (const v of findViolations(root, rule, rel, text, config.aliases, importsOf)) {
+			for (const v of findViolations(root, rule, rel, text, config.aliases, importsOf, resolved)) {
 				if (allows.has(`${rule.id}:${v.line}`)) continue;
 				violations.push({ rule: rule.id, file: rel, ...v, message: rule.message, fix: rule.fix });
 			}
