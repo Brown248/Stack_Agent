@@ -16,6 +16,8 @@ const IMPORT_RES = [
 	/\b(?:import|export)\s+(?:[^'"`;]*?\sfrom\s+)?(['"])([^'"]+)\1/g,
 	/\b(?:require|import)\s*\(\s*(['"`])([^'"`$]+)\1\s*\)/g,
 ];
+const PY_IMPORT_RE = /(?:^|[;:])[ \t]*(?:from[ \t]+(\.*[\w.]*)[ \t]+import\b|import\b)/gm;
+const PY_NAME_RE = /([A-Za-z_][\w.]*)(?:\s+as\s+\w+)?|\*/g;
 const ALLOW_RE = /stack-agent-allow\s+([\w-]+)((?:\s+\w+=(?:"[^"]*"|\S+))*)/;
 const DEFAULT_MAX_ALLOW_DAYS = 90;
 
@@ -23,6 +25,7 @@ export function loadConfig(configPath) {
 	const config = readJson(configPath, "guard config");
 	if (!Array.isArray(config.rules) || config.rules.length === 0) throw new ConfigError("guard config needs a non-empty rules array");
 	requireStringArray(config.ignore, "ignore", { optional: true });
+	requireStringArray(config.pythonRoots, "pythonRoots", { optional: true });
 	if (config.aliases !== undefined && (typeof config.aliases !== "object" || Array.isArray(config.aliases) || !Object.values(config.aliases).every((v) => typeof v === "string")))
 		throw new ConfigError('aliases must map an import prefix to a repo path, e.g. {"@/": "src/"}');
 	config.maxAllowDays ??= DEFAULT_MAX_ALLOW_DAYS;
@@ -57,7 +60,6 @@ export function loadConfig(configPath) {
 			requireStringArray(rule.publicEntry, `${where}: publicEntry`, { optional: true });
 			rule.modulesRoot = rule.modulesRoot.replace(/\/+$/, "");
 			rule.files = [`${rule.modulesRoot}/**`];
-			rule.publicEntry = rule.publicEntry ?? ["index.js", "index.ts"];
 		}
 	}
 	return config;
@@ -100,6 +102,98 @@ function extractImports(text) {
 	return out;
 }
 
+// strings are blanked too: a Python import never holds one, and docstrings often quote code
+export function blankPython(text) {
+	const out = text.split("");
+	for (let i = 0; i < text.length; ) {
+		const c = text[i];
+		if (c === "#") {
+			while (i < text.length && text[i] !== "\n") out[i++] = " ";
+		} else if (c === "'" || c === '"') {
+			const close = text.startsWith(c.repeat(3), i) ? c.repeat(3) : c;
+			let j = i + close.length;
+			while (j < text.length && !text.startsWith(close, j) && (close.length === 3 || text[j] !== "\n")) j += text[j] === "\\" ? 2 : 1;
+			const stop = Math.min(text.length, text.startsWith(close, j) ? j + close.length : j);
+			for (; i < stop; i++) if (text[i] !== "\n") out[i] = " ";
+		} else i++;
+	}
+	return out.join("");
+}
+
+function statementEnd(code, i) {
+	let depth = 0;
+	for (; i < code.length; i++) {
+		const c = code[i];
+		if (c === "(") depth++;
+		else if (c === ")") depth--;
+		else if (c === "\\") i++;
+		else if ((c === "\n" || c === ";") && depth <= 0) break;
+	}
+	return i;
+}
+
+// a dotted name and the packages above it, so toSpecifiers "requests" also matches requests.adapters
+function dottedPrefixes(name) {
+	const parts = name.split(".");
+	return parts.map((_, i) => parts.slice(0, i + 1).join(".")).filter((p) => !/^\.*$/.test(p) || p === name);
+}
+
+function isFile(root, rel, cache) {
+	const key = "file:" + rel;
+	let hit = cache.get(key);
+	if (hit === undefined) {
+		const abs = path.join(root, rel);
+		cache.set(key, (hit = fs.existsSync(abs) && fs.statSync(abs).isFile()));
+	}
+	return hit;
+}
+
+// relative modules resolve against the importing file's package, absolute ones against pythonRoots;
+// returns the repo path of the module file, the bare path for an unresolved relative import, or null (third-party)
+function resolvePython(root, fromRel, mod, pythonRoots, cache) {
+	const dots = /^\.*/.exec(mod)[0].length;
+	const sub = mod.slice(dots).replaceAll(".", "/");
+	let bases;
+	if (dots) {
+		let dir = path.posix.dirname(fromRel);
+		for (let n = 1; n < dots; n++) dir = path.posix.dirname(dir);
+		bases = [path.posix.join(dir, sub)];
+	} else bases = pythonRoots.map((r) => path.posix.join(r, sub));
+	for (const base of bases) {
+		const candidates = sub ? [base + ".py", base + "/__init__.py"] : [base + "/__init__.py"];
+		const hit = candidates.find((c) => isFile(root, c, cache));
+		if (hit) return hit;
+	}
+	return dots ? bases[0] : null;
+}
+
+function extractPythonImports(text, rel, resolve) {
+	const code = blankPython(text);
+	const out = [];
+	PY_IMPORT_RE.lastIndex = 0;
+	for (let m; (m = PY_IMPORT_RE.exec(code)); ) {
+		const end = statementEnd(code, PY_IMPORT_RE.lastIndex);
+		const names = [...code.slice(PY_IMPORT_RE.lastIndex, end).matchAll(PY_NAME_RE)].map((n) => ({ name: n[1] ?? "*", index: PY_IMPORT_RE.lastIndex + n.index }));
+		if (m[1] === undefined) {
+			for (const n of names) if (n.name !== "*") out.push({ spec: n.name, specs: dottedPrefixes(n.name), target: resolve(n.name), index: n.index });
+		} else {
+			const mod = m[1];
+			const modIndex = m.index + m[0].lastIndexOf(mod, m[0].length - "import".length - 1);
+			// `from pkg import name` imports pkg/name.py when that module exists, otherwise a name defined in pkg
+			let plain = false;
+			for (const n of names) {
+				const full = mod + (mod.endsWith(".") ? "" : ".") + n.name;
+				const target = n.name === "*" ? null : resolve(full);
+				if (target?.endsWith(".py")) out.push({ spec: full, specs: dottedPrefixes(full), target, index: n.index });
+				else plain = true;
+			}
+			if (plain) out.push({ spec: mod, specs: [...dottedPrefixes(mod), ...names.map((n) => mod + (mod.endsWith(".") ? "" : ".") + n.name)], target: resolve(mod), index: modIndex });
+		}
+		PY_IMPORT_RE.lastIndex = Math.max(end, PY_IMPORT_RE.lastIndex);
+	}
+	return out;
+}
+
 function resolveImport(root, fromRel, spec, aliases = {}, cache = new Map()) {
 	const alias = Object.keys(aliases).find((a) => spec.startsWith(a));
 	let base;
@@ -133,19 +227,20 @@ function findViolations(root, rule, rel, text, aliases, imports, resolved) {
 		}
 	} else if (rule.type === "forbidden-import") {
 		for (const imp of imports()) {
-			const target = resolveImport(root, rel, imp.spec, aliases, resolved);
-			const hit = (target !== null && matchesAny(target, rule.to)) || matchesAny(imp.spec, rule.toSpecifiers);
+			const target = "target" in imp ? imp.target : resolveImport(root, rel, imp.spec, aliases, resolved);
+			const hit = (target !== null && matchesAny(target, rule.to)) || (imp.specs ?? [imp.spec]).some((s) => matchesAny(s, rule.toSpecifiers));
 			if (hit) found.push({ index: imp.index, detail: `imports ${imp.spec}` });
 		}
 	} else if (rule.type === "module-boundary") {
 		const prefix = rule.modulesRoot + "/";
 		const own = rel.slice(prefix.length).split("/")[0];
+		const publicEntry = rule.publicEntry ?? (rel.endsWith(".py") ? ["__init__.py"] : ["index.js", "index.ts"]);
 		for (const imp of imports()) {
-			const target = resolveImport(root, rel, imp.spec, aliases, resolved);
+			const target = "target" in imp ? imp.target : resolveImport(root, rel, imp.spec, aliases, resolved);
 			if (target === null || !target.startsWith(prefix)) continue;
 			const [mod, ...rest] = target.slice(prefix.length).split("/");
 			if (mod === own) continue;
-			if (rest.length === 1 && rule.publicEntry.includes(rest[0])) continue;
+			if (rest.length === 1 && publicEntry.includes(rest[0])) continue;
 			found.push({ index: imp.index, detail: `imports ${imp.spec} (inside module ${mod})` });
 		}
 	}
@@ -192,6 +287,7 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 	const ruleIds = new Set(config.rules.map((r) => r.id));
 	const latest = addDays(today, config.maxAllowDays);
 	const resolved = new Map();
+	const pythonRoots = config.pythonRoots ?? [".", ...(fs.existsSync(path.join(root, "src")) && fs.statSync(path.join(root, "src")).isDirectory() ? ["src"] : [])];
 	if (!files && warnings) for (const r of config.rules) if (!all.some((f) => matchesAny(f, r.files) && !matchesAny(f, r.exclude))) warnings.push(`rule ${r.id} matches no files; check its files globs`);
 	for (const rel of all) {
 		const abs = path.join(root, rel);
@@ -212,7 +308,7 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 		}
 		// parsed at most once per file, and only if an import rule asks and the text could hold an import or re-export
 		let imports;
-		const importsOf = () => (imports ??= /import|export|require/.test(text) ? extractImports(text) : []);
+		const importsOf = () => (imports ??= !/import|export|require/.test(text) ? [] : rel.endsWith(".py") ? extractPythonImports(text, rel, (mod) => resolvePython(root, rel, mod, pythonRoots, resolved)) : extractImports(text));
 		for (const rule of rules) {
 			for (const v of findViolations(root, rule, rel, text, config.aliases, importsOf, resolved)) {
 				if (allows.has(`${rule.id}:${v.line}`)) continue;

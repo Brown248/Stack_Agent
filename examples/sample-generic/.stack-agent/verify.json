@@ -1,0 +1,13 @@
+{
+  "test": { "command": "node --test", "timeoutSec": 120 },
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "smoke",
+      "args": ["node", "job.mjs", "data/expenses.csv", "out/totals.csv"],
+      "expectExit": 0,
+      "expectOutputMatches": "^category,total\\r?\\ntravel,200\\.50\\r?\\noffice,42\\.10\\r?\\nfood,25\\.00\\r?\\nwrote out/totals\\.csv \\(3 categories\\)",
+      "timeoutSec": 60
+    }
+  ]
+}

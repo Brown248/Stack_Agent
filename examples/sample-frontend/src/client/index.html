@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Tip splitter</title>
+</head>
+<body>
+	<main id="app">
+		<h1>Tip splitter</h1>
+		<form id="split">
+			<label>Bill total <input name="total" type="number" min="0" step="0.01" value="50"></label>
+			<label>Tip % <input name="tip" type="number" min="0" step="1" value="0"></label>
+			<label>People <input name="people" type="number" min="1" step="1" value="4"></label>
+		</form>
+		<p>Each person pays <output id="share" for="split"></output></p>
+	</main>
+	<script type="module" src="/app.js"></script>
+</body>
+</html>

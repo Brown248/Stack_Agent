@@ -1,0 +1,33 @@
+{
+  "baseline": ".stack-agent/guard-baseline.json",
+  "ignore": ["out"],
+  "rules": [
+    {
+      "id": "no-merge-conflict-markers",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "^(<{7}|>{7})( .*)?$",
+      "flags": "m",
+      "message": "an unresolved merge conflict marker was committed",
+      "fix": "resolve the conflict and delete the <<<<<<< / >>>>>>> lines"
+    },
+    {
+      "id": "no-private-keys",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "-----BEGIN ((RSA|EC|DSA|OPENSSH) )?PRIVATE KEY-----",
+      "message": "a private key is in the repository",
+      "fix": "remove it, rotate the key, and load it from a secret store or an untracked env file"
+    },
+    {
+      "id": "transform-is-pure",
+      "type": "pattern",
+      "files": ["src/**"],
+      "pattern": "\\bnode:|\\brequire\\(|\\bprocess\\.|\\bconsole\\.",
+      "message": "src/ must stay pure: no file access, process state, or printing",
+      "fix": "return a value or throw from src/transform.js, and do the reading, writing, and printing in job.mjs"
+    }
+  ]
+}

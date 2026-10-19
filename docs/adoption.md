@@ -63,10 +63,10 @@ Put the 3 to 5 rules that must never break in `.stack-agent/guard.config.json`. 
 | Type | Use when | Fields |
 | --- | --- | --- |
 | `pattern` | text that must never appear in some files, in any language | `files`, `pattern`, `flags`, `exclude` |
-| `forbidden-import` | JS/TS files that must not import certain files or packages | `files`, `to` (glob of the resolved target file), `toSpecifiers` (glob of package names) |
-| `module-boundary` | JS/TS modules that may talk only through a public entry | `modulesRoot`, `publicEntry` |
+| `forbidden-import` | JS/TS or Python files that must not import certain files or packages | `files`, `to` (glob of the resolved target file), `toSpecifiers` (glob of package or dotted module names) |
+| `module-boundary` | JS/TS or Python modules that may talk only through a public entry | `modulesRoot`, `publicEntry` |
 
-**`forbidden-import` and `module-boundary` only understand JavaScript and TypeScript.** In any other language, delete them from the template and write the same rule as a `pattern`.
+**`forbidden-import` and `module-boundary` understand JavaScript, TypeScript, and Python (`.py`) imports.** In any other language, delete them from the template and write the same rule as a `pattern`.
 
 Details that cause silent misses:
 
@@ -78,8 +78,11 @@ Details that cause silent misses:
 - `to` matches the file an import resolves to. Importing `../db/index.js` needs `"to": ["src/db/**"]`. `"src/db"` matches nothing.
 - Globs support `*`, `**`, `?`, and `{js,ts}`.
 - Path-alias imports (`@/modules/x`) need `"aliases": {"@/": "src/"}`.
-- Import rules skip imports inside comments.
-- For other languages, write the rule as a `pattern`. Example: `"files": ["app/api/**/*.py"], "pattern": "^from app\\.db import"`.
+- Import rules skip imports inside comments (and, in Python, inside strings and docstrings).
+- Python: `import a.b`, `from a.b import x`, relative `from ..pkg import x`, and parenthesized multi-line imports are all read. Relative imports resolve against the importing file's package. Absolute ones are looked up under `pythonRoots` (default `["."]`, plus `"src"` when a `src/` folder exists) as `<mod>.py`, then `<mod>/__init__.py`. `from pkg import name` counts as importing `pkg/name.py` when that file exists. Example: `"files": ["app/api/**"], "to": ["app/db.py", "app/db/**"]`.
+- Python modules that are not found in the repo (third-party) are matched by `toSpecifiers` on their dotted name, and a package name also matches its submodules: `"toSpecifiers": ["requests"]` catches `import requests.adapters`.
+- For Python, `module-boundary` defaults `publicEntry` to `["__init__.py"]`, so other modules may import the package but not the files inside it.
+- For other languages, write the rule as a `pattern` that matches the import line.
 
 ```bash
 node .stack-agent/bin/guard.mjs --update-baseline
@@ -152,6 +155,8 @@ node <path-to-Stack_Agent>/scripts/init.mjs . --check
 ```
 
 Exit 0 means setup is complete. Otherwise it lists what is left.
+
+`--check` also compares every file in `.stack-agent/bin/` with the plugin's current copy. A file that differs or is missing appears as `outdated: .stack-agent/bin/<file>` and counts as unfinished setup (exit 1). This tells you that your vendored guard or verify is older than the plugin and may lack recent fixes. Refresh them by rerunning `node <path-to-Stack_Agent>/scripts/init.mjs .`, which rewrites only the tools and never touches your configs. `.stack-agent/bin/VERSION` records which plugin version the tools came from.
 
 ## 5. Skills
 

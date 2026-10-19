@@ -52,6 +52,39 @@ test("--check exits 1 while placeholders remain and 0 on a finished setup", () =
 	assert.match(done.stdout, /setup complete/);
 });
 
+test("init stamps .stack-agent/bin/VERSION with the plugin version", () => {
+	const dir = emptyDir();
+	assert.match(runNode(initScript, [dir]).stdout, /created {3}\.stack-agent\/bin\/VERSION/);
+	const { version } = JSON.parse(fs.readFileSync(path.join(repoRoot, ".claude-plugin/plugin.json"), "utf8"));
+	assert.equal(fs.readFileSync(path.join(dir, ".stack-agent/bin/VERSION"), "utf8"), version + "\n");
+	assert.match(runNode(initScript, [dir]).stdout, /unchanged \.stack-agent\/bin\/VERSION/);
+});
+
+test("--check reports vendored tools that differ from the plugin, and rerunning init fixes them", () => {
+	const fresh = emptyDir();
+	runNode(initScript, [fresh]);
+	assert.doesNotMatch(runNode(initScript, [fresh, "--check"]).stdout, /outdated|refresh it/, "a fresh init has nothing outdated");
+
+	const sample = copySample();
+	runNode(initScript, [sample]);
+	write(sample, ".stack-agent/bin/guard.mjs", "// old guard\n");
+	write(sample, ".stack-agent/bin/VERSION", "0.0.1\n");
+	fs.rmSync(path.join(sample, ".stack-agent/bin/lib/files.mjs"));
+	const stale = runNode(initScript, [sample, "--check"]);
+	assert.equal(stale.code, 1, stale.stdout);
+	assert.match(stale.stdout, /outdated: \.stack-agent\/bin\/guard\.mjs\n/);
+	assert.match(stale.stdout, /outdated: \.stack-agent\/bin\/VERSION\n/);
+	assert.match(stale.stdout, /outdated: \.stack-agent\/bin\/lib\/files\.mjs \(missing\)/);
+	assert.doesNotMatch(stale.stdout, /outdated: \.stack-agent\/bin\/(verify|api-map)\.mjs/);
+	assert.match(stale.stdout, /refresh it with `node \S*scripts\/init\.mjs /);
+	assert.equal(fs.readFileSync(path.join(sample, ".stack-agent/bin/guard.mjs"), "utf8"), "// old guard\n", "--check must not write");
+
+	runNode(initScript, [sample]);
+	const fixed = runNode(initScript, [sample, "--check"]);
+	assert.equal(fixed.code, 0, fixed.stdout);
+	assert.doesNotMatch(fixed.stdout, /outdated/);
+});
+
 test("the vendored tools work from the target repo", () => {
 	const sample = copySample();
 	runNode(initScript, [sample]);

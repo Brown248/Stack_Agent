@@ -1,0 +1,13 @@
+{
+  "name": "tip-splitter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stack Agent example: a zero-dependency static web app with a tiny node:http dev server.",
+  "scripts": {
+    "start": "node src/server/server.js",
+    "test": "node --test",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "license": "MIT"
+}

@@ -63,10 +63,10 @@ node .stack-agent/bin/verify.mjs
 | แบบ | ใช้เมื่อ | ฟิลด์ |
 | --- | --- | --- |
 | `pattern` | ข้อความที่ห้ามปรากฏในไฟล์บางกลุ่ม ใช้ได้ทุกภาษา | `files`, `pattern`, `flags`, `exclude` |
-| `forbidden-import` | ไฟล์ JS/TS กลุ่มหนึ่งห้าม import ไฟล์หรือ package บางตัว | `files`, `to` (glob ของไฟล์ปลายทางที่ import ไปถึงจริง), `toSpecifiers` (glob ของชื่อ package) |
-| `module-boundary` | โมดูล JS/TS คุยกันได้เฉพาะผ่าน public entry | `modulesRoot`, `publicEntry` |
+| `forbidden-import` | ไฟล์ JS/TS หรือ Python กลุ่มหนึ่งห้าม import ไฟล์หรือ package บางตัว | `files`, `to` (glob ของไฟล์ปลายทางที่ import ไปถึงจริง), `toSpecifiers` (glob ของชื่อ package หรือชื่อโมดูลแบบมีจุด) |
+| `module-boundary` | โมดูล JS/TS หรือ Python คุยกันได้เฉพาะผ่าน public entry | `modulesRoot`, `publicEntry` |
 
-**`forbidden-import` และ `module-boundary` เข้าใจเฉพาะ JavaScript และ TypeScript** ถ้าเป็นภาษาอื่นให้ลบออกจาก template แล้วเขียนกฎเดียวกันเป็นแบบ `pattern`
+**`forbidden-import` และ `module-boundary` เข้าใจ import ของ JavaScript, TypeScript และ Python (`.py`)** ถ้าเป็นภาษาอื่นให้ลบออกจาก template แล้วเขียนกฎเดียวกันเป็นแบบ `pattern`
 
 รายละเอียดที่ทำให้กฎไม่ทำงานโดยไม่มีใครรู้:
 
@@ -78,8 +78,11 @@ node .stack-agent/bin/verify.mjs
 - `to` เทียบกับไฟล์ที่ import ไปถึงจริง เช่น import `../db/index.js` ต้องเขียน `"to": ["src/db/**"]` ถ้าเขียน `"src/db"` จะไม่จับอะไรเลย
 - glob รองรับ `*`, `**`, `?` และ `{js,ts}`
 - import แบบ path alias (เช่น `@/modules/x`) ต้องตั้ง `"aliases": {"@/": "src/"}`
-- กฎ import ข้าม import ที่อยู่ใน comment
-- ภาษาอื่นให้เขียนเป็นกฎแบบ `pattern` เช่น `"files": ["app/api/**/*.py"], "pattern": "^from app\\.db import"`
+- กฎ import ข้าม import ที่อยู่ใน comment (และใน Python ข้ามที่อยู่ใน string และ docstring ด้วย)
+- Python: อ่านได้ทั้ง `import a.b`, `from a.b import x`, import แบบ relative `from ..pkg import x` และ import หลายบรรทัดในวงเล็บ import แบบ relative หาเทียบกับ package ของไฟล์ที่ import ส่วนแบบ absolute หาใต้ `pythonRoots` (ค่าเริ่มต้น `["."]` และเพิ่ม `"src"` ถ้ามีโฟลเดอร์ `src/`) โดยลอง `<mod>.py` ก่อน แล้วจึง `<mod>/__init__.py` ส่วน `from pkg import name` นับว่า import `pkg/name.py` ถ้าไฟล์นั้นมีอยู่จริง ตัวอย่าง: `"files": ["app/api/**"], "to": ["app/db.py", "app/db/**"]`
+- โมดูล Python ที่หาไม่เจอใน repo (third-party) เทียบกับ `toSpecifiers` ด้วยชื่อแบบมีจุด และชื่อ package ตรงกับโมดูลย่อยของมันด้วย เช่น `"toSpecifiers": ["requests"]` จับ `import requests.adapters` ได้
+- สำหรับ Python `module-boundary` ใช้ `publicEntry` เริ่มต้นเป็น `["__init__.py"]` โมดูลอื่นจึง import ตัว package ได้ แต่ import ไฟล์ข้างในไม่ได้
+- ภาษาอื่นให้เขียนเป็นกฎแบบ `pattern` ที่จับบรรทัด import
 
 ```bash
 node .stack-agent/bin/guard.mjs --update-baseline
@@ -152,6 +155,8 @@ node <path-to-Stack_Agent>/scripts/init.mjs . --check
 ```
 
 exit 0 แปลว่าตั้งค่าครบ ถ้าไม่ใช่จะบอกว่ายังเหลืออะไร
+
+`--check` ยังเทียบทุกไฟล์ใน `.stack-agent/bin/` กับไฟล์ปัจจุบันของ plugin ไฟล์ที่ต่างไปหรือหายไปจะขึ้นเป็น `outdated: .stack-agent/bin/<file>` และนับว่ายังตั้งค่าไม่ครบ (exit 1) แปลว่า guard หรือ verify ที่คัดลอกไว้เก่ากว่า plugin และอาจยังไม่มีการแก้บั๊กล่าสุด ให้อัปเดตด้วยการรัน `node <path-to-Stack_Agent>/scripts/init.mjs .` ซ้ำ คำสั่งนี้เขียนทับเฉพาะเครื่องมือ ไม่แตะ config ของคุณ ส่วน `.stack-agent/bin/VERSION` บอกว่าเครื่องมือมาจาก plugin เวอร์ชันไหน
 
 ## 5. Skills
 

@@ -1,0 +1,18 @@
+{
+  "test": { "command": "node --test", "timeoutSec": 120 },
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "build",
+      "command": "node scripts/build.mjs",
+      "expectExit": 0,
+      "expectOutputIncludes": "built dist/ (exports: isSlug, slugify)"
+    },
+    {
+      "name": "example-as-a-user",
+      "command": "node examples/basic.mjs",
+      "expectExit": 0,
+      "expectOutputMatches": "^creme-brulee-a-recipe\r?\nisSlug: true"
+    }
+  ]
+}

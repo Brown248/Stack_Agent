@@ -31,7 +31,9 @@ hooks/            hooks.json (wires scripts/hooks/*.mjs into Claude Code)
 skills/<name>/    one SKILL.md per skill, plus any scripts it calls
 scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs, lib/, hooks/
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
-examples/         sample-backend (Node HTTP API), sample-cli (Python CLI)
+examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
+                  sample-library (Node package), sample-frontend (static web app),
+                  sample-generic (CSV data job)
 evals/            claude plugin eval cases and scaffold.mjs
 tests/            node:test suite for every script and hook
 ```
@@ -39,6 +41,7 @@ tests/            node:test suite for every script and hook
 Rules that keep forks healthy:
 
 - Scripts are plain Node ESM with zero dependencies. Target repos vendor them into `.stack-agent/bin/`, and CI runs them without `npm install`.
+- `init.mjs --check` reports a vendored file as `outdated` whenever its bytes differ from `scripts/`, so every script change reaches adopters as a prompt to rerun init. A new vendored script goes in `TOOLS` in `scripts/init.mjs`. Bump `version` in `.claude-plugin/plugin.json` when you release, since init writes it to `.stack-agent/bin/VERSION`.
 - Every script behavior has a test in `tests/`. Run `npm test` after every change.
 - `claude plugin validate . --strict` must pass after you touch `.claude-plugin/`, `skills/`, `agents/`, or `hooks/`.
 
@@ -58,9 +61,9 @@ Rules live in each project's `.stack-agent/guard.config.json`, not in this repo.
 
 - `message` says what is wrong. `fix` names the file, function, or module to use instead. The guard rejects a rule without `fix`.
 - Prove each rule on a real past mistake before relying on it (`guard.mjs --strict`, or a test fixture).
-- For languages other than JS/TS, use `pattern` rules.
+- Import rules read JS/TS and Python. For other languages, use `pattern` rules.
 
-To add a new rule *type* (for example, Python imports), extend `findViolations` in `scripts/guard.mjs`, validate its fields in `loadConfig`, and add tests next to the existing ones in `tests/guard.test.mjs`.
+To add a new rule *type* (for example, imports in another language), extend `findViolations` in `scripts/guard.mjs`, validate its fields in `loadConfig`, and add tests next to the existing ones in `tests/guard.test.mjs`.
 
 ## Add a skill
 

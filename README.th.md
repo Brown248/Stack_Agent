@@ -21,7 +21,7 @@ Stack Agent ย้ายกฎออกจาก prompt ไปไว้ในส
 | ชั้น | อยู่ที่ | หน้าที่ |
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | รันเทส เปิด server (ถ้ามี) รัน HTTP check และ command check แล้วเขียนหลักฐานลง `.stack-agent/evidence/` |
-| Hard constraint (CI) | `scripts/guard.mjs` | กฎแบบ regex ใช้ได้ทุกภาษา และกฎ import สำหรับ JS/TS มี baseline แบบ ratchet คือของเดิมผ่าน แต่ของใหม่ต้อง fail ส่วน `--compare-ref` ทำให้ PR ที่แอบผ่อนกฎ fail |
+| Hard constraint (CI) | `scripts/guard.mjs` | กฎแบบ regex ใช้ได้ทุกภาษา และกฎ import สำหรับ JS/TS และ Python มี baseline แบบ ratchet คือของเดิมผ่าน แต่ของใหม่ต้อง fail ส่วน `--compare-ref` ทำให้ PR ที่แอบผ่อนกฎ fail |
 | Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบ branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และเตือนครั้งเดียวก่อน agent จบงานถ้ายังไม่ได้ verify |
 | Soft constraint | `.stack-agent/rules.md` | วิธีเขียนที่ทีมชอบ โหลดเข้าทุก session |
 | Feature map (backend) | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่ endpoint จากโค้ด และ fail เมื่อแผนที่ไม่ตรงกับโค้ด |
@@ -81,11 +81,14 @@ Fork หรือ clone repo แล้วแก้ได้ทุกส่วน
 
 - [`examples/sample-backend`](examples/sample-backend): HTTP API ด้วย Node บน `node:sqlite` แบ่งเป็นโมดูล มีตัวรัน migration, แผนที่ API และจุดผิดกฎแบบ legacy ที่ตั้งใจใส่ไว้เพื่อสาธิต ratchet
 - [`examples/sample-cli`](examples/sample-cli): CLI ภาษา Python ที่มี command check และกฎ guard "core ต้องไม่ทำ I/O" แสดงว่าตัวโปรเจคไม่จำเป็นต้องเป็น Node
+- [`examples/sample-library`](examples/sample-library) (preset `library`): แพ็กเกจ Node ขนาดเล็กที่ check `build` โหลด `dist/` ผ่าน `exports` ใน `package.json` และตัวอย่าง import แพ็กเกจด้วยชื่อแบบที่ผู้ใช้จริงทำ พร้อมกฎ guard ที่ห้ามตัวอย่างเข้าไปใช้ `src/internal/`
+- [`examples/sample-frontend`](examples/sample-frontend) (preset `frontend-web`): เว็บแอปแบบ static บน dev server ที่เขียนด้วย `node:http` มี check หน้าเว็บ และสคริปต์ `e2e` ที่ไล่ตรวจทุกโมดูลที่หน้าเว็บโหลด พร้อมกฎ guard `client-not-import-server`
+- [`examples/sample-generic`](examples/sample-generic) (preset `generic`): งานประมวลผลข้อมูลที่แปลง CSV ค่าใช้จ่ายเป็นยอดรวมแยกตามหมวด มี smoke check แบบ `args` ที่ไม่ผ่าน shell และกฎ guard "transform ต้องไม่ทำ I/O"
 
 ## ข้อกำหนดและข้อจำกัด
 
 - ต้องมี Node.js 22 ขึ้นไปเพื่อรันเครื่องมือเท่านั้น ตัวโปรเจคใช้ภาษาอะไรก็ได้
-- กฎ `forbidden-import` และ `module-boundary` อ่านได้เฉพาะ import ของ JS/TS ภาษาอื่นให้ใช้กฎแบบ `pattern`
+- กฎ `forbidden-import` และ `module-boundary` อ่าน import ของ JS/TS และ Python ภาษาอื่นให้ใช้กฎแบบ `pattern`
 - hook ดักด้วยการจับ pattern ของคำสั่ง จึงจับทางลัดที่พบบ่อยได้ แต่ไม่ครอบคลุมทุกรูปแบบ CI คือด่านที่ต้องมีเสมอ
 - `claude plugin eval` ต้องใช้ Claude Code 2.1.269 ขึ้นไป eval case ที่ให้ agent ใช้ Bash ต้องรันบน Linux, macOS หรือ WSL2 เพราะ Windows ไม่มี sandbox สำหรับกรณีนี้
 - ทดสอบจริงแล้วบน Windows 11 กับ Node 25 ส่วน CI ตั้งไว้สำหรับ Linux และ Windows บน Node 22 และ 24

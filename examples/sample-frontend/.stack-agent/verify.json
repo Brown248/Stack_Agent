@@ -1,0 +1,29 @@
+{
+  "test": { "command": "node --test", "timeoutSec": 120 },
+  "server": {
+    "command": "node src/server/server.js",
+    "env": { "PORT": "3999" },
+    "readyUrl": "http://127.0.0.1:3999/",
+    "readyTimeoutSec": 30
+  },
+  "baseUrl": "http://127.0.0.1:3999",
+  "evidenceDir": ".stack-agent/evidence",
+  "checks": [
+    {
+      "name": "home-page",
+      "method": "GET",
+      "path": "/",
+      "expectStatus": 200,
+      "expectBodyIncludes": "<main id=\"app\">"
+    },
+    {
+      "name": "e2e",
+      "command": "node scripts/e2e.mjs",
+      "needsServer": true,
+      "env": { "BASE_URL": "http://127.0.0.1:3999" },
+      "expectExit": 0,
+      "expectOutputIncludes": "e2e: ok",
+      "timeoutSec": 60
+    }
+  ]
+}

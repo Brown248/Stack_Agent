@@ -1,0 +1,15 @@
+{
+  "name": "tinyslug",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stack Agent example: a tiny zero-dependency slug library.",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

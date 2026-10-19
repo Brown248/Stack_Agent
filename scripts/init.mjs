@@ -9,9 +9,10 @@ const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--check] [--li
   adds config templates for the chosen preset and a CI workflow only where none exist,
   and ignores the evidence dir.
   --preset NAME   project type: generic (default), backend-http, cli, library, frontend-web
-  --check         only report setup that is still unfinished (EDIT ME placeholders, missing files)
+  --check         only report setup that is still unfinished (EDIT ME placeholders, missing files,
+                  vendored tools in .stack-agent/bin that differ from this plugin's copy)
   --list-presets  print the available presets
-exit codes: 0 done / setup complete, 1 setup still has placeholders, 2 usage error`;
+exit codes: 0 done / setup complete, 1 setup still unfinished, 2 usage error`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
@@ -26,6 +27,25 @@ const ALWAYS_REQUIRED = [".stack-agent/guard.config.json", ".stack-agent/verify.
 const GITIGNORE_LINE = ".stack-agent/evidence/";
 const PRESET_FILES = ["guard.config.json", "verify.json", "api-map.json"];
 const PRESET_MARKER = ".stack-agent/preset";
+const BIN = ".stack-agent/bin";
+
+export function pluginVersion() {
+	return JSON.parse(fs.readFileSync(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "utf8")).version;
+}
+
+// Everything init writes to .stack-agent/bin: each tool as this plugin ships it, plus a VERSION stamp for humans.
+export function vendoredFiles() {
+	return [...TOOLS.map((tool) => [tool, fs.readFileSync(path.join(pluginRoot, "scripts", tool))]), ["VERSION", Buffer.from(pluginVersion() + "\n")]];
+}
+
+export function outdatedTools(target) {
+	return vendoredFiles()
+		.filter(([rel, src]) => {
+			const dest = path.join(target, BIN, rel);
+			return !fs.existsSync(dest) || Buffer.compare(fs.readFileSync(dest), src) !== 0;
+		})
+		.map(([rel]) => rel);
+}
 
 export function recordedPreset(target) {
 	const file = path.join(target, PRESET_MARKER);
@@ -56,14 +76,20 @@ export function pendingSetup(target) {
 	}
 	if (usesApiMap && !fs.existsSync(path.join(target, ".stack-agent/api-map.md"))) pending.push(".stack-agent/api-map.md: missing, create it with `node .stack-agent/bin/api-map.mjs --draft`");
 	if (!fs.existsSync(path.join(target, ".stack-agent/guard-baseline.json"))) pending.push(".stack-agent/guard-baseline.json: missing, record existing violations with `node .stack-agent/bin/guard.mjs --update-baseline`");
+	const outdated = outdatedTools(target);
+	for (const rel of outdated) pending.push(`outdated: ${BIN}/${rel}${fs.existsSync(path.join(target, BIN, rel)) ? "" : " (missing)"}`);
+	if (outdated.length) {
+		const arg = (p) => (/\s/.test(p) ? JSON.stringify(p) : p);
+		const where = toPosix(path.relative(process.cwd(), target)) || ".";
+		pending.push(`${BIN}: differs from Stack Agent ${pluginVersion()}, refresh it with \`node ${arg(toPosix(path.join(pluginRoot, "scripts", "init.mjs")))} ${arg(where)}\``);
+	}
 	return pending;
 }
 
 export function init(target, preset = "generic") {
 	const report = [];
-	for (const tool of TOOLS) {
-		const dest = path.join(target, ".stack-agent/bin", tool);
-		const src = fs.readFileSync(path.join(pluginRoot, "scripts", tool));
+	for (const [tool, src] of vendoredFiles()) {
+		const dest = path.join(target, BIN, tool);
 		const existed = fs.existsSync(dest);
 		const same = existed && Buffer.compare(fs.readFileSync(dest), src) === 0;
 		if (!same) {

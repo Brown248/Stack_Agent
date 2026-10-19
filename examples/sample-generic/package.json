@@ -1,0 +1,12 @@
+{
+  "name": "expense-totals",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stack Agent example: a data job that turns an expenses CSV into per-category totals.",
+  "scripts": {
+    "job": "node job.mjs data/expenses.csv out/totals.csv",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

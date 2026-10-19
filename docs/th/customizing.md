@@ -31,7 +31,9 @@ hooks/            hooks.json (ผูก scripts/hooks/*.mjs เข้ากั�
 skills/<name>/    SKILL.md หนึ่งไฟล์ต่อ skill และ script ที่ skill เรียกใช้
 scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs, lib/, hooks/
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
-examples/         sample-backend (Node HTTP API), sample-cli (Python CLI)
+examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
+                  sample-library (Node package), sample-frontend (static web app),
+                  sample-generic (CSV data job)
 evals/            eval case ของ claude plugin eval และ scaffold.mjs
 tests/            ชุดเทส node:test สำหรับทุก script และ hook
 ```
@@ -39,6 +41,7 @@ tests/            ชุดเทส node:test สำหรับทุก scrip
 กติกาที่ทำให้ fork ไม่พัง:
 
 - script เป็น Node ESM ธรรมดาและไม่มี dependency เพราะ repo ปลายทางคัดลอกไปไว้ใน `.stack-agent/bin/` และ CI รันได้โดยไม่ต้อง `npm install`
+- `init.mjs --check` รายงานไฟล์ที่คัดลอกไว้เป็น `outdated` เมื่อเนื้อหาไม่ตรงกับ `scripts/` ทุก byte ดังนั้นทุกการแก้ script จะไปถึงทีมที่ใช้งานในรูปของคำเตือนให้รัน init ซ้ำ script ใหม่ที่ต้องคัดลอกให้เพิ่มใน `TOOLS` ของ `scripts/init.mjs` และเมื่อออก release ให้เพิ่ม `version` ใน `.claude-plugin/plugin.json` เพราะ init จะเขียนค่านี้ลง `.stack-agent/bin/VERSION`
 - ทุกพฤติกรรมของ script มีเทสใน `tests/` ให้รัน `npm test` ทุกครั้งที่แก้
 - `claude plugin validate . --strict` ต้องผ่านหลังแก้ `.claude-plugin/`, `skills/`, `agents/` หรือ `hooks/`
 
@@ -58,9 +61,9 @@ tests/            ชุดเทส node:test สำหรับทุก scrip
 
 - `message` บอกว่าผิดอะไร `fix` บอกชื่อไฟล์ ฟังก์ชัน หรือโมดูลที่ให้ใช้แทน guard จะไม่รับกฎที่ไม่มี `fix`
 - พิสูจน์ว่ากฎจับความผิดจริงในอดีตได้ก่อนพึ่งพา (`guard.mjs --strict` หรือ fixture ในเทส)
-- ภาษาที่ไม่ใช่ JS/TS ให้ใช้กฎแบบ `pattern`
+- กฎ import อ่านได้ทั้ง JS/TS และ Python ภาษาอื่นให้ใช้กฎแบบ `pattern`
 
-ถ้าจะเพิ่ม *แบบ* ของกฎใหม่ (เช่นอ่าน import ของ Python) ให้ขยาย `findViolations` ใน `scripts/guard.mjs` ตรวจฟิลด์ใน `loadConfig` และเพิ่มเทสข้างเทสเดิมใน `tests/guard.test.mjs`
+ถ้าจะเพิ่ม *แบบ* ของกฎใหม่ (เช่นอ่าน import ของภาษาอื่น) ให้ขยาย `findViolations` ใน `scripts/guard.mjs` ตรวจฟิลด์ใน `loadConfig` และเพิ่มเทสข้างเทสเดิมใน `tests/guard.test.mjs`
 
 ## เพิ่ม skill
 

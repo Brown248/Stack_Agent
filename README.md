@@ -21,7 +21,7 @@ Stack Agent moves rules out of prompts and into things that fail loudly: a verif
 | Layer | Where | What it does |
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | Runs your tests, starts your server if you have one, runs HTTP checks and command checks, and writes evidence to `.stack-agent/evidence/`. |
-| Hard constraints (CI) | `scripts/guard.mjs` | Regex rules for any language, plus import rules for JS/TS. A baseline ratchets: existing violations pass, new ones fail. `--compare-ref` fails a PR that loosens the rules. |
+| Hard constraints (CI) | `scripts/guard.mjs` | Regex rules for any language, plus import rules for JS/TS and Python. A baseline ratchets: existing violations pass, new ones fail. `--compare-ref` fails a PR that loosens the rules. |
 | Hard constraints (live) | `hooks/hooks.json` | Blocks hook bypasses (`--no-verify`, `HUSKY=0`, `core.hooksPath`), asks before force-push, branch deletion, `reset --hard`, or edits to the guard's own files. Runs the guard after every edit. Reminds once to verify before the agent stops. |
 | Soft constraints | `.stack-agent/rules.md` | Team preferences loaded into every session. |
 | Feature map (backends) | `scripts/api-map.mjs`, skill `api-map` | Drafts an endpoint map from code and fails when the map drifts. |
@@ -81,11 +81,14 @@ The full setup walkthrough is in [docs/adoption.md](docs/adoption.md).
 
 - [`examples/sample-backend`](examples/sample-backend): a Node HTTP API on `node:sqlite` with modules, a migration runner, an API map, and a deliberate legacy violation that shows the ratchet.
 - [`examples/sample-cli`](examples/sample-cli): a Python CLI with command checks and a "core stays pure" guard rule. It shows that the project itself does not need to be Node.
+- [`examples/sample-library`](examples/sample-library) (`library` preset): a small Node package whose `build` check loads `dist/` through `package.json` `exports` and whose example imports the package by name, plus a guard rule that keeps examples out of `src/internal/`.
+- [`examples/sample-frontend`](examples/sample-frontend) (`frontend-web` preset): a static web app on a `node:http` dev server, with a page check and an `e2e` script that follows every module the page loads, plus the `client-not-import-server` guard rule.
+- [`examples/sample-generic`](examples/sample-generic) (`generic` preset): a data job that turns an expenses CSV into per-category totals, with a shell-free `args` smoke check and a "transform stays pure" guard rule.
 
 ## Requirements and limits
 
 - Node.js 22 or newer, only to run the tools. The project can use any language.
-- `forbidden-import` and `module-boundary` rules read JS/TS imports only. Use `pattern` rules for other languages.
+- `forbidden-import` and `module-boundary` rules read JS/TS and Python imports. Use `pattern` rules for other languages.
 - The hooks match command patterns. They catch common shortcuts, not every possible one. CI is the gate that always holds.
 - `claude plugin eval` needs Claude Code 2.1.269 or newer. Cases that let the agent use Bash need Linux, macOS, or WSL2, because native Windows has no sandbox for them.
 - Tested on Windows 11 with Node 25. CI is set up for Linux and Windows on Node 22 and 24.

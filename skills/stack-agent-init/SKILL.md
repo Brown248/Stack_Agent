@@ -30,7 +30,7 @@ Run from the repo root:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/init.mjs" . --preset <preset>
 ```
 
-It copies `guard.mjs`, `verify.mjs`, `api-map.mjs` into `.stack-agent/bin/` so CI can run them without the plugin. It adds the preset's config templates and `.github/workflows/stack-agent.yml` only where none exist, and adds `.stack-agent/evidence/` to `.gitignore`. Re-running it is safe. Node.js 22+ must be installed even when the project uses another language. Only the tools need it.
+It copies `guard.mjs`, `verify.mjs`, `api-map.mjs` into `.stack-agent/bin/` so CI can run them without the plugin, with a `VERSION` file naming the plugin version. It adds the preset's config templates and `.github/workflows/stack-agent.yml` only where none exist, and adds `.stack-agent/evidence/` to `.gitignore`. Re-running it is safe. Node.js 22+ must be installed even when the project uses another language. Only the tools need it.
 
 ## 3. Verification first (`.stack-agent/verify.json`)
 
@@ -47,7 +47,7 @@ Do not continue until it prints `verify: ok`. If the program cannot run locally 
 Every preset keeps two universal rules (no merge-conflict markers, no private keys). Replace every `EDIT ME` value, and make sure the config holds the 3 to 5 rules that must never break in this repo. Ask the user, or mine them with `/stack-agent:correct`. For each rule, write `message` and a `fix` that names the file or function to use instead.
 
 - `pattern` works in any language. Patterns are JavaScript regular expressions, always multiline (`^` and `$` match each line). In JSON, write `\\b` for a regex `\b`.
-- `forbidden-import` and `module-boundary` read JavaScript/TypeScript imports only. For other languages, express the rule as a `pattern`, e.g. `^from app\.db import` in `app/api/**/*.py`.
+- `forbidden-import` and `module-boundary` read JavaScript/TypeScript and Python imports. For Python, `to` is a glob of the resolved `.py` file (`["app/db.py", "app/db/**"]`), `toSpecifiers` matches dotted names of third-party packages (`["requests"]` also catches `requests.adapters`), absolute imports are found under `pythonRoots` (default `["."]`, plus `"src"` if it exists), and `module-boundary` defaults `publicEntry` to `["__init__.py"]`. For other languages, express the rule as a `pattern` that matches the import line.
 - Every list field (`files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`) is an array of strings. `to` is a glob of the resolved target file (`["src/db/**"]`, not `"src/db"`). Path-alias imports need `"aliases": {"@/": "src/"}`.
 - Delete template rules that do not fit. The guard prints `warning: rule ... matches no files` for them.
 
@@ -82,4 +82,4 @@ Fill `.stack-agent/rules.md` with soft preferences. Add `@.stack-agent/rules.md`
 node "${CLAUDE_PLUGIN_ROOT}/scripts/init.mjs" . --check
 ```
 
-Report the output. Exit 0 means setup is complete. Do not commit. List the files you created and let the user review them.
+Report the output. Exit 0 means setup is complete. An `outdated: .stack-agent/bin/<file>` line means a vendored tool differs from the plugin's copy. Rerun step 2 to refresh it; your configs are kept. Do not commit. List the files you created and let the user review them.

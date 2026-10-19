@@ -18,7 +18,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | แนวคิด | ทำเป็น | ตรวจโดย |
 | --- | --- | --- |
-| Verification: agent ต้องพิสูจน์ว่าโปรแกรมทำงานจริง | `scripts/verify.mjs` (เทส, server, HTTP check, command check, หลักฐาน) และ skill `verify` | `tests/verify.test.mjs`, `tests/verify-command.test.mjs` และตัวอย่างทั้งสองผ่าน verify แบบเต็ม |
+| Verification: agent ต้องพิสูจน์ว่าโปรแกรมทำงานจริง | `scripts/verify.mjs` (เทส, server, HTTP check, command check, หลักฐาน) และ skill `verify` | `tests/verify.test.mjs`, `tests/verify-command.test.mjs`, `tests/verify-args.test.mjs` และตัวอย่างทั้งห้าผ่าน verify แบบเต็ม |
 | Close the loop: เช็กผลเองใน session เดียวกัน | หลักฐานใน `.stack-agent/evidence/latest.json` (บันทึกว่ารันเต็มหรือบางส่วน) และ Stop hook `stop-verify.mjs` | `tests/hooks.test.mjs`, `tests/stop-hook.test.mjs` |
 | Feature map: ฟีเจอร์ไหนอยู่ตรงไหน | `scripts/api-map.mjs` สำหรับ HTTP backend พร้อมตรวจ drift | `tests/api-map.test.mjs` และ eval ที่รันจริง (ด้านล่าง) |
 | Hard constraint อยู่ใน lint/CI ไม่ใช่ prompt | `scripts/guard.mjs` และ `templates/ci/stack-agent.yml` | `tests/guard.test.mjs`, `tests/presets.test.mjs` |
@@ -27,7 +27,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | Ratchet สำหรับ repo ที่ใช้ร่วมกัน | baseline, `--allow-increase`, `--compare-ref` | เทส ratchet และ compare-ref |
 | สุ่มตรวจแทนการรีวิวทุก PR | `scripts/sample-commits.mjs`, skill `sample-review` และ agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 122 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 150 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 9 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -41,7 +41,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 ## ข้อจำกัดที่รู้อยู่
 
-- กฎที่อ่าน import รองรับเฉพาะ JS/TS ภาษาอื่นใช้กฎแบบ `pattern`
+- กฎที่อ่าน import รองรับ JS/TS และ Python ภาษาอื่นใช้กฎแบบ `pattern` การหาโมดูล Python เป็นแบบ static ไม่ตามการแก้ `sys.path`, การเรียก `importlib` หรือ package ที่ติดตั้งไว้ โมดูลที่หาไม่เจอใน repo จึงถือเป็น third-party
 - hook ที่ดักคำสั่ง shell ใช้การจับ pattern ถ้าตั้งใจเลี่ยง (เช่นใช้ alias หรือ script ที่เขียนไฟล์โดยไม่ระบุชื่อไฟล์ในคำสั่ง) อาจหลุดได้ CI ที่มี `--compare-ref` และ CODEOWNERS คือด่านที่ไม่มีทางหลุด
 - guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย CI และ Stop hook
 - ratchet นับต่อไฟล์ต่อกฎ
@@ -51,8 +51,8 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 122 เทสบน Windows 11 กับ Node 25 |
-| ตัวอย่างทั้งสอง (Node API, Python CLI) | ผ่าน guard และ verify แบบเต็ม |
+| Unit และ integration test | ผ่าน 150 เทสบน Windows 11 กับ Node 25 |
+| ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
 | Eval `api-map-lookup` (อ่านอย่างเดียว) | รันจริง 2 ครั้ง: มี plugin 1.0, ไม่มี 0.5, ส่วนต่าง +0.5 ทั้งสองแบบตอบถูก ที่ต่างคือแบบมี plugin อ่านแผนที่ก่อน |
