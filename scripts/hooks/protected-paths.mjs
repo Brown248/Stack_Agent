@@ -16,6 +16,6 @@ export function protectedMentioned(text) {
 export function askForProtected(what) {
 	return {
 		decision: "ask",
-		reason: `this changes ${what}, which decide what the guard enforces. Loosening them is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead.`,
+		reason: `this changes ${what}. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead.`,
 	};
 }

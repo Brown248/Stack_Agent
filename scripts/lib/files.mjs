@@ -22,7 +22,15 @@ export function toPosix(p) {
 	return p.split(path.sep).join("/");
 }
 
+const globCache = new Map();
+
 export function globToRegExp(glob) {
+	let cached = globCache.get(glob);
+	if (!cached) globCache.set(glob, (cached = compileGlob(glob)));
+	return cached;
+}
+
+function compileGlob(glob) {
 	let re = "";
 	for (let i = 0; i < glob.length; i++) {
 		const c = glob[i];

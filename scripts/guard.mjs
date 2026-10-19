@@ -114,7 +114,7 @@ function resolveImport(root, fromRel, spec, aliases = {}) {
 	return base;
 }
 
-function findViolations(root, rule, rel, text, aliases) {
+function findViolations(root, rule, rel, text, aliases, imports) {
 	const found = [];
 	if (rule.type === "pattern") {
 		rule.regex.lastIndex = 0;
@@ -123,7 +123,7 @@ function findViolations(root, rule, rel, text, aliases) {
 			if (m[0] === "") rule.regex.lastIndex++;
 		}
 	} else if (rule.type === "forbidden-import") {
-		for (const imp of extractImports(text)) {
+		for (const imp of imports()) {
 			const target = resolveImport(root, rel, imp.spec, aliases);
 			const hit = (target !== null && matchesAny(target, rule.to)) || matchesAny(imp.spec, rule.toSpecifiers);
 			if (hit) found.push({ index: imp.index, detail: `imports ${imp.spec}` });
@@ -131,7 +131,7 @@ function findViolations(root, rule, rel, text, aliases) {
 	} else if (rule.type === "module-boundary") {
 		const prefix = rule.modulesRoot + "/";
 		const own = rel.slice(prefix.length).split("/")[0];
-		for (const imp of extractImports(text)) {
+		for (const imp of imports()) {
 			const target = resolveImport(root, rel, imp.spec, aliases);
 			if (target === null || !target.startsWith(prefix)) continue;
 			const [mod, ...rest] = target.slice(prefix.length).split("/");
@@ -155,10 +155,9 @@ function addDays(day, n) {
 	return d.toISOString().slice(0, 10);
 }
 
-function parseAllows(lines, { today, ruleIds, maxAllowDays }) {
+function parseAllows(lines, { today, latest, ruleIds, maxAllowDays }) {
 	const allows = new Map();
 	const problems = [];
-	const latest = addDays(today, maxAllowDays);
 	lines.forEach((text, i) => {
 		const m = ALLOW_RE.exec(text);
 		if (!m) return;
@@ -182,20 +181,30 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 	const all = files ?? walk(root, config.ignore);
 	const violations = [];
 	const ruleIds = new Set(config.rules.map((r) => r.id));
+	const latest = addDays(today, config.maxAllowDays);
 	if (!files && warnings) for (const r of config.rules) if (!all.some((f) => matchesAny(f, r.files) && !matchesAny(f, r.exclude))) warnings.push(`rule ${r.id} matches no files; check its files globs`);
 	for (const rel of all) {
 		const abs = path.join(root, rel);
-		if (!fs.existsSync(abs) || fs.statSync(abs).size > 1_000_000) continue;
+		let size;
+		try {
+			size = fs.statSync(abs).size;
+		} catch {
+			continue;
+		}
+		if (size > 1_000_000) continue;
 		const rules = config.rules.filter((r) => matchesAny(rel, r.files) && !matchesAny(rel, r.exclude));
 		if (rules.length === 0) continue;
 		const text = fs.readFileSync(abs, "utf8");
 		if (text.includes("\0")) continue;
-		const { allows, problems } = parseAllows(text.split("\n"), { today, ruleIds, maxAllowDays: config.maxAllowDays });
+		const { allows, problems } = parseAllows(text.split("\n"), { today, latest, ruleIds, maxAllowDays: config.maxAllowDays });
 		for (const p of problems) {
 			violations.push({ rule: "invalid-allow", file: rel, ...p, message: "exception comment is invalid or expired", fix: `write: stack-agent-allow <rule-id> reason="..." until=YYYY-MM-DD (at most ${config.maxAllowDays} days ahead) by=<approver>, or fix the code` });
 		}
+		// parsed at most once per file, and only if an import rule asks and the text could hold an import or re-export
+		let imports;
+		const importsOf = () => (imports ??= /import|export|require/.test(text) ? extractImports(text) : []);
 		for (const rule of rules) {
-			for (const v of findViolations(root, rule, rel, text, config.aliases)) {
+			for (const v of findViolations(root, rule, rel, text, config.aliases, importsOf)) {
 				if (allows.has(`${rule.id}:${v.line}`)) continue;
 				violations.push({ rule: rule.id, file: rel, ...v, message: rule.message, fix: rule.fix });
 			}

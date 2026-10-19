@@ -58,7 +58,8 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | Eval `api-map-lookup` (อ่านอย่างเดียว) | รันจริง 2 ครั้ง: มี plugin 1.0, ไม่มี 0.5, ส่วนต่าง +0.5 ทั้งสองแบบตอบถูก ที่ต่างคือแบบมี plugin อ่านแผนที่ก่อน |
 | Eval ที่ใช้ Bash (`add-endpoint-delete-item`, `verify-before-done`, `add-migration-column`) | โหลดได้ถูกต้อง แต่ยังไม่ได้รัน เพราะต้องใช้ Linux, macOS หรือ WSL2 |
 | CI บน Linux และ Windows ด้วย Node 22/24 | ตั้งค่าแล้ว ยังไม่ได้รัน |
-| Hook ใน session Claude Code จริง | ทดสอบด้วยการป้อน JSON ตามเอกสาร ยังไม่ได้ทดสอบใน session จริง |
+| Hook ใน session Claude Code จริง | ยืนยันแล้วด้วยการรันจริงแบบ headless (`claude -p --plugin-dir`, Claude Code 2.1.300, haiku, รวม $0.05): การปฏิเสธ `--no-verify`, การถามก่อนแก้ guard baseline, guard หลังแก้ไฟล์ และการเตือนตอน Stop ทำงานครบ และการเตือนไม่เด้งซ้ำในครั้งที่สอง |
+| ความเร็วของ guard ตอนสแกนทั้ง repo | หลัง cache regex ของ glob และตัดการเช็กไฟล์ที่ซ้ำ: repo สังเคราะห์ที่ไม่มี import ขนาด 1k/5k/20k ไฟล์ จาก 1,535→180 ms, 2,872→639 ms, 16,698→2,239 ms ส่วน repo ที่มี import เยอะ (`scripts/bench-guard.mjs`) เร็วขึ้น 13–17% เพราะเวลาส่วนใหญ่ไปอยู่ที่การหาไฟล์ปลายทางของ import ผลลัพธ์เหมือนเดิมทุกไบต์ |
 
 ## บันทึกการตรวจงานตัวเอง
 

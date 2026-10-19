@@ -58,7 +58,8 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Eval `api-map-lookup` (read-only) | run twice for real: 1.0 with the plugin, 0.5 without, delta +0.5. Both answered correctly. The difference is that with the plugin the agent read the map first. |
 | Evals that use Bash (`add-endpoint-delete-item`, `verify-before-done`, `add-migration-column`) | load correctly, not yet run: they need Linux, macOS, or WSL2 |
 | CI on Linux and Windows, Node 22/24 | configured, not yet run |
-| Hooks inside a live Claude Code session | tested by feeding the documented JSON, not yet in a live session |
+| Hooks inside a live Claude Code session | verified in real headless runs (`claude -p --plugin-dir`, Claude Code 2.1.300, haiku, $0.05 total): the `--no-verify` deny, the guard-baseline ask, the PostToolUse guard, and the Stop reminder all fired, and the reminder stayed silent the second time |
+| Guard full-scan speed | after caching glob regexes and dropping redundant file checks: synthetic repos without imports, 1k/5k/20k files, 1,535→180 ms, 2,872→639 ms, 16,698→2,239 ms; import-heavy repos (`scripts/bench-guard.mjs`) 13–17% faster, where resolving import targets now dominates. Output is byte-identical before and after. |
 
 ## Self-review log
 
