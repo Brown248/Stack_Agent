@@ -133,7 +133,7 @@ Inline exceptions need a reason, an expiry date, and an approver:
 - After the date passes, the guard fails again.
 - The guard cannot prove `by=` approved it. Code review does that (see below).
 
-CI: `.github/workflows/stack-agent.yml` runs the guard, runs `guard.mjs --compare-ref origin/<base>` on pull requests (it fails if the baseline grew or a rule was removed or narrowed), and runs the API map check when `api-map.json` exists. On another CI system, run the same commands.
+CI: `.github/workflows/stack-agent.yml` runs the guard, runs `guard.mjs --compare-ref origin/<base>` on pull requests (it fails if the baseline grew or a rule was removed or narrowed), and runs the API map check when `api-map.json` exists. A separate `verify` job runs `node .stack-agent/bin/verify.mjs` on every push and pull request, with `--against origin/<base>` on pull requests, and uploads `.stack-agent/evidence/` as an artifact. That job is what makes a forged `latest.json` worthless. It is on by default and stays red until `verify.json` is filled in and you have replaced the `EDIT ME: install your dependencies` step (`npm ci`, `pip install ...`, a `services:` block for a database). `init.mjs --check` reports that step. The job is not skipped when placeholders remain, because a skip keyed to a text marker would let a pull request switch the gate off. Make `guard` and `verify` required status checks and put `.github/workflows/` and `.stack-agent/` under CODEOWNERS, since a pull request can still edit the workflow or weaken `verify.json`. On another CI system, run the same commands.
 
 ### Keeping the guard from being switched off
 

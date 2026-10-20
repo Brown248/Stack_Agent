@@ -99,3 +99,26 @@ test("init refuses the plugin repo itself and bad arguments", () => {
 	assert.equal(runNode(initScript, [path.join(repoRoot, "does-not-exist")]).code, 2);
 	assert.equal(runNode(initScript, ["a", "b"]).code, 2);
 });
+
+test("the CI workflow template runs verify in CI, with fetch-depth 0 and --against on pull requests", () => {
+	const text = fs.readFileSync(path.join(repoRoot, "templates/ci/stack-agent.yml"), "utf8");
+	const job = text.slice(text.search(/^ {2}verify:/m));
+	assert.ok(job.length < text.length, "verify job missing");
+	assert.match(job, /fetch-depth: 0/);
+	assert.match(job, /if: github\.event_name == 'pull_request'\n\s+run: node \.stack-agent\/bin\/verify\.mjs --against "origin\/\$\{\{ github\.base_ref \}\}"/);
+	assert.match(job, /if: github\.event_name != 'pull_request'\n\s+run: node \.stack-agent\/bin\/verify\.mjs\n/);
+	assert.match(job, /if: always\(\)\n\s+uses: actions\/upload-artifact@v4[\s\S]*path: \.stack-agent\/evidence\//);
+	assert.match(job, /EDIT ME: install your dependencies/);
+	assert.doesNotMatch(job, /continue-on-error/);
+});
+
+test("--check reports the workflow's EDIT ME install step on a fresh init, and examples ship it filled", () => {
+	const fresh = emptyDir();
+	runNode(initScript, [fresh]);
+	assert.match(runNode(initScript, [fresh, "--check"]).stdout, /\.github\/workflows\/stack-agent\.yml: still has EDIT ME placeholders/);
+	for (const name of fs.readdirSync(path.join(repoRoot, "examples"))) {
+		const wf = fs.readFileSync(path.join(repoRoot, "examples", name, ".github/workflows/stack-agent.yml"), "utf8");
+		assert.doesNotMatch(wf, /EDIT ME/, name);
+		assert.match(wf, /verify\.mjs --against/, name);
+	}
+});

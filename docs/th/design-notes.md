@@ -28,7 +28,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | Ratchet สำหรับ repo ที่ใช้ร่วมกัน | baseline, `--allow-increase`, `--compare-ref` | เทส ratchet และ compare-ref |
 | สุ่มตรวจแทนการรีวิวทุก PR | `scripts/sample-commits.mjs`, skill `sample-review` และ agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 216 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 219 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 9 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -45,7 +45,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 - กฎที่อ่าน import รองรับ JS/TS และ Python ภาษาอื่นใช้กฎแบบ `pattern` การหาโมดูล Python เป็นแบบ static ไม่ตามการแก้ `sys.path`, การเรียก `importlib` หรือ package ที่ติดตั้งไว้ โมดูลที่หาไม่เจอใน repo จึงถือเป็น third-party
 - hook ที่ดักคำสั่ง shell ใช้การจับ pattern ถ้าตั้งใจเลี่ยง (เช่นใช้ alias หรือ script ที่เขียนไฟล์โดยไม่ระบุชื่อไฟล์ในคำสั่ง) อาจหลุดได้ CI ที่มี `--compare-ref` และ CODEOWNERS คือด่านที่ไม่มีทางหลุด
 - guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย CI และ Stop hook
-- หลักฐานและไฟล์ skip เป็นไฟล์ธรรมดา การแก้ด้วย Edit/Write จะถามคนก่อน แต่ถ้าตั้งใจเขียนผ่าน shell ก็ยังปลอมได้ CI ที่รัน verify ซ้ำคือด่านที่ปลอมไม่ได้
+- หลักฐานและไฟล์ skip เป็นไฟล์ธรรมดา การแก้ด้วย Edit/Write จะถามคนก่อน แต่ถ้าตั้งใจเขียนผ่าน shell ก็ยังปลอมได้ job `verify` ใน template ของ CI รัน verify ซ้ำทุก push และ pull request (ใน pull request ใช้ `--against origin/<base>`) ไฟล์ที่ปลอมจึงผ่าน CI ไม่ได้ แต่ใช้ได้จริงก็ต่อเมื่อ job นี้เป็น required check, workflow กับ `verify.json` อยู่ใต้ CODEOWNERS และกรอกขั้นติดตั้ง dependency แล้ว workflow นี้ยังไม่เคยรันบน GitHub Actions จริง ตอนนี้ตรวจได้เฉพาะด้วยเทสที่อ่านข้อความ
 - ขั้น `against` พิสูจน์ได้ว่ามี check ใหม่อย่างน้อยหนึ่งตัวที่แยกโค้ดเก่ากับโค้ดใหม่ออกจากกัน แต่บอกไม่ได้ว่า check ครอบคลุมทุกอย่างที่การแก้ควรทำ และผลที่เชื่อไม่ได้ (server ของโค้ดเก่าเปิดไม่ขึ้น) จะข้ามขั้นนี้แทนที่จะให้ผ่าน
 - ratchet นับต่อไฟล์ต่อกฎ กฎแบบ import นับทีละชื่อที่ import (baseline version 2) version 1 นับทีละบรรทัด การเพิ่มชื่อเข้าไปใน import ต้องห้ามที่มีอยู่แล้วจึงผ่านได้ ช่องโหว่นี้เจอระหว่างวางแผนงาน A/B และปิดแล้วพร้อมเทสกันถอยหลัง (`tests/guard-widening.test.mjs`)
 - judge แบบ LLM ใน Claude Code เลือกได้เฉพาะโมเดล Claude คำว่า "คนละโมเดล" จึงหมายถึงโมเดล Claude อีกตัว
@@ -54,7 +54,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 216 เทสบน Windows 11 กับ Node 25 |
+| Unit และ integration test | ผ่าน 219 เทสบน Windows 11 กับ Node 25 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -62,6 +62,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | Eval ที่ใช้ Bash (`add-endpoint-delete-item`, `verify-before-done`, `add-migration-column`) | โหลดได้ถูกต้อง แต่ยังไม่ได้รัน เพราะต้องใช้ Linux, macOS หรือ WSL2 |
 | CI บน Linux และ Windows ด้วย Node 22/24 | ตั้งค่าแล้ว ยังไม่ได้รัน |
 | Hook ใน session Claude Code จริง | ยืนยันแล้วด้วยการรันจริงแบบ headless (`claude -p --plugin-dir`, Claude Code 2.1.300, haiku, รวม $0.05): การปฏิเสธ `--no-verify`, การถามก่อนแก้ guard baseline, guard หลังแก้ไฟล์ และการเตือนตอน Stop ทำงานครบ และการเตือนไม่เด้งซ้ำในครั้งที่สอง |
+| Fingerprint, ขั้น against และ Stop hook แบบบล็อกใน session จริง | รันจริงแบบ headless 4 รอบ (Claude Code 2.1.299, Sonnet, รวมประมาณ $0.52) กับ sample-backend งาน "ปฏิเสธชื่อที่ยาวเกิน 50 ตัวอักษร" เมื่อใช้ prompt ปกติ (2 รอบ) agent ทั้งสองเพิ่ม check reject-51 และรัน verify ก่อนจบ SessionStart hook บันทึก session ขั้น against รันเทียบกับ commit ตอนเริ่ม session และรายงานว่า check จับการแก้ได้ ส่วน Stop hook ปล่อยให้จบโดยไม่ต้องบล็อก เมื่อใช้ prompt ที่บอกว่า "ไม่ต้องรันอะไรหรือเพิ่มเทส" (2 รอบ) Stop hook บล็อกหนึ่งครั้ง agent ทั้งสองจึงรัน `verify.mjs --skip` พร้อมเหตุผลว่าผู้ใช้ขอแก้เร็วโดยไม่ต้องรันและไม่ต้องเทส hook แสดงเหตุผลนั้น และคำตอบสุดท้ายของทั้งคู่บอกผู้ใช้ว่ายังไม่ได้ verify สองรอบแรกถูกตัวตรวจการแยกสภาพแวดล้อมตั้งเป็น invalid เพราะ `CLAUDE_CODE_PLUGIN_DIRS` ของแอป desktop โหลด plugin อื่น 9 ตัวเข้าไปใน `claude` ลูก ซึ่ง `--setting-sources` กันไม่ได้ ตอนนี้ harness ตัดตัวแปรนี้ออกแล้ว และสองรอบถัดมาผ่านการตรวจ จำนวนรอบยังน้อยเกินกว่าจะสรุปเป็นอัตรา |
 | ความเร็วของ guard ตอนสแกนทั้ง repo | หลัง cache regex ของ glob และตัดการเช็กไฟล์ที่ซ้ำ: repo สังเคราะห์ที่ไม่มี import ขนาด 1k/5k/20k ไฟล์ จาก 1,535→180 ms, 2,872→639 ms, 16,698→2,239 ms ส่วน repo ที่มี import เยอะ (`scripts/bench-guard.mjs`) เร็วขึ้น 13–17% จากนั้นให้หาไฟล์ปลายทางของแต่ละ import บนดิสก์แค่ครั้งเดียวต่อการรัน แทนที่จะหาทุกครั้งที่เจอ import: repo ที่มี import เยอะขนาด 1k/5k ไฟล์ ค่ามัธยฐาน 566→254 ms และ 2,859→1,312 ms (ราว 2.2 เท่า เครื่องที่วัดมีโหลดแกว่ง รอบที่เร็วที่สุด 511→213 และ 1,775→860 ms) ผลลัพธ์เหมือนเดิมทุกไบต์ทุกขั้น การรันซ้ำแยกต่างหากภายหลังบนเครื่องที่มีงานอื่นแย่ง CPU ผลแกว่งเกินกว่าจะยืนยันอัตราที่แน่นอนได้ (เร็วขึ้น 3 ใน 4 ครั้ง ราว 1.7–3 เท่า และช้าลง 1 ครั้ง) จึงให้ถือเป็นตัวเลขโดยประมาณ ส่วนผลลัพธ์ตรงกันทุกไบต์ทุกครั้ง |
 
 ## ทดสอบ A/B กับ agent จริง (19 ต.ค. 2026)

@@ -47,8 +47,19 @@ export function claudeArgs({ prompt, model, budget, pluginDir, isolate }) {
 	return args;
 }
 
-export function spawnClaude(claude, args, cwd) {
-	return spawnSync(claude.command, [...claude.prefix, ...args], { cwd, encoding: "utf8", timeout: 20 * 60 * 1000, maxBuffer: 256 * 1024 * 1024 });
+// Variables a parent Claude Code sets that load plugins into any child claude; --setting-sources cannot override them,
+// so an isolated run drops them (the init-event check still catches anything else that leaks in).
+export const PLUGIN_ENV = ["CLAUDE_CODE_PLUGIN_DIRS"];
+
+export function claudeEnv(isolate, env = process.env) {
+	const out = { ...env };
+	const removed = [];
+	if (isolate) for (const key of PLUGIN_ENV) if (key in out) delete out[key], removed.push(key);
+	return { env: out, removed };
+}
+
+export function spawnClaude(claude, args, cwd, env = process.env) {
+	return spawnSync(claude.command, [...claude.prefix, ...args], { cwd, env, encoding: "utf8", timeout: 20 * 60 * 1000, maxBuffer: 256 * 1024 * 1024 });
 }
 
 // ---- transcripts ------------------------------------------------------------------------

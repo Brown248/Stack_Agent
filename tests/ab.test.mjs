@@ -197,7 +197,7 @@ test("--model and --budget are required, and bad values are usage errors", () =>
 test("an unknown task names the available ones", () => {
 	const r = runNode(runScript, ["--task", "nope", "--model", "m", "--budget", "1", "--dry-run", "--out", path.join(tempDir(), "o")]);
 	assert.equal(r.code, 2);
-	assert.match(r.stderr, /unknown task "nope" \(available: endpoint, validate\)/);
+	assert.match(r.stderr, /unknown task "nope" \(available: endpoint, validate, validate-hurry\)/);
 });
 
 test("hooks-only and skills-only plugin copies really lack the removed part", () => {
@@ -352,4 +352,14 @@ test("end to end with a fake claude: a run that loaded an extra plugin is invali
 
 test("the arm list is the documented one", () => {
 	assert.deepEqual(ARMS, ["full", "none", "hooks-only", "skills-only"]);
+});
+
+test("an isolated run drops plugin variables a parent Claude Code set; a non-isolated run keeps them", async () => {
+	const { claudeEnv } = await import("../scripts/ab/lib.mjs");
+	const parent = { PATH: "x", CLAUDE_CODE_PLUGIN_DIRS: "C:\mods\a;C:\mods\b" };
+	const isolated = claudeEnv(true, parent);
+	assert.equal("CLAUDE_CODE_PLUGIN_DIRS" in isolated.env, false);
+	assert.deepEqual(isolated.removed, ["CLAUDE_CODE_PLUGIN_DIRS"]);
+	assert.equal(isolated.env.PATH, "x");
+	assert.equal(claudeEnv(false, parent).env.CLAUDE_CODE_PLUGIN_DIRS, parent.CLAUDE_CODE_PLUGIN_DIRS);
 });

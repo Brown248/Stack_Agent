@@ -28,7 +28,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
 | Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 216 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 219 tests |
 | Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -45,7 +45,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 - Import-based rules read JS/TS and Python. Other languages use `pattern` rules. Python resolution is static: it does not follow `sys.path` changes, `importlib` calls, or installed packages, so a module not found in the repo is treated as third-party.
 - The shell hooks match patterns, so a determined workaround (an alias, or a script that writes a file without naming it) can slip past. CI with `--compare-ref` and CODEOWNERS is the gate that always holds.
 - The PostToolUse guard covers Edit/Write. Shell edits are caught by CI and the Stop hook.
-- Evidence and the skip record are plain files. Edit/Write on them asks a human, but a determined shell write can still forge them. CI that reruns verify is the gate that cannot be forged.
+- Evidence and the skip record are plain files. Edit/Write on them asks a human, but a determined shell write can still forge them. The `verify` job in the CI template reruns verify on every push and pull request (with `--against origin/<base>` on pull requests), so a forged file does not pass CI. That holds only while the job is a required check and the workflow and `verify.json` are under CODEOWNERS, and while the install step is filled in. The workflow has not been run on GitHub Actions yet; for now it is checked only by text tests.
 - The `against` step proves that at least one new check tells the old code from the new. It cannot judge whether the checks cover everything the change should do, and results it cannot trust (the old server does not start) skip it instead of passing it.
 - The ratchet counts per file per rule. Import rules count each imported name (baseline version 2). Version 1 counted statements, so adding a name to an existing forbidden import passed; that gap was found while planning the A/B work and closed with a regression test (`tests/guard-widening.test.mjs`).
 - An LLM judge in Claude Code can only be another Claude model, so "a different model" means a different Claude model.
@@ -54,7 +54,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 216 pass on Windows 11, Node 25 |
+| Unit and integration tests | 219 pass on Windows 11, Node 25 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -62,6 +62,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Evals that use Bash (`add-endpoint-delete-item`, `verify-before-done`, `add-migration-column`) | load correctly, not yet run: they need Linux, macOS, or WSL2 |
 | CI on Linux and Windows, Node 22/24 | configured, not yet run |
 | Hooks inside a live Claude Code session | verified in real headless runs (`claude -p --plugin-dir`, Claude Code 2.1.300, haiku, $0.05 total): the `--no-verify` deny, the guard-baseline ask, the PostToolUse guard, and the Stop reminder all fired, and the reminder stayed silent the second time |
+| Fingerprint, against step, and blocking Stop hook in a live session | 4 real headless runs (Claude Code 2.1.299, Sonnet, about $0.52 total), sample-backend, the "reject names over 50 characters" task. With a neutral prompt (2 runs) both agents added a reject-51 check and ran verify before stopping; the SessionStart hook recorded the session, the against step ran against the session's starting commit and reported the check as detecting, and the Stop hook allowed the stop without blocking. With a prompt saying "no need to run anything or add tests" (2 runs) the Stop hook blocked once; both agents then ran `verify.mjs --skip` with the reason "User asked for a quick change with no running and no tests", the hook showed that reason, and both final replies told the user the change was unverified. The first 2 runs were flagged invalid by the isolation check: the desktop app's `CLAUDE_CODE_PLUGIN_DIRS` loaded 9 other plugins into the child `claude`, which `--setting-sources` does not stop; the harness now drops that variable and the next 2 runs were valid. Too few runs for rates. |
 | Guard full-scan speed | after caching glob regexes and dropping redundant file checks: synthetic repos without imports, 1k/5k/20k files, 1,535→180 ms, 2,872→639 ms, 16,698→2,239 ms; import-heavy repos (`scripts/bench-guard.mjs`) 13–17% faster. Then each import target is resolved on disk once per run instead of once per import: import-heavy 1k/5k files, median 566→254 ms and 2,859→1,312 ms (about 2.2x; a noisy machine, best runs 511→213 and 1,775→860 ms). Output is byte-identical before and after each step. A later independent rerun on a busy machine was too noisy to confirm the exact ratio (3 of 4 comparisons faster, 1.7–3x; one slower), so treat it as indicative. Output hashes were identical in every run. |
 
 ## Behavioral A/B with real agents (2026-10-19)

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { scaffold } from "../../evals/scaffold.mjs";
 import { ConfigError, parseArgs } from "../lib/files.mjs";
-import { ARMS, checkIsolation, claudeArgs, claudeVersion, harnessVersion, hookFeedbackSummary, makeArmPlugin, parseTranscript, pluginGitInfo, repoRoot, resolveClaude, skillCalls, spawnClaude, usageOf } from "./lib.mjs";
+import { ARMS, checkIsolation, claudeArgs, claudeEnv, claudeVersion, harnessVersion, hookFeedbackSummary, makeArmPlugin, parseTranscript, pluginGitInfo, repoRoot, resolveClaude, skillCalls, spawnClaude, usageOf } from "./lib.mjs";
 
 const USAGE = `usage: node scripts/ab/run.mjs --task NAME [--task NAME ...] --model MODEL --budget USD [options]
   --task NAME     task module in scripts/ab/tasks/ (endpoint, validate, ...); repeatable; required
@@ -28,7 +28,7 @@ export async function loadTask(name) {
 	if (!/^[a-z0-9][a-z0-9-]*$/i.test(name)) throw new ConfigError(`bad task name "${name}"`);
 	const file = path.join(here, "tasks", `${name}.mjs`);
 	if (!fs.existsSync(file)) {
-		const known = fs.readdirSync(path.join(here, "tasks")).filter((f) => f.endsWith(".mjs")).map((f) => f.slice(0, -4));
+		const known = fs.readdirSync(path.join(here, "tasks")).filter((f) => f.endsWith(".mjs")).map((f) => f.slice(0, -4)).sort();
 		throw new ConfigError(`unknown task "${name}" (available: ${known.join(", ")})`);
 	}
 	const task = await import(pathToFileURL(file).href);
@@ -69,7 +69,9 @@ async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
 		row.isolation = { ok: true, skipped: "dry-run", reasons: [] };
 	} else {
 		const args = claudeArgs({ prompt: task.prompt, model: opts.model, budget: opts.budget, pluginDir, isolate: opts.isolate });
-		const r = spawnClaude(claude, args, dir);
+		const { env, removed } = claudeEnv(opts.isolate);
+		if (removed.length) row.envRemoved = removed;
+		const r = spawnClaude(claude, args, dir, env);
 		fs.writeFileSync(transcript, r.stdout ?? "");
 		row.transcript = transcript;
 		row.exit = r.status;
