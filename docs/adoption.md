@@ -55,6 +55,31 @@ Behavior to know:
 - The server, and any test command or command check that runs past its timeout, are stopped with their whole process tree.
 - `baseUrl` may include a path prefix, such as `http://127.0.0.1:3999/api/v1`.
 - Only a run with no flags counts as done (`"full": true` in `latest.json`). `--skip-tests`, `--skip-checks`, `--check`, and `--reuse` are for iterating. The Stop hook does not accept them as evidence.
+- Evidence records a fingerprint of the code as the run found it: the git blob id of every file git sees under the project (tracked, or untracked and not gitignored), except docs, `*.md`, and `.stack-agent/` (the `stopHookIgnore` list), but always including `verify.json`. Gitignored files such as `.env` are not part of it. Committing does not change it. Editing code or checks afterwards does. If the run itself changes files (snapshots, codegen, a database outside a gitignored folder), they are listed in the output and the Stop hook will not accept that evidence. Gitignore untracked ones; for a tracked file the run rewrites (a coverage report, a fixture), add it to `stopHookIgnore`, which takes effect from the next session.
+
+### The against step: new checks must fail on the code before the change
+
+A check that passes before and after a change does not test the change. After a full passing run, verify takes the checks that are new in `verify.json` since a reference commit and runs them against the code at that commit, in a temporary git worktree.
+
+- At least one new check must fail on the old code. If every new check passes there, the run fails with `FAIL against`, naming the checks. Usually the fix is to add the rejection case (bad input must be refused), which the old code accepts.
+- New checks that pass on the old code are fine alongside one that fails. A success case often passes before the change.
+- The reference commit is the HEAD the Claude session started from (recorded by the SessionStart hook), so committing mid-task does not hide the change. Without a session record it is `HEAD`. `--against <ref>` sets it. If you run verify in CI, pass `--against origin/<base branch>`: there the default `HEAD` already contains the change, so the step would skip.
+- The step is skipped, with the reason in the output, when: the project is not in git, `verify.json` did not exist at the reference, no check is new (renaming a check or changing only `timeoutSec` does not count), or only checks and test files changed (adding coverage for existing behavior). Checks removed since the reference are listed.
+- Results that prove nothing are "inconclusive" and skip the step instead of passing it: the old code's server does not start, a command cannot start, exits 127, times out, or reports a missing module or program (often a gitignored build such as `dist/` that the old checkout does not have), or a request cannot connect. Set `"against": { "required": true }` to fail the run in those cases.
+- The worktree gets the current `verify.json` and the current test files (`test/**`, `tests/**`, `__tests__/**`, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `*_test.go`; override with `against.keep`). `node_modules` is linked in from the project (`against.link` sets the list). If the old code needs a build or install first, give `against.setup` a `command` or `args`; with a setup, nothing is linked unless you set `against.link`, because an install through a link would rewrite the real folder. Never put an install in `setup` while linking `node_modules`. `against.tmpDir` moves the worktree off a small system drive. Git hooks do not run on checkout. Links are removed before the worktree is deleted, and leftovers from a killed run are cleaned up two hours later.
+- `--no-against` or `"against": false` turns the step off. The evidence records that, and the Stop hook only accepts it when the session started with `"against": false`, so turning the step off after a `FAIL against` does not get past it. Partial runs never run it. It starts the server a second time, so it adds that time to a run with new checks.
+
+### Stop hook
+
+By default (`"stopHook": "block"`) the Stop hook keeps the agent from finishing while code it changed in this session has no matching evidence. Matching means a full passing run whose fingerprint equals the current code.
+
+- It only holds the agent to changes made in the session: a tree you left dirty before the session does not block, and those files are not listed. Committing the work does not hide it, because the hook compares with the fingerprint taken when the session started.
+- The `stopHook` and `stopHookIgnore` settings are read when the session starts, so editing them in `verify.json` takes effect from the next session, not in the middle of the one being checked. A verify run made with a different `stopHookIgnore` than the session started with is not accepted.
+- Without a session record (the plugin was installed mid-session, or the session started in another folder) the hook falls back to `git status` and the live settings, which a commit or a config edit can get past. Deleting the evidence folder from the shell asks a human first.
+- When verification truly cannot run (no database, no network), the agent records why with `node .stack-agent/bin/verify.mjs --skip "<reason>"` (at least 15 characters). That writes `.stack-agent/verify-skip.json`, a file git sees (it is not gitignored), so it appears in `git status` and in the diff once added, and the hook shows the reason to you once. A skip is only valid for the code it was written for; a later change needs verification or a new skip.
+- After 3 blocks in a row the hook lets the agent stop and tells you the changes are unverified, so a stuck agent cannot loop. A new message from you resets the count.
+- Edit/Write on `latest.json`, `verify-skip.json`, or the session records in `evidence/sessions/` asks a human first. Only Stack Agent's own scripts write them. With a custom `evidenceDir`, only `verify-skip.json` is covered. A determined shell write can still change these files; CI is the gate that cannot be bypassed.
+- `"stopHook": "remind"` restores the earlier behavior: one reminder per change set, then the agent may stop.
 
 ## 2. Guard
 

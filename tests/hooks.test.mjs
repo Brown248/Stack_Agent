@@ -7,6 +7,11 @@ import { copySample, git, repoRoot, runNode, write } from "./helpers.mjs";
 
 const hook = (name) => path.join(repoRoot, "scripts", "hooks", name);
 const hookInput = (obj) => JSON.stringify(obj);
+// "remind" is the pre-blocking Stop hook behavior; tests/stop-block.test.mjs covers the default "block" mode
+const useRemind = (dir) => {
+	const file = path.join(dir, ".stack-agent/verify.json");
+	fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), stopHook: "remind" }, null, 2));
+};
 
 test("pre-bash denies guard bypasses, including global git options and hook-disabling env", () => {
 	for (const cmd of [
@@ -131,8 +136,9 @@ test("post-edit guard resolves a relative file_path against cwd", () => {
 	assert.match(r.stderr, /\[controller-no-db\]/);
 });
 
-test("stop hook blocks once when code changed without evidence", () => {
+test("remind mode: stop hook blocks once when code changed without evidence", () => {
 	const dir = copySample();
+	useRemind(dir);
 	git(dir, "init", "-q");
 	git(dir, "add", "-A");
 	git(dir, "commit", "-qm", "base");
@@ -177,8 +183,9 @@ test("stop hook allows stopping when passing evidence is newer than the change",
 	assert.match(failed.stderr, /the latest verify run failed/);
 });
 
-test("stop hook ignores docs-only changes, stop_hook_active, and projects without verify config", () => {
+test("remind mode: stop hook ignores docs-only changes, stop_hook_active, and projects without verify config", () => {
 	const dir = copySample();
+	useRemind(dir);
 	git(dir, "init", "-q");
 	git(dir, "add", "-A");
 	git(dir, "commit", "-qm", "base");

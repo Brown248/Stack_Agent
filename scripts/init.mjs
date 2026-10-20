@@ -16,7 +16,7 @@ exit codes: 0 done / setup complete, 1 setup still unfinished, 2 usage error`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
-const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "lib/files.mjs"];
+const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "lib/files.mjs", "lib/fingerprint.mjs"];
 const PRESETS_DIR = path.join(pluginRoot, "templates", "presets");
 const COMMON = [
 	["templates/common/rules.md", ".stack-agent/rules.md"],

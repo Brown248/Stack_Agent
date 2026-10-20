@@ -22,6 +22,7 @@ description: Prove a change works by running the test suite and the project's re
    ```
 
    Use `--check <name>` to rerun one check while iterating and `--skip-tests` to skip the suite during that loop. Those runs are recorded as partial. The final run must be the full one with no flags.
+   A full run also runs the new checks against the code from before your change (`against` step). At least one new check must fail there; a check that passes on both does not test your change. If it reports `FAIL against`, add the check that the old code fails, usually the rejection case.
 4. If something fails, read the failing step's output, fix the cause, and rerun. Never change an expectation to match a wrong result. Change it only when the requirement changed, and say so.
 5. If verify says something already answers on the server's port, it is not ours. Do not kill processes you did not start. Change the port in `verify.json` or ask the user.
 
@@ -31,4 +32,4 @@ description: Prove a change works by running the test suite and the project's re
 - The evidence file path (`.stack-agent/evidence/verify-*.json`).
 - Any check you could not run and exactly why (for example, it needs a third-party API key).
 
-If verification cannot run at all in this environment, say that plainly instead of claiming success.
+If verification cannot run at all in this environment, record why with `node .stack-agent/bin/verify.mjs --skip "<reason>"` and say plainly that the change is unverified instead of claiming success. Never write `latest.json` or `verify-skip.json` by hand.

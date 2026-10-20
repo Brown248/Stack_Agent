@@ -1,6 +1,17 @@
 {
-  "description": "Stack Agent hard constraints: block guard bypasses and destructive git, ask before loosening the guard's own config, run the guard on every edit, and remind once per change set to verify before stopping.",
+  "description": "Stack Agent hard constraints: block guard bypasses and destructive git, ask before loosening the guard's own config, run the guard on every edit, and keep the agent from stopping until verify evidence matches the code it changed (or it records why it cannot verify).",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/session-start.mjs\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell",

@@ -19,7 +19,8 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | แนวคิด | ทำเป็น | ตรวจโดย |
 | --- | --- | --- |
 | Verification: agent ต้องพิสูจน์ว่าโปรแกรมทำงานจริง | `scripts/verify.mjs` (เทส, server, HTTP check, command check, หลักฐาน) และ skill `verify` | `tests/verify.test.mjs`, `tests/verify-command.test.mjs`, `tests/verify-args.test.mjs` และตัวอย่างทั้งห้าผ่าน verify แบบเต็ม |
-| Close the loop: เช็กผลเองใน session เดียวกัน | หลักฐานใน `.stack-agent/evidence/latest.json` (บันทึกว่ารันเต็มหรือบางส่วน) และ Stop hook `stop-verify.mjs` | `tests/hooks.test.mjs`, `tests/stop-hook.test.mjs` |
+| Close the loop: เช็กผลเองใน session เดียวกัน | หลักฐานใน `.stack-agent/evidence/latest.json` (บันทึกว่ารันเต็มหรือบางส่วน และ fingerprint ของโค้ดที่ทดสอบ) และ Stop hook `stop-verify.mjs` ที่บล็อกจนกว่าหลักฐานจะตรงกับโค้ด มีทางออกด้วย `--skip` ที่บันทึกเหตุผล และปล่อยหลังบล็อก 3 ครั้ง | `tests/hooks.test.mjs`, `tests/stop-hook.test.mjs`, `tests/stop-block.test.mjs`, `tests/fingerprint.test.mjs` |
+| check ต้องทดสอบการแก้จริง ไม่ใช่แค่ผ่าน | ขั้น `against` ใน `verify.mjs`: เอา check ใหม่ไปรันกับโค้ดก่อนแก้ และต้องมีอย่างน้อยหนึ่งตัวที่ fail | `tests/verify-against.test.mjs` |
 | Feature map: ฟีเจอร์ไหนอยู่ตรงไหน | `scripts/api-map.mjs` สำหรับ HTTP backend พร้อมตรวจ drift | `tests/api-map.test.mjs` และ eval ที่รันจริง (ด้านล่าง) |
 | Hard constraint อยู่ใน lint/CI ไม่ใช่ prompt | `scripts/guard.mjs` และ `templates/ci/stack-agent.yml` | `tests/guard.test.mjs`, `tests/presets.test.mjs` |
 | ทางที่ขี้เกียจที่สุดต้องเป็นทางที่ถูก | ทุกกฎต้องมี `fix` และ hook PostToolUse ส่ง fix ให้ agent ทันทีหลังแก้ไฟล์ | เทสของ config และ hook |
@@ -27,7 +28,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | Ratchet สำหรับ repo ที่ใช้ร่วมกัน | baseline, `--allow-increase`, `--compare-ref` | เทส ratchet และ compare-ref |
 | สุ่มตรวจแทนการรีวิวทุก PR | `scripts/sample-commits.mjs`, skill `sample-review` และ agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 152 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 216 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 9 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -44,6 +45,8 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 - กฎที่อ่าน import รองรับ JS/TS และ Python ภาษาอื่นใช้กฎแบบ `pattern` การหาโมดูล Python เป็นแบบ static ไม่ตามการแก้ `sys.path`, การเรียก `importlib` หรือ package ที่ติดตั้งไว้ โมดูลที่หาไม่เจอใน repo จึงถือเป็น third-party
 - hook ที่ดักคำสั่ง shell ใช้การจับ pattern ถ้าตั้งใจเลี่ยง (เช่นใช้ alias หรือ script ที่เขียนไฟล์โดยไม่ระบุชื่อไฟล์ในคำสั่ง) อาจหลุดได้ CI ที่มี `--compare-ref` และ CODEOWNERS คือด่านที่ไม่มีทางหลุด
 - guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย CI และ Stop hook
+- หลักฐานและไฟล์ skip เป็นไฟล์ธรรมดา การแก้ด้วย Edit/Write จะถามคนก่อน แต่ถ้าตั้งใจเขียนผ่าน shell ก็ยังปลอมได้ CI ที่รัน verify ซ้ำคือด่านที่ปลอมไม่ได้
+- ขั้น `against` พิสูจน์ได้ว่ามี check ใหม่อย่างน้อยหนึ่งตัวที่แยกโค้ดเก่ากับโค้ดใหม่ออกจากกัน แต่บอกไม่ได้ว่า check ครอบคลุมทุกอย่างที่การแก้ควรทำ และผลที่เชื่อไม่ได้ (server ของโค้ดเก่าเปิดไม่ขึ้น) จะข้ามขั้นนี้แทนที่จะให้ผ่าน
 - ratchet นับต่อไฟล์ต่อกฎ กฎแบบ import นับทีละชื่อที่ import (baseline version 2) version 1 นับทีละบรรทัด การเพิ่มชื่อเข้าไปใน import ต้องห้ามที่มีอยู่แล้วจึงผ่านได้ ช่องโหว่นี้เจอระหว่างวางแผนงาน A/B และปิดแล้วพร้อมเทสกันถอยหลัง (`tests/guard-widening.test.mjs`)
 - judge แบบ LLM ใน Claude Code เลือกได้เฉพาะโมเดล Claude คำว่า "คนละโมเดล" จึงหมายถึงโมเดล Claude อีกตัว
 
@@ -51,7 +54,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 152 เทสบน Windows 11 กับ Node 25 |
+| Unit และ integration test | ผ่าน 216 เทสบน Windows 11 กับ Node 25 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |

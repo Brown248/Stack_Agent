@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { ConfigError, parseArgs, readJson, toPosix } from "./lib/files.mjs";
+import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
+import { SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff, gitTop, ignoreList } from "./lib/fingerprint.mjs";
 
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
-                      [--check NAME...] [--reuse] [--json]
+                      [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
+       node verify.mjs --skip "REASON"   record why verification cannot run for the current code
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
+const MIN_SKIP_REASON = 15;
 
 const CHECK_TYPES = ["http", "command"];
 
@@ -38,6 +42,17 @@ export function loadVerifyConfig(file) {
 	if (runs(config.test)) checkRunSpec(config.test, "test", "test needs a command string or an args array");
 	if (config.server !== undefined) checkRunSpec(config.server, "server", "server needs a command string or an args array");
 	if (config.checks !== undefined && !Array.isArray(config.checks)) throw new ConfigError("checks must be an array");
+	if (config.against !== undefined && typeof config.against !== "boolean" && (typeof config.against !== "object" || config.against === null || Array.isArray(config.against)))
+		throw new ConfigError("against must be true, false, or an object with keep, link, setup, tmpDir, required");
+	if (config.against && typeof config.against === "object") {
+		const a = config.against;
+		for (const key of ["keep", "link"]) requireStringArray(a[key], `against.${key}`, { optional: true });
+		if (a.tmpDir !== undefined && (typeof a.tmpDir !== "string" || !a.tmpDir)) throw new ConfigError("against.tmpDir must be a folder path string");
+		if (a.required !== undefined && typeof a.required !== "boolean") throw new ConfigError("against.required must be true or false");
+		if (a.setup !== undefined) checkRunSpec(a.setup, "against.setup", "against.setup needs a command string or an args array");
+	}
+	requireStringArray(config.stopHookIgnore, "stopHookIgnore", { optional: true });
+	if (config.stopHook !== undefined && !["block", "remind"].includes(config.stopHook)) throw new ConfigError('stopHook must be "block" or "remind"');
 	const names = new Set();
 	for (const c of config.checks ?? []) {
 		const where = `check ${JSON.stringify(c.name ?? "?")}`;
@@ -170,7 +185,7 @@ async function runCommandCheck(root, check) {
 	if (check.expectOutputExcludes && r.output.includes(check.expectOutputExcludes)) problems.push(`output includes ${JSON.stringify(check.expectOutputExcludes)}`);
 	if (r.truncated && (check.expectOutputIncludes || check.expectOutputMatches || check.expectOutputExcludes))
 		problems.push(`output was over ${OUTPUT_LIMIT / 1024 / 1024} MB, so the middle was dropped before matching; make the command quieter`);
-	return { step: "check", type: "command", name: check.name, request: shown(check), ...(check.args && { args: check.args }), ok: problems.length === 0, exitCode: r.exitCode, timedOut: r.timedOut, truncated: r.truncated, problems, output: tail(r.output, 1000), durationMs: r.durationMs };
+	return { step: "check", type: "command", name: check.name, request: shown(check), ...(check.args && { args: check.args }), ok: problems.length === 0, ...((r.startError || r.timedOut) && { inconclusive: true }), exitCode: r.exitCode, timedOut: r.timedOut, truncated: r.truncated, problems, output: tail(r.output, 1000), durationMs: r.durationMs };
 }
 
 async function responds(url) {
@@ -271,7 +286,7 @@ async function runCheck(baseUrl, check) {
 		}
 		return { ...result, ok: problems.length === 0, status: res.status, problems, body: tail(text, 1000), durationMs: Date.now() - started };
 	} catch (err) {
-		return { ...result, ok: false, problems: [`request failed: ${err.cause?.code ?? err.message}`], durationMs: Date.now() - started };
+		return { ...result, ok: false, inconclusive: true, problems: [`request failed: ${err.cause?.code ?? err.message}`], durationMs: Date.now() - started };
 	}
 }
 
@@ -314,11 +329,15 @@ export async function runVerify({ root, config, skipTests, skipChecks, only, reu
 	return steps;
 }
 
+export const fingerprintOptions = (config) => ({ ignore: ignoreList(config.stopHookIgnore), evidenceDir: config.evidenceDir ?? ".stack-agent/evidence" });
+
 function writeEvidence(root, config, steps, run) {
 	const dir = path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence");
 	fs.mkdirSync(dir, { recursive: true });
 	const at = new Date().toISOString();
-	const record = { at, ok: steps.length > 0 && steps.every((s) => s.ok), full: run.full, flags: run.flags, git: gitHead(root), steps };
+	const record = { at, ok: steps.length > 0 && steps.every((s) => s.ok), full: run.full, flags: run.flags, git: gitHead(root), fingerprint: run.fingerprint?.value ?? null, ignore: run.ignore, against: run.against };
+	if (run.changedByRun?.length) record.changedByRun = run.changedByRun;
+	record.steps = steps;
 	const file = path.join(dir, `verify-${at.replace(/[:.]/g, "-")}.json`);
 	const body = JSON.stringify(record, null, 2) + "\n";
 	fs.writeFileSync(file, body);
@@ -326,9 +345,215 @@ function writeEvidence(root, config, steps, run) {
 	return { record, file: toPosix(path.relative(root, file)) };
 }
 
+// ---- against: the new checks must fail on the code before the change ---------------------------
+
+// test files travel with the checks, so a check that runs a new test does not "fail before" only because the file is missing
+export const AGAINST_KEEP = ["test/**", "tests/**", "__tests__/**", "**/*.test.*", "**/*.spec.*", "**/test_*.py", "**/*_test.py", "**/*_test.go"];
+const AGAINST_PREFIX = "stack-agent-against-";
+// a shell's own "command not found" is exit 127; the text alone could be the program rejecting a new subcommand
+const MISSING_RE = /MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module|ModuleNotFoundError|No module named|is not recognized as an internal or external command/;
+const gitRun = (cwd, args) => spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const realpath = (p) => {
+	try {
+		return fs.realpathSync.native(p);
+	} catch {
+		return path.resolve(p);
+	}
+};
+const canonical = (v) =>
+	Array.isArray(v) ? `[${v.map(canonical).join(",")}]` : v && typeof v === "object" ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical(v[k])}`).join(",")}}` : JSON.stringify(v);
+
+// what a check asserts; renaming a check or giving it more time does not make it new
+function assertionKey(check) {
+	const { name, timeoutSec, ...rest } = check;
+	return canonical({ ...rest, type: checkType(check) });
+}
+
+// the HEAD this session started from (recorded by the SessionStart hook), so committing mid-task does not hide the change
+function resolveAgainstRef(root, config, explicit) {
+	const isCommit = (ref) => gitRun(root, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).status === 0;
+	if (explicit) {
+		if (!isCommit(explicit)) throw new ConfigError(`--against: ${explicit} is not a commit in this repo`);
+		return explicit;
+	}
+	if (!isCommit("HEAD")) return null;
+	const dir = path.join(path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence"), "sessions");
+	// among sessions active in the last day whose start is behind HEAD, the earliest start: with two sessions in one
+	// repo that compares with more history, never less, so neither session's checks are hidden by the other's commits
+	let earliest = null;
+	for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+		try {
+			const file = path.join(dir, f);
+			if (Date.now() - fs.statSync(file).mtimeMs > 24 * 3600_000) continue;
+			const { head, at } = JSON.parse(fs.readFileSync(file, "utf8"));
+			// a long-resumed session keeps a days-old start; comparing with it would count everyone's checks since then as new
+			if (!(Date.now() - Date.parse(at) <= 3 * 24 * 3600_000)) continue;
+			if (!head || !isCommit(head) || gitRun(root, ["merge-base", "--is-ancestor", head, "HEAD"]).status !== 0) continue;
+			if (!earliest || String(at) < earliest.at) earliest = { head, at: String(at) };
+		} catch {}
+	}
+	return earliest?.head ?? "HEAD";
+}
+
+function codeChangedSince(root, ref, config, keep) {
+	const paths = new Set(gitRun(root, ["diff", "--name-only", "-z", "--relative", ref, "--", "."]).stdout.split("\0").filter(Boolean));
+	for (const p of changedFiles(root) ?? []) paths.add(p);
+	const ignore = ignoreList(config.stopHookIgnore);
+	return [...paths].filter((p) => !p.startsWith(".stack-agent/") && !matchesAny(p, ignore) && !matchesAny(p, keep));
+}
+
+function copyInto(fromRoot, toRoot, rel) {
+	const to = path.join(toRoot, rel);
+	fs.mkdirSync(path.dirname(to), { recursive: true });
+	fs.copyFileSync(path.join(fromRoot, rel), to);
+}
+
+// links are removed before anything deletes the worktree, so nothing can follow a link into the real node_modules
+function unlinkLinks(dir, depth = 0) {
+	if (depth > 6) return;
+	let entries;
+	try {
+		entries = fs.readdirSync(dir, { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const e of entries) {
+		const p = path.join(dir, e.name);
+		if (e.isSymbolicLink()) {
+			try {
+				fs.unlinkSync(p);
+			} catch {
+				try {
+					fs.rmdirSync(p);
+				} catch {}
+			}
+		} else if (e.isDirectory() && e.name !== ".git") unlinkLinks(p, depth + 1);
+	}
+}
+
+function removeWorktree(top, tmp, links) {
+	for (const { at, target } of links) {
+		try {
+			if (fs.lstatSync(at).isSymbolicLink()) {
+				try {
+					fs.unlinkSync(at);
+				} catch {
+					fs.rmdirSync(at);
+				}
+			}
+		} catch {}
+		if (!fs.existsSync(target)) throw new Error(`verify: ${target} is missing after removing the link to it from the against worktree`);
+	}
+	unlinkLinks(tmp);
+	const wt = path.join(tmp, "wt");
+	if (fs.existsSync(wt)) gitRun(top, ["worktree", "remove", "--force", wt]);
+	gitRun(top, ["worktree", "prune"]);
+	fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// worktrees left by a crashed or killed run; only old ones, so a concurrent run is not disturbed
+function cleanStaleWorktrees(top, base) {
+	for (const name of fs.existsSync(base) ? fs.readdirSync(base) : []) {
+		if (!name.startsWith(AGAINST_PREFIX)) continue;
+		const tmp = path.join(base, name);
+		try {
+			if (Date.now() - fs.statSync(tmp).mtimeMs > 2 * 3600_000) removeWorktree(top, tmp, []);
+		} catch {}
+	}
+}
+
+const conclude = (step, config, reason) =>
+	config.against?.required ? { ...step, ok: false, problems: [`${reason} (against.required is set, so this fails the run)`] } : { ...step, skipped: `${reason} (inconclusive)` };
+
+export async function runAgainst({ root, config, configRel = ".stack-agent/verify.json", ref: explicit }) {
+	const step = { step: "against", ok: true };
+	const top = gitTop(root);
+	if (!top) return { ...step, skipped: "not a git repository" };
+	const ref = resolveAgainstRef(root, config, explicit);
+	if (!ref) return { ...step, skipped: "no commit to compare with yet" };
+	step.ref = ref;
+	const prefix = toPosix(path.relative(realpath(top), realpath(root)));
+	const oldText = gitRun(top, ["show", `${ref}:${prefix ? prefix + "/" : ""}${configRel}`]);
+	if (oldText.status !== 0) return { ...step, skipped: `${configRel} does not exist at ${ref}` };
+	let oldConfig;
+	try {
+		oldConfig = JSON.parse(oldText.stdout);
+	} catch {
+		return { ...step, skipped: `${configRel} at ${ref} is not valid JSON` };
+	}
+	const oldKeys = new Set((oldConfig.checks ?? []).map(assertionKey));
+	const newKeys = new Set((config.checks ?? []).map(assertionKey));
+	const added = (config.checks ?? []).filter((c) => !oldKeys.has(assertionKey(c)));
+	const removed = (oldConfig.checks ?? []).filter((c) => !newKeys.has(assertionKey(c))).map((c) => c.name);
+	if (removed.length) step.removed = removed;
+	if (!added.length) return { ...step, skipped: "no new or changed checks" };
+	const keep = config.against?.keep ?? AGAINST_KEEP;
+	if (!codeChangedSince(root, ref, config, keep).length) return { ...step, skipped: "only checks or tests changed, no code" };
+	step.checks = added.map((c) => c.name);
+
+	const base = path.resolve(root, config.against?.tmpDir ?? os.tmpdir());
+	fs.mkdirSync(base, { recursive: true });
+	cleanStaleWorktrees(top, base);
+	const tmp = fs.mkdtempSync(path.join(base, AGAINST_PREFIX));
+	const links = [];
+	try {
+		const noHooks = path.join(tmp, "no-hooks");
+		fs.mkdirSync(noHooks);
+		const wt = path.join(tmp, "wt");
+		const add = gitRun(top, ["-c", `core.hooksPath=${noHooks}`, "worktree", "add", "--detach", "--quiet", wt, ref]);
+		if (add.status !== 0) return conclude(step, config, `could not check out ${ref}: ${add.stderr.trim()}`);
+		const wtRoot = path.join(wt, prefix);
+		fs.mkdirSync(wtRoot, { recursive: true });
+		copyInto(root, wtRoot, configRel);
+		for (const rel of gitRun(root, ["ls-files", "-co", "--exclude-standard", "-z"]).stdout.split("\0").filter(Boolean))
+			if (matchesAny(rel, keep) && fs.existsSync(path.join(root, rel))) copyInto(root, wtRoot, rel);
+		// with a setup step (often an install) nothing is linked unless asked: an install through a link would rewrite the real folder
+		for (const rel of config.against?.link ?? (config.against?.setup ? [] : ["node_modules"])) {
+			const target = path.join(root, rel);
+			const at = path.join(wtRoot, rel);
+			if (!fs.existsSync(target) || fs.existsSync(at)) continue;
+			fs.mkdirSync(path.dirname(at), { recursive: true });
+			fs.symlinkSync(target, at, process.platform === "win32" ? "junction" : "dir");
+			links.push({ at, target });
+		}
+		if (config.against?.setup) {
+			const r = await runCommand(wtRoot, config.against.setup, 600);
+			if (r.exitCode !== 0 || r.timedOut) return conclude(step, config, `against.setup failed on ${ref}: ${tail(r.output, 300)}`);
+		}
+		const steps = await runVerify({ root: wtRoot, config, skipTests: true, only: step.checks });
+		const server = steps.find((s) => s.step === "server");
+		if (server && !server.ok) return conclude(step, config, `the server did not start on the code at ${ref}: ${server.reason}`);
+		// a missing build, module, or program on the old checkout proves nothing about the change
+		const results = steps.filter((s) => s.step === "check").map((s) => (s.type === "command" && !s.ok && (s.exitCode === 127 || MISSING_RE.test(s.output ?? "")) ? { ...s, inconclusive: true } : s));
+		step.detecting = results.filter((s) => !s.ok && !s.inconclusive).map((s) => s.name);
+		step.passingBefore = results.filter((s) => s.ok).map((s) => s.name);
+		const inconclusive = results.filter((s) => s.inconclusive).map((s) => s.name);
+		if (inconclusive.length) step.inconclusive = inconclusive;
+		if (step.detecting.length) return step;
+		if (!step.passingBefore.length) return conclude(step, config, `every new check was inconclusive on the code at ${ref}`);
+		return {
+			...step,
+			ok: false,
+			problems: [`new check(s) ${step.passingBefore.join(", ")} also pass on the code before your change (${ref}), so they do not test it. Add a check that fails without your change, usually the rejection case.`],
+		};
+	} finally {
+		// cleanup problems must not hide the result; a missing link target is reported loudly
+		try {
+			removeWorktree(top, tmp, links);
+		} catch (err) {
+			process.stderr.write(`verify: could not fully remove the against worktree at ${tmp}: ${err.message}\n`);
+		}
+	}
+}
+
 function summarize(steps) {
 	return steps.map((s) => {
 		const mark = s.ok ? "PASS" : "FAIL";
+		if (s.step === "against") {
+			const removed = s.removed?.length ? `\n  note: check(s) removed since ${s.ref}: ${s.removed.join(", ")}` : "";
+			if (s.skipped) return `SKIP against: ${s.skipped}${removed}`;
+			return (s.ok ? `PASS against ${s.ref}: ${s.detecting.join(", ")} fail(s) on the code before the change` : `FAIL against ${s.ref}: ${s.problems.join("; ")}`) + removed;
+		}
 		if (s.step === "tests") return `${mark} tests: ${s.command} (exit ${s.exitCode}${s.timedOut ? ", timed out" : ""})${s.ok ? "" : "\n" + s.output}`;
 		if (s.step === "server") return `${mark} server: ${s.ok ? "ready" : s.reason}${s.ok || !s.log ? "" : "\n" + s.log}`;
 		if (s.type === "command") return `${mark} check ${s.name}: ${s.request} -> exit ${s.exitCode}${s.ok ? "" : " (" + s.problems.join("; ") + ")\n" + s.output}`;
@@ -337,18 +562,42 @@ function summarize(steps) {
 }
 
 async function main(argv) {
-	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help"], options: ["root", "config"], multi: ["check"] });
+	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against"], options: ["root", "config", "skip", "against"], multi: ["check"] });
 	if (args.help) return { code: 0, text: USAGE };
 	const root = path.resolve(args.root ?? process.cwd());
-	const config = loadVerifyConfig(path.resolve(root, args.config ?? ".stack-agent/verify.json"));
+	const configPath = path.resolve(root, args.config ?? ".stack-agent/verify.json");
+	const config = loadVerifyConfig(configPath);
+	if (args.skip !== undefined) return writeSkip(root, config, args.skip);
+	const before = codeFingerprint(root, fingerprintOptions(config));
 	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse });
 	if (steps.length === 0) throw new ConfigError("nothing ran: every step was skipped");
-	const flags = argv.filter((a) => a.startsWith("--") && a !== "--root" && a !== "--config" && a !== "--json");
+	const flags = argv.filter((a) => a.startsWith("--") && !["--root", "--config", "--json", "--against"].includes(a));
 	const full = !args["skip-tests"] && !args["skip-checks"] && !args.check?.length && !args.reuse;
-	const { record, file } = writeEvidence(root, config, steps, { full, flags });
+	const wantAgainst = args.against !== undefined || (config.against !== false && !args["no-against"]);
+	if (full && wantAgainst && steps.every((s) => s.ok)) steps.push(await runAgainst({ root, config, configRel: toPosix(path.relative(root, configPath)), ref: args.against }));
+	// the Stop hook refuses evidence from a run with the against step off unless the session started that way
+	const against = wantAgainst ? "on" : "off";
+	// the evidence names the code as it was when the run started; if the run itself changed files (snapshots, codegen,
+	// a database outside a gitignored folder) the Stop hook sees the mismatch and says which files to gitignore
+	const after = codeFingerprint(root, fingerprintOptions(config));
+	const changedByRun = fingerprintDiff(before, after);
+	const { record, file } = writeEvidence(root, config, steps, { full, flags, fingerprint: before, ignore: fingerprintOptions(config).ignore, changedByRun, against });
 	if (args.json) return { code: record.ok ? 0 : 1, text: JSON.stringify({ ...record, evidence: file }, null, 2) };
 	const scope = full ? "" : ` (partial run: ${flags.join(" ")}; run with no flags before calling the change done)`;
-	return { code: record.ok ? 0 : 1, text: [...summarize(steps), `verify: ${record.ok ? "ok" : "FAIL"}, evidence ${file}${scope}`].join("\n") };
+	const wrote = changedByRun.length ? [`  note: this run changed ${changedByRun.slice(0, 5).join(", ")}${changedByRun.length > 5 ? ", ..." : ""}; gitignore files that tests or the server write`] : [];
+	return { code: record.ok ? 0 : 1, text: [...summarize(steps), ...wrote, `verify: ${record.ok ? "ok" : "FAIL"}, evidence ${file}${scope}`].join("\n") };
+}
+
+// Written outside the gitignored evidence dir on purpose: the skip shows up in the diff a reviewer reads.
+function writeSkip(root, config, reason) {
+	reason = String(reason ?? "").trim();
+	if (reason.length < MIN_SKIP_REASON) throw new ConfigError(`--skip needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run here`);
+	const fingerprint = codeFingerprint(root, fingerprintOptions(config));
+	if (!fingerprint) throw new ConfigError("--skip needs a git repository (the Stop hook only checks changes git can see)");
+	const file = path.join(root, SKIP_FILE);
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	fs.writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), reason, fingerprint: fingerprint.value }, null, 2) + "\n");
+	return { code: 0, text: `verify: skipped, reason recorded in ${SKIP_FILE} for the current code. Tell the user the change is unverified and why.` };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

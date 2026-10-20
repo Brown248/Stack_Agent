@@ -19,7 +19,8 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Idea | Implementation | Verified by |
 | --- | --- | --- |
 | Verification: the agent proves the change works on the real program | `scripts/verify.mjs` (tests, server, HTTP checks, command checks, evidence), skill `verify` | `tests/verify.test.mjs`, `tests/verify-command.test.mjs`, `tests/verify-args.test.mjs`, all five examples pass full verify |
-| Close the loop: check results in the same session | evidence in `.stack-agent/evidence/latest.json` (records full vs partial runs), Stop hook `stop-verify.mjs` | `tests/hooks.test.mjs`, `tests/stop-hook.test.mjs` |
+| Close the loop: check results in the same session | evidence in `.stack-agent/evidence/latest.json` (full vs partial runs, a fingerprint of the tested code), Stop hook `stop-verify.mjs` that blocks until the evidence matches the code, with a logged `--skip` and a 3-block cap | `tests/hooks.test.mjs`, `tests/stop-hook.test.mjs`, `tests/stop-block.test.mjs`, `tests/fingerprint.test.mjs` |
+| A check must test the change, not just pass | the `against` step in `verify.mjs`: new checks run on the code before the change, and at least one must fail there | `tests/verify-against.test.mjs` |
 | Feature map: where each feature lives | `scripts/api-map.mjs` for HTTP backends, with drift detection | `tests/api-map.test.mjs`, real eval run (below) |
 | Hard constraints in lint/CI, not prompts | `scripts/guard.mjs` + `templates/ci/stack-agent.yml` | `tests/guard.test.mjs`, `tests/presets.test.mjs` |
 | Shortest path = correct path | every rule must carry a `fix`, and the PostToolUse hook hands it to the agent right after the edit | guard config tests, hook tests |
@@ -27,7 +28,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
 | Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 152 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 216 tests |
 | Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -44,6 +45,8 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 - Import-based rules read JS/TS and Python. Other languages use `pattern` rules. Python resolution is static: it does not follow `sys.path` changes, `importlib` calls, or installed packages, so a module not found in the repo is treated as third-party.
 - The shell hooks match patterns, so a determined workaround (an alias, or a script that writes a file without naming it) can slip past. CI with `--compare-ref` and CODEOWNERS is the gate that always holds.
 - The PostToolUse guard covers Edit/Write. Shell edits are caught by CI and the Stop hook.
+- Evidence and the skip record are plain files. Edit/Write on them asks a human, but a determined shell write can still forge them. CI that reruns verify is the gate that cannot be forged.
+- The `against` step proves that at least one new check tells the old code from the new. It cannot judge whether the checks cover everything the change should do, and results it cannot trust (the old server does not start) skip it instead of passing it.
 - The ratchet counts per file per rule. Import rules count each imported name (baseline version 2). Version 1 counted statements, so adding a name to an existing forbidden import passed; that gap was found while planning the A/B work and closed with a regression test (`tests/guard-widening.test.mjs`).
 - An LLM judge in Claude Code can only be another Claude model, so "a different model" means a different Claude model.
 
@@ -51,7 +54,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 152 pass on Windows 11, Node 25 |
+| Unit and integration tests | 216 pass on Windows 11, Node 25 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |

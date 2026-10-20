@@ -32,7 +32,8 @@ test("command checks run without a server or baseUrl and pass on exit code and o
 	const latest = JSON.parse(fs.readFileSync(path.join(dir, ".stack-agent/evidence/latest.json"), "utf8"));
 	assert.equal(latest.ok, true);
 	assert.equal(latest.full, true);
-	assert.deepEqual(latest.steps.map((s) => s.type), ["command", "command", "command"]);
+	assert.deepEqual(latest.steps.filter((s) => s.step === "check").map((s) => s.type), ["command", "command", "command"]);
+	assert.equal(latest.steps.at(-1).skipped, "not a git repository");
 });
 
 test("command checks report wrong exit codes, missing output, and unwanted output", async () => {
