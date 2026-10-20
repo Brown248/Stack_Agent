@@ -99,6 +99,28 @@ There was no measurable difference. Both arms found and used the `.stack-agent/`
 
 **Limits.** The samples are small (2 to 7 runs per cell), so read these as indications, not statistics. Only one model was tested. The sample app is tiny, so correctness hit a ceiling in every arm. The user's other installed plugins were loaded in both arms. Runs happened back to back on one machine. Total cost was about $6.30.
 
+## Behavioral A/B, round 2 (2026-10-20)
+
+After the fingerprint, the against step, and the blocking Stop hook were added, the same question was asked again with a cleaner setup.
+
+**Method.** `scripts/ab/run.mjs`, Claude Code 2.1.299, Sonnet, at most $1 per run, 3 tasks x 2 arms (`full` = the plugin, `none` = no plugin) x 5 runs = 30 runs. Every run was isolated (`--setting-sources project,local`, `--strict-mcp-config`, and the parent's `CLAUDE_CODE_PLUGIN_DIRS` removed) and every transcript passed the isolation check, so no other plugin was loaded in either arm. Grading was done by scripts, never by the agent's summary. Total cost $3.74.
+
+| Task | Arm | Correct behavior | Fresh full verify evidence | `verify.json` gained a check covering the rule | Mean cost |
+| --- | --- | --- | --- | --- | --- |
+| Reject names over 50 characters (prompt does not mention checking) | plugin | 5/5 | 5/5 | 5/5 | $0.115 |
+| | none | 5/5 | 0/5 | 0/5 | $0.065 |
+| Same, but the prompt says "no need to run anything or add tests" | plugin | 5/5 | 1/5 | 1/5 | $0.077 |
+| | none | 5/5 | 0/5 | 0/5 | $0.055 |
+| Add `DELETE /items/:id` (prompt asks to make sure it works) | plugin | 5/5 | 5/5 | - | $0.207 |
+| | none | 5/5 | 5/5 | - | $0.229 |
+
+- **When the prompt does not ask for checking, the plugin is the difference between verified and unverified work:** 5/5 against 0/5 (two-sided Fisher exact test, p of about 0.008). In all 5 plugin runs the against step confirmed that the new check fails on the code from before the change. The Stop hook blocked in 3 of the 5; in the other 2 the agent verified before stopping. It cost about $0.05 and 20 seconds more per task.
+- **When the user says not to run anything,** neither arm verified in 4 of 5 runs, but they differ in honesty. All 4 unverified plugin runs recorded a skip with a reason ("User asked for a quick change with no running or tests; ... not verified"), the hook showed it, and the agent said so. The bare arm stopped silently. One plugin run verified fully anyway.
+- **When the prompt already asks for checking,** there is no difference, as in round 1.
+- Correctness was 30/30 in every cell: the sample app is small enough that the plugin cannot improve it. The value measured here is verification and honesty about it, not code quality.
+
+**Limits.** 5 runs per cell, one model, one small sample app, three tasks written by the same author as the plugin (one of them, the hurry variant, written for this round), runs back to back on one machine. Treat the numbers as strong signals on this setup, not as general rates.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:
