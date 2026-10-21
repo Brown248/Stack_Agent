@@ -205,8 +205,11 @@ exit 0 แปลว่าตั้งค่าครบ ถ้าไม่ใช
 agent `reviewer` รายงานเป็น candidate ไม่ใช่คำตัดสิน ในรูป JSON array แต่ละรายการระบุ `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>` หรือ `correctness`) ตำแหน่ง และหลักฐาน ทุกตำแหน่งและหลักฐานต้องยกโค้ดที่ชี้มาด้วย agent `finding-verifier` อีกตัวได้แค่ข้อกล่าวหากับตำแหน่ง ไม่ได้หลักฐานของ reviewer พยายามหักล้างทีละข้อ แล้วตัดสินว่า:
 
 - `confirmed`: พร้อม `severity` (`blocking` หรือ `non-blocking`), `kind` (`repeatable` ส่งต่อให้ `/stack-agent:correct` ส่วน `one-off` ไม่ส่ง), สิ่งที่ `observed` และ `fix`
+- `hardening`: ถ้าไม่มีอะไรกันไว้จะเป็นปัญหาจริง แต่มีอีกชั้นในโค้ดกันไว้แล้ว (validation ที่ขอบ, กฎ guard, constraint ของฐานข้อมูล) บันทึก `control` กับ `suggestion` และรายงานแยกจากปัญหา ข้อเสนอเสริมความแข็งแรงจึงไม่ไปปนกับรายการของที่พังจริง
 - `needs_validation`: เฉพาะเมื่อตัดสินได้จากข้อเท็จจริงที่โค้ดบอกไม่ได้ พร้อม `blockers` และ `how_to_check`
 - `rejected`: พร้อม `reason`
+
+review log ยังเป็น ledger ของการสุ่มรอบถัดไปด้วย: `sample-commits.mjs` จะข้าม commit ที่ log บันทึกว่ารีวิวแล้ว (แถวที่ action ขึ้นต้นด้วย `not reviewed` ไม่นับ) และเลือก commit ที่แตะไฟล์ที่ยังไม่เคยมี commit ที่รีวิวแล้วแตะก่อน commit อื่น ถ้าใส่ `--no-ledger` จะสุ่มล้วนแบบเดิม commit ที่ finding ยังต้องรอตรวจสอบนับว่ารีวิวแล้ว เพราะรีวิวเกิดขึ้นแล้ว และคำถามที่ค้างอยู่ก็อยู่ใน log commit ที่แค่เพิ่มแถวใน log จะไม่ถูกสุ่มเลย และเมื่อเปิด ledger อยู่ `--seed` จะได้ชุดเดิมก็ต่อเมื่อ log ยังไม่เปลี่ยน ไฟล์จะนับว่ารีวิวแล้วทันทีที่มี commit ที่รีวิวแล้วแตะมัน ไฟล์ที่รีวิวไปนานแล้วและแก้ไปเยอะตั้งแต่นั้นจึงยังนับว่ารีวิวแล้ว
 
 agent ทั้งสองตัวรัน git แบบ `git -C "<review root>" ...` และส่ง `--root` ให้ check ของ Stack Agent แทนการเปลี่ยน directory เพราะกฎ permission ปฏิเสธ `cd` ที่นำหน้าคำสั่ง git ถ้าอ่าน diff ไม่ได้ reviewer จะหยุดโดยไม่มี candidate (log ว่า commit นั้นไม่ได้รีวิว) ส่วน verifier ก็หยุดด้วย candidate ของมันจึงถูกบันทึกเป็น `needs_validation` ไฟล์ที่ commit ลบไปให้อ้างตามที่เป็นก่อน commit นั้น validator จะอ่านจาก parent ของ commit
 

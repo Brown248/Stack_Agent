@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { isGuardFile, main, pickIndexes } from "../scripts/sample-commits.mjs";
+import { isGuardFile, main, parseLogRow, pickIndexes } from "../scripts/sample-commits.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
 import { git, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
@@ -83,7 +83,7 @@ test("--seed makes the pick reproducible and different seeds differ", () => {
 
 test("without --seed a seed is chosen and printed so the pick can be repeated", () => {
 	const r = sample(repo, "--count", "3");
-	const seed = /--seed (\S+) for the same pick/.exec(r.text)?.[1];
+	const seed = /--seed (\S+) and the review log as it is now for the same pick/.exec(r.text)?.[1];
 	assert.ok(seed, r.text);
 	const again = sample(repo, "--count", "3", "--seed", seed);
 	const shas = (text) => [...text.matchAll(/^([0-9a-f]{12}) /gm)].map((m) => m[1]);
@@ -136,4 +136,95 @@ test("CLI exits 2 on bad args and outside a git repo, 0 on success", () => {
 	const ok = runNode(script, ["--root", repo, "--count", "1", "--seed", "s"]);
 	assert.equal(ok.code, 0, ok.stderr);
 	assert.match(ok.stdout, /1 of 8 commit\(s\)/);
+});
+
+// c1 and c2 touch a.js, c3 touches b.js, c4 touches c.js; the log says c1 was reviewed
+function ledgerRepo() {
+	const dir = tempDir("stack-agent-ledger-");
+	git(dir, "init", "-q");
+	commit(dir, "src/a.js", "1\n", "c1");
+	commit(dir, "src/a.js", "2\n", "c2");
+	commit(dir, "src/b.js", "1\n", "c3");
+	commit(dir, "src/c.js", "1\n", "c4");
+	const sha = (msg) => git(dir, "log", "--format=%H", `--grep=^${msg}$`).trim();
+	return { dir, sha };
+}
+const logWith = (dir, rows) => write(dir, ".stack-agent/review-log.md", ["# Sampling review log", "", "| Date | Commit | Finding | Action |", "|------|--------|---------|--------|", ...rows, ""].join("\n"));
+const subjects = (r) => r.sampled.map((c) => c.subject).sort();
+
+test("the review log is a ledger: reviewed commits are skipped and unreviewed files are picked first", () => {
+	const { dir, sha } = ledgerRepo();
+	logWith(dir, [`| 2026-10-21 | ${sha("c1").slice(0, 12)} | a finding (src/a.js:1) | one-off (non-blocking): fix it |`, "| 2026-10-21 | - | sampled 1 of 1, seed x | node sample-commits.mjs |"]);
+	for (const seed of ["a", "b", "c", "d", "e"]) {
+		const two = json(dir, "--range", "HEAD", "--count", "2", "--seed", seed);
+		assert.deepEqual(subjects(two), ["c3", "c4"], `seed ${seed}`);
+		assert.deepEqual(two.ledger.alreadyReviewed, 1);
+		assert.equal(two.ledger.touchingUnreviewedFiles, 2);
+		assert.deepEqual(two.sampled.map((c) => c.unreviewedFiles), [["src/c.js"], ["src/b.js"]]);
+	}
+	// c2 only touches a file the review of c1 already covered, so it fills the last place
+	assert.deepEqual(subjects(json(dir, "--range", "HEAD", "--count", "3", "--seed", "a")), ["c2", "c3", "c4"]);
+	const text = sample(dir, "--range", "HEAD", "--count", "2", "--seed", "a").text;
+	assert.match(text, /ledger \.stack-agent[\/]review-log\.md: 1 already reviewed \(skipped\), 2 touch files no review has covered \(picked first\)/);
+	assert.match(text, /not covered by any review yet \(1\): src\/b\.js/);
+});
+
+test("ledger: not-reviewed rows do not count, unknown shas are noted, and --no-ledger samples everything", () => {
+	const { dir, sha } = ledgerRepo();
+	logWith(dir, [`| 2026-10-21 | ${sha("c1").slice(0, 12)} | - | not reviewed: diff could not be read |`, "| 2026-10-21 | 0123456789ab | a finding (x.js:1) | dismissed: no |"]);
+	const r = json(dir, "--range", "HEAD", "--count", "10", "--seed", "a");
+	assert.equal(r.ledger.alreadyReviewed, 0);
+	assert.deepEqual(r.ledger.unknownShas, ["0123456789ab"]);
+	assert.deepEqual(subjects(r), ["c1", "c2", "c3", "c4"]);
+	logWith(dir, [`| 2026-10-21 | ${sha("c1")} | f (src/a.js:1) | dismissed: no |`]);
+	assert.deepEqual(subjects(json(dir, "--range", "HEAD", "--count", "10", "--seed", "a", "--no-ledger")), ["c1", "c2", "c3", "c4"]);
+	assert.equal(json(dir, "--range", "HEAD", "--seed", "a", "--no-ledger").ledger, null);
+	assert.throws(() => sample(dir, "--log", "x.md", "--no-ledger"), /--log or --no-ledger, not both/);
+	// --log points at another file; a missing log means nothing was reviewed yet
+	assert.equal(json(dir, "--range", "HEAD", "--seed", "a", "--log", "nowhere.md").ledger.alreadyReviewed, 0);
+});
+
+test("ledger: when every commit in the window is reviewed, nothing is picked and the output says why", () => {
+	const { dir, sha } = ledgerRepo();
+	logWith(dir, ["c1", "c2", "c3", "c4"].map((m) => `| 2026-10-21 | ${sha(m).slice(0, 12)} | no findings | no findings |`));
+	const r = json(dir, "--range", "HEAD", "--seed", "a");
+	assert.equal(r.sampled.length, 0);
+	assert.match(sample(dir, "--range", "HEAD", "--seed", "a").text, /every commit in the window is already in the review log/);
+});
+
+test("ledger: lenient rows, escaped pipes, CRLF, and reviewer-output-unusable rows", () => {
+	const { dir, sha } = ledgerRepo();
+	const rows = [
+		`| 2026-10-21 | ${sha("c1").slice(0, 12)} | a \\| b (src/a.js:1) | dismissed: x \\| y |`,
+		`| 2026-10-21 | ${sha("c4").slice(0, 12)} | a | b, written without escaping | not reviewed: diff could not be read |`,
+		`| 2026-10-21 | ${sha("c3").slice(0, 12)} | no findings | no findings`,
+		`| 2026-10-21 | ${sha("c4").slice(0, 12)} | not reviewed: reviewer output unusable | - |`,
+		`| 2026-10-21 | ${sha("c2").slice(0, 12)} | reviewer output unusable | x |`,
+	];
+	write(dir, ".stack-agent/review-log.md", ["| Date | Commit | Finding | Action |", "|---|---|---|---|", ...rows, ""].join("\r\n"));
+	const r = json(dir, "--range", "HEAD", "--count", "10", "--seed", "a");
+	// c1 and c3 count (escaped pipe, missing closing pipe); c4 and c2 do not (not reviewed in either column)
+	assert.equal(r.ledger.alreadyReviewed, 2);
+	assert.deepEqual(subjects(r), ["c2", "c4"]);
+	assert.deepEqual(r.ledger.unknownShas, []);
+	assert.deepEqual(parseLogRow("| d | abc1234 | a \\| b | dismissed: x \\| y |"), { commit: "abc1234", finding: "a \\| b", action: "dismissed: x \\| y" });
+	assert.deepEqual(parseLogRow("| d | abc1234 | no findings | no findings"), { commit: "abc1234", finding: "no findings", action: "no findings" });
+	assert.equal(parseLogRow("not a row"), null);
+});
+
+test("ledger: the commit that only appends to the review log is not sampled, and the pick follows the seed", () => {
+	const { dir, sha } = ledgerRepo();
+	commit(dir, "src/d.js", "1\n", "c5");
+	commit(dir, "src/e.js", "1\n", "c6");
+	logWith(dir, [`| 2026-10-21 | ${sha("c1").slice(0, 12)} | f (src/a.js:1) | dismissed: no |`]);
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "log review");
+	const r = json(dir, "--range", "HEAD", "--count", "10", "--seed", "a");
+	assert.equal(r.ledger.logOnly, 1);
+	assert.ok(!subjects(r).includes("log review"));
+	// four commits touch unreviewed files (c3..c6); one place goes to one of them, chosen by the seed
+	const picks = new Set(["a", "b", "c", "d", "e", "f", "g", "h"].map((s) => json(dir, "--range", "HEAD", "--count", "1", "--seed", s).sampled[0].subject));
+	assert.ok(picks.size > 1, `the seed should change the pick: ${[...picks]}`);
+	for (const p of picks) assert.ok(["c3", "c4", "c5", "c6"].includes(p), p);
+	assert.deepEqual(json(dir, "--range", "HEAD", "--count", "1", "--seed", "a").sampled[0].sha, json(dir, "--range", "HEAD", "--count", "1", "--seed", "a").sampled[0].sha);
 });

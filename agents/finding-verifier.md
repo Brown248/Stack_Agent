@@ -1,6 +1,6 @@
 ---
 name: finding-verifier
-description: Read-only verifier for review candidates. Given claims and locations from the reviewer (never its evidence), it re-reads the code, tries to refute each claim, and decides confirmed, needs_validation, or rejected. Used by the sample-review skill and after a standalone review; not for finding new problems.
+description: Read-only verifier for review candidates. Given claims and locations from the reviewer (never its evidence), it re-reads the code, tries to refute each claim, and decides confirmed, hardening, needs_validation, or rejected. Used by the sample-review skill and after a standalone review; not for finding new problems.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 effort: high
@@ -23,18 +23,20 @@ If the diff cannot be read (the command is refused or fails), stop: output an em
 3. If a read-only command decides it (the guard, the API map check, a test), run it and keep its command and the relevant output.
 4. Decide:
    - `confirmed` only with a concrete observation: the command and its output, or the exact code path that shows the problem. Give `severity` (`blocking` if it breaks behavior, a rule, or a check; otherwise `non-blocking`), `kind` (`repeatable` if an agent is likely to make this mistake again and a rule or check could stop it; otherwise `one-off`), `observed`, and `fix`.
+   - `hardening` when the problem would be real, but another layer in this code already stops it (validation at the boundary, a guard rule, a database constraint, a framework default) and you can point at that layer. Give `control` (the layer that stops it, in a few words) and `suggestion` (the extra layer worth adding, or `none needed` when the control is enough on its own), and cite the control's code in `evidence`. It is a note, not a problem: nothing breaks today.
    - `needs_validation` only when a fact the code cannot show decides it (runtime config, data in production, an external service). Give `blockers` (the exact unknown facts) and `how_to_check` (a safe way to find out). It is never a place for a hunch.
-   - `rejected` when the code, a check, an existing control, or a missing precondition refutes it, or when the problem is real but was already there before the range. Give `reason`.
+   - `rejected` when the code, a check, or a missing precondition shows the claim is wrong, or when the problem is real but was already there before the range. Give `reason`.
 
 ## Output
 
 Exactly one fenced `json` block: an array with one record per candidate, same `id`. Each record keeps `id`, `commit`, `title`, `claim`, and `source` from the candidate (you may correct `claim` and `location` if the code shows they were off), plus:
 
-- `verdict`: `confirmed`, `needs_validation`, or `rejected`
+- `verdict`: `confirmed`, `hardening`, `needs_validation`, or `rejected`
 - `location`: `{ "file", "line", "excerpt" }` you checked yourself
 - `evidence`: at least one `{ "file", "line", "excerpt", "description" }` you found yourself, each `excerpt` copied from the file within 3 lines of `line`
 - for a past commit, the `location` or at least one `evidence` entry is in a file the range changed: cite the changed line that causes the problem, or for a `rejected` "already there", the changed lines that show the range did not touch it. A file the range deleted is cited as it was before (`git -C "<review root>" show <sha>~1:./<path>`), with the line number from that version.
 - for `confirmed`: `severity`, `kind`, `observed`, `fix`
+- for `hardening`: `control`, `suggestion`
 - for `needs_validation`: `blockers` (array), `how_to_check`
 - for `rejected`: `reason`
 

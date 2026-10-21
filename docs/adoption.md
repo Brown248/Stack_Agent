@@ -205,8 +205,11 @@ Exit 0 means setup is complete. Otherwise it lists what is left.
 The `reviewer` agent reports candidates, not verdicts, as a JSON array. Each one names a `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>`, or `correctness`), a location, and evidence, and every location and evidence entry quotes the code it points at. A separate `finding-verifier` agent gets only the claims and locations, never the reviewer's evidence, tries to refute each one, and decides:
 
 - `confirmed`: with `severity` (`blocking` or `non-blocking`), `kind` (`repeatable` goes to `/stack-agent:correct`, `one-off` does not), what it `observed`, and a `fix`.
+- `hardening`: the problem would be real, but another layer in the code already stops it (validation at the boundary, a guard rule, a database constraint). It records the `control` and a `suggestion`, and is reported apart from problems, so defense-in-depth ideas do not crowd the list of things that are broken.
 - `needs_validation`: only when a fact the code cannot show decides it, with the `blockers` and `how_to_check`.
 - `rejected`: with a `reason`.
+
+The review log is also the ledger for the next sample: `sample-commits.mjs` skips commits it already lists as reviewed (rows whose action starts with `not reviewed` do not count) and picks commits that touch files no reviewed commit has touched before the rest. `--no-ledger` samples at random as before. A commit whose findings still need validation counts as reviewed: the review happened, and the open question is listed in the log. A commit that only appends to the log is never sampled. With the ledger on, `--seed` repeats a pick only while the log is unchanged. A file counts as covered once any reviewed commit touched it, so a file that was reviewed long ago and has changed a lot since still counts as covered.
 
 Both agents run git as `git -C "<review root>" ...` and pass `--root` to the Stack Agent checks instead of changing directory, because permission rules refuse a `cd` in front of a git command. If the diff cannot be read, the reviewer stops with no candidates (the commit is logged as not reviewed), and the verifier stops too, so its candidates are recorded as `needs_validation`. A file the commit deleted is cited as it was before the commit; the validator reads it from the commit's parent.
 

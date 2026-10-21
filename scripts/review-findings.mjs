@@ -20,7 +20,9 @@ const USAGE = `usage: node review-findings.mjs validate FILE [--stage candidates
   rows      prints review-log rows for a final findings file
 exit codes: 0 valid, 1 invalid, 2 usage or unreadable input`;
 
-export const VERDICTS = ["candidate", "confirmed", "needs_validation", "rejected"];
+export const VERDICTS = ["candidate", "confirmed", "hardening", "needs_validation", "rejected"];
+// verdicts a verifier can give; hardening = the problem would be real, but another layer in this code already stops it
+export const FINAL_VERDICTS = VERDICTS.filter((v) => v !== "candidate");
 export const SEVERITIES = ["blocking", "non-blocking"];
 export const KINDS = ["repeatable", "one-off"];
 // where a finding comes from; script-verifiable sources may be confirmed by re-running the script
@@ -38,6 +40,7 @@ export const COMMON = ["id", "commit", "title", "claim", "location", "source", "
 export const FIELDS = {
 	candidate: [],
 	confirmed: ["severity", "kind", "observed", "fix", "found_by", "verified_by"],
+	hardening: ["control", "suggestion", "found_by", "verified_by"],
 	needs_validation: ["blockers", "how_to_check", "found_by", "verified_by"],
 	rejected: ["reason", "found_by", "verified_by"],
 };
@@ -66,7 +69,7 @@ export function checkRecords(records, { stage = "final" } = {}) {
 		const at = `finding ${i + 1}${isText(r?.id) ? ` (${r.id})` : ""}`;
 		if (!r || typeof r !== "object" || Array.isArray(r)) return errors.push(`${at} must be an object`);
 		for (const k of COMMON) if (r[k] === undefined) errors.push(`${at}: missing ${k}`);
-		const allowedVerdicts = stage === "candidates" ? ["candidate"] : ["confirmed", "needs_validation", "rejected"];
+		const allowedVerdicts = stage === "candidates" ? ["candidate"] : FINAL_VERDICTS;
 		if (!allowedVerdicts.includes(r.verdict)) errors.push(`${at}: verdict must be ${allowedVerdicts.join(" | ")} at the ${stage} stage`);
 		for (const k of ["id", "commit", "title", "claim"]) if (r[k] !== undefined && !isText(r[k])) errors.push(`${at}: ${k} must be non-empty text`);
 		if (isText(r.id)) {
@@ -87,7 +90,7 @@ export function checkRecords(records, { stage = "final" } = {}) {
 		if (unknown.length) errors.push(`${at}: unknown field(s): ${unknown.join(", ")}`);
 		if (r.severity !== undefined && !SEVERITIES.includes(r.severity)) errors.push(`${at}: severity must be ${SEVERITIES.join(" | ")}`);
 		if (r.kind !== undefined && !KINDS.includes(r.kind)) errors.push(`${at}: kind must be ${KINDS.join(" | ")}`);
-		for (const k of ["observed", "fix", "how_to_check", "reason", "found_by", "verified_by"]) if (r[k] !== undefined && !isText(r[k])) errors.push(`${at}: ${k} must be non-empty text`);
+		for (const k of ["observed", "fix", "control", "suggestion", "how_to_check", "reason", "found_by", "verified_by"]) if (r[k] !== undefined && !isText(r[k])) errors.push(`${at}: ${k} must be non-empty text`);
 		if (r.blockers !== undefined && (!Array.isArray(r.blockers) || !r.blockers.length || !r.blockers.every(isText)))
 			errors.push(`${at}: blockers must list at least one unresolved fact`);
 		if (isText(r.found_by) && isText(r.verified_by)) {
@@ -248,8 +251,10 @@ export function logRows(records, date) {
 				? r.kind === "repeatable"
 					? `repeatable (${r.severity}): to /stack-agent:correct`
 					: `one-off (${r.severity}): ${r.fix}`
-				: r.verdict === "rejected"
-					? `dismissed: ${r.reason}`
+				: r.verdict === "hardening"
+					? `hardening (already stopped by ${r.control}): ${r.suggestion}`
+					: r.verdict === "rejected"
+						? `dismissed: ${r.reason}`
 					: `needs validation: ${r.blockers[0]}`;
 		return `| ${date} | ${cell(String(r.commit).slice(0, 12))} | ${cell(`${r.title} (${r.location.file}:${r.location.line})`)} | ${cell(action)} |`;
 	});

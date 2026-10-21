@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { COMMON, FIELDS, KINDS, SEVERITIES, VERDICTS, checkRecords, logRows, main, validateFindings } from "../scripts/review-findings.mjs";
+import { COMMON, FIELDS, FINAL_VERDICTS, KINDS, SEVERITIES, VERDICTS, checkRecords, logRows, main, validateFindings } from "../scripts/review-findings.mjs";
 import { main as worktree } from "../scripts/review-worktree.mjs";
 import { main as verify } from "../scripts/verify.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
@@ -44,19 +44,20 @@ const candidate = (over = {}) => ({
 	...over,
 });
 const confirmed = (over = {}) => candidate({ verdict: "confirmed", severity: "blocking", kind: "repeatable", observed: "create('') returns { name: '' }", fix: "restore the name check", found_by: "reviewer", verified_by: "finding-verifier", ...over });
+const hardening = (over = {}) => candidate({ verdict: "hardening", control: "the router validates name", suggestion: "also check name in the service", found_by: "reviewer", verified_by: "finding-verifier", ...over });
 const needsValidation = (over = {}) => candidate({ verdict: "needs_validation", blockers: ["whether callers already validate"], how_to_check: "grep the callers", found_by: "reviewer", verified_by: "finding-verifier", ...over });
-const rejected = (over = {}) => candidate({ verdict: "rejected", reason: "the router validates name first", found_by: "reviewer", verified_by: "finding-verifier", ...over });
+const rejected = (over = {}) => candidate({ verdict: "rejected", reason: "create still returns early when name is empty", found_by: "reviewer", verified_by: "finding-verifier", ...over });
 const valid = (records, opts = {}) => validateFindings(records, { root: repo, ...opts });
 const has = (errors, re) => assert.ok(errors.some((e) => re.test(e)), `expected ${re} in:\n${errors.join("\n")}`);
 
 test("each verdict with its own fields is valid at its stage", () => {
 	assert.deepEqual(valid([candidate()], { stage: "candidates" }), []);
-	assert.deepEqual(valid([confirmed({ id: "a" }), needsValidation({ id: "b" }), rejected({ id: "c" })]), []);
+	assert.deepEqual(valid([confirmed({ id: "a" }), needsValidation({ id: "b" }), rejected({ id: "c" }), hardening({ id: "d" })]), []);
 });
 
 test("stages accept only their verdicts", () => {
 	has(checkRecords([confirmed()], { stage: "candidates" }), /verdict must be candidate at the candidates stage/);
-	has(checkRecords([candidate()]), /verdict must be confirmed \| needs_validation \| rejected at the final stage/);
+	has(checkRecords([candidate()]), /verdict must be confirmed \| hardening \| needs_validation \| rejected at the final stage/);
 	has(checkRecords([candidate({ verdict: "maybe" })], { stage: "candidates" }), /verdict must be candidate/);
 });
 
@@ -67,6 +68,11 @@ test("missing, forbidden, and unknown fields are named", () => {
 	has(checkRecords([noLocation]), /missing location/);
 	has(checkRecords([rejected({ severity: "blocking" })]), /rejected must not have severity/);
 	has(checkRecords([needsValidation({ reason: "x" })]), /needs_validation must not have reason/);
+	const { control, ...noControl } = hardening();
+	has(checkRecords([noControl]), /hardening needs control/);
+	has(checkRecords([hardening({ severity: "blocking" })]), /hardening must not have severity/);
+	has(checkRecords([rejected({ suggestion: "x" })]), /rejected must not have suggestion/);
+	has(checkRecords([hardening({ suggestion: " " })]), /suggestion must be non-empty text/);
 	has(checkRecords([candidate({ found_by: "reviewer" })], { stage: "candidates" }), /candidate must not have found_by/);
 	has(checkRecords([confirmed({ confidence: "high" })]), /unknown field\(s\): confidence/);
 	has(checkRecords([confirmed({ location: { file: SERVICE, line: 1, excerpt: "export", col: 3 } })]), /location has unknown field\(s\): col/);
@@ -169,16 +175,18 @@ test("rows prints one log row per final finding with its action", () => {
 		confirmed({ id: "b", kind: "one-off", severity: "non-blocking", fix: "rename | the var" }),
 		needsValidation({ id: "c" }),
 		rejected({ id: "d" }),
+		hardening({ id: "e" }),
 	];
 	assert.deepEqual(logRows(records, "2026-10-21"), [
 		`| 2026-10-21 | ${sha.slice(0, 12)} | name no longer validated (src/service.js:1) | repeatable (blocking): to /stack-agent:correct |`,
 		`| 2026-10-21 | ${sha.slice(0, 12)} | name no longer validated (src/service.js:1) | one-off (non-blocking): rename \\| the var |`,
 		`| 2026-10-21 | ${sha.slice(0, 12)} | name no longer validated (src/service.js:1) | needs validation: whether callers already validate |`,
-		`| 2026-10-21 | ${sha.slice(0, 12)} | name no longer validated (src/service.js:1) | dismissed: the router validates name first |`,
+		`| 2026-10-21 | ${sha.slice(0, 12)} | name no longer validated (src/service.js:1) | dismissed: create still returns early when name is empty |`,
+		`| 2026-10-21 | ${sha.slice(0, 12)} | name no longer validated (src/service.js:1) | hardening (already stopped by the router validates name): also check name in the service |`,
 	]);
 	const file = path.join(tempDir(), "f.json");
 	fs.writeFileSync(file, JSON.stringify(records));
-	assert.equal(main(["rows", file, "--date", "2026-10-21"]).text.split("\n").length, 4);
+	assert.equal(main(["rows", file, "--date", "2026-10-21"]).text.split("\n").length, 5);
 	assert.throws(() => main(["rows", file]), /--date YYYY-MM-DD/);
 	fs.writeFileSync(file, JSON.stringify([candidate()]));
 	assert.throws(() => main(["rows", file, "--date", "2026-10-21"]), /not a valid final findings file/);
@@ -268,10 +276,11 @@ test("the reviewer and verifier prompts name every field and value the validator
 	for (const k of [...COMMON, ...FIELDS.candidate]) assert.ok(reviewer.includes(`\`${k}\``), `agents/reviewer.md does not mention \`${k}\``);
 	assert.ok(reviewer.includes("`candidate`"));
 	for (const src of ["guard:<rule-id>", "api-map", "verify-evidence", "rules.md:<line>", "correctness"]) assert.ok(reviewer.includes(src), `reviewer.md does not mention ${src}`);
-	const verifierFields = [...COMMON, ...new Set(["confirmed", "needs_validation", "rejected"].flatMap((v) => FIELDS[v]))].filter((k) => !["found_by", "verified_by"].includes(k));
+	const verifierFields = [...COMMON, ...new Set(FINAL_VERDICTS.flatMap((v) => FIELDS[v]))].filter((k) => !["found_by", "verified_by"].includes(k));
 	for (const k of verifierFields) assert.ok(verifier.includes(`\`${k}\``), `agents/finding-verifier.md does not mention \`${k}\``);
 	for (const v of [...VERDICTS.filter((v) => v !== "candidate"), ...SEVERITIES, ...KINDS]) assert.ok(verifier.includes(`\`${v}\``), `finding-verifier.md does not mention \`${v}\``);
 	for (const k of ["found_by", "verified_by", "candidates", "final"]) assert.ok(skill.includes(k), `sample-review SKILL.md does not mention ${k}`);
+	for (const v of FINAL_VERDICTS) assert.ok(skill.includes(`\`${v}\``), `sample-review SKILL.md does not say what to do with \`${v}\``);
 });
 
 test("every flag the skills and agents pass to a script is in that script's usage", () => {
