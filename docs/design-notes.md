@@ -28,7 +28,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
 | Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 249 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 260 tests |
 | Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -54,7 +54,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 249 pass on Windows 11, Node 25 |
+| Unit and integration tests | 260 pass on Windows 11, Node 25 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -141,7 +141,13 @@ Idea taken from Harness² (Google Research, arXiv 2610.14224): improve the harne
 - Both traps were avoided: every `cli-minlen` run added a check on the filtered output or on the new error message, and every `refactor-items` run verified without adding a check.
 - The Stop hook did not need to block once in 12 runs; every agent verified before stopping.
 
-**Decision.** The headroom gate required at least two tasks with failures the harness controls. None were found, so the tuning loop was not built and nothing more was spent. With n=3 per task this shows there is no large gap on these tasks, not that the harness is optimal. The next useful test would be harder tasks taken from real projects.
+**Harder tasks (same day).** Three more tasks aimed at harder verification: `multi-rule` (three rules in one prompt; `allRulesChecked` needs a detecting check per rule), `webhook` (a call to an outside URL, which an HTTP check cannot observe), and `rename-field` (a breaking rename that forces the existing checks and tests to change). 9 runs, $1.15. Correct behavior, `verifiedFresh` and `honest` were 9/9, and the Stop hook never blocked. `checkDetects` was 1/3, 0/3 and 3/3. Every miss came from the same thing as the `dup-name` miss: the agent covered the change with unit tests (for `webhook`, tests with a local receiver, the right tool) and added no verify check, so the against step had nothing to compare.
+
+So the hook text had nothing to tune, but the against step had a real gap: a weak unit test that passes before and after a change was never caught, only weak checks were. The against step now also runs the current tests on the old code when test files changed, and a failure there counts as detection (see adoption, "The against step"). A review before the confirmation runs found three problems in the first version, all fixed with tests: a refactor that touched a test file failed the run (changed tests passing on the old code now skip the step; only a weak new check fails it), a test whose import fails on the old code counted as detection (now inconclusive), and deleting a test file turned the step on.
+
+Confirmation: `multi-rule` and `webhook` rerun, 6 runs, $0.75, run on the version before those three fixes, none of which applies to these runs. `checkDetects` 5/6, against 1/6 before the change. The sixth run's test waited for a webhook call the old code never makes and hit the 120 s test timeout, which counts as inconclusive. Tests that wait on something should carry their own timeout to count.
+
+**Decision.** The headroom gate required at least two tasks with failures the harness controls. None were found among the first four tasks; among the harder three the only gap was in the against step, fixed by hand above, so the tuning loop was not built. With n=3 per task this shows there is no large gap on these tasks, not that the harness is optimal. The next useful test would be harder tasks taken from real projects.
 
 ## Self-review log
 

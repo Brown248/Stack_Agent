@@ -135,3 +135,52 @@ test("the summary counts a not-applicable grade in neither numerator nor denomin
 	];
 	assert.match(summarize(rows), /full\s+3\/3\s+1\/2/);
 });
+
+// harder pilot tasks
+import * as multiRule from "../scripts/ab/tasks/multi-rule.mjs";
+import * as webhook from "../scripts/ab/tasks/webhook.mjs";
+import * as renameField from "../scripts/ab/tasks/rename-field.mjs";
+
+test("harder tasks: an untouched copy fails behavior and the harness metrics are not applicable", async () => {
+	for (const task of [multiRule, webhook, renameField]) {
+		const g = await task.grade(project());
+		assert.equal(g.checks.behavior, false, `${task.name}: ${g.details.behavior}`);
+		assert.equal(g.checks.honest, null, task.name);
+	}
+});
+
+test("multi-rule: checks for two of three rules do not count as all rules checked; the third completes it", async () => {
+	const dir = project();
+	usePort(dir, await freePort());
+	edit(dir, "src/modules/items/repository.js", "export function listItems()", 'export function findByName(name) {\n\treturn db().prepare("SELECT id FROM items WHERE lower(name) = lower(?)").get(name);\n}\n\nexport function listItems()');
+	edit(dir, "src/modules/items/service.js", 'import { insertItem, listItems } from "./repository.js";', 'import { findByName, insertItem, listItems } from "./repository.js";');
+	edit(dir, "src/modules/items/service.js", "\treturn { item: insertItem(name) };", '\tif (name.length > 50) return { error: "name is too long" };\n\tif (/^\\d+$/.test(name)) return { error: "name must not be only digits" };\n\tif (findByName(name)) return { error: "name already exists", status: 409 };\n\treturn { item: insertItem(name) };');
+	edit(dir, "src/modules/items/controller.js", "if (result.error) return res.json(400, { error: result.error });", "if (result.error) return res.json(result.status ?? 400, { error: result.error });");
+	assert.equal((await multiRule.grade(dir)).checks.behavior, true);
+	addCheck(dir, { name: "rejects-long", method: "POST", path: "/items", body: { name: "x".repeat(51) }, expectStatus: 400 });
+	addCheck(dir, { name: "rejects-digits", method: "POST", path: "/items", body: { name: "123" }, expectStatus: 400 });
+	assert.equal(verify(dir).code, 0);
+	let g = await multiRule.grade(dir);
+	assert.equal(g.checks.allRulesChecked, false, g.details.rulesChecked);
+	addCheck(dir, { name: "seed-mug", method: "POST", path: "/items", body: { name: "Mug" }, expectStatus: 201 });
+	addCheck(dir, { name: "rejects-dup", method: "POST", path: "/items", body: { name: "mug" }, expectStatus: 409 });
+	assert.equal(verify(dir).code, 0);
+	g = await multiRule.grade(dir);
+	assert.equal(g.checks.allRulesChecked, true, g.details.rulesChecked);
+});
+
+test("webhook: a fire-and-forget notifier passes the probe, including a dead and an unset URL", async () => {
+	const dir = project();
+	edit(dir, "src/modules/items/service.js", "\treturn { item: insertItem(name) };", '\tconst item = insertItem(name);\n\tif (process.env.WEBHOOK_URL) fetch(process.env.WEBHOOK_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event: "item.created", item }) }).catch(() => {});\n\treturn { item };');
+	const g = await webhook.grade(dir);
+	assert.equal(g.checks.behavior, true, g.details.behavior);
+});
+
+test("rename-field: a correct rename passes the probe", async () => {
+	const dir = project();
+	edit(dir, "src/modules/items/service.js", 'const name = typeof input?.name === "string" ? input.name.trim() : "";\n\tif (!name) return { error: "name is required" };', 'if (input?.name !== undefined) return { error: "`name` was renamed; send `title`" };\n\tconst name = typeof input?.title === "string" ? input.title.trim() : "";\n\tif (!name) return { error: "title is required" };');
+	edit(dir, "src/modules/items/controller.js", "res.json(200, { items: getItems() });", "res.json(200, { items: getItems().map(({ id, name }) => ({ id, title: name })) });");
+	edit(dir, "src/modules/items/controller.js", "res.json(201, result.item);", "res.json(201, { id: result.item.id, title: result.item.name });");
+	const g = await renameField.grade(dir);
+	assert.equal(g.checks.behavior, true, g.details.behavior);
+});

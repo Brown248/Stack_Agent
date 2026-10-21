@@ -110,7 +110,7 @@ test("a missing module or program on the old checkout is inconclusive, not detec
 	editConfig(dir, (c) => c.checks.push({ name: "new-cli", args: [process.execPath, "src/new-cli.js"], expectOutputIncludes: "new" }));
 	const r = runNode(verify, ["--root", dir, "--json"]);
 	assert.equal(r.code, 0, r.stdout + r.stderr);
-	assert.match(against(r).skipped, /every new check was inconclusive/);
+	assert.match(against(r).skipped, /every new check and test run was inconclusive/);
 	assert.deepEqual(against(r).inconclusive, ["new-cli"]);
 });
 

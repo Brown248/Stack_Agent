@@ -22,7 +22,7 @@ description: Prove a change works by running the test suite and the project's re
    ```
 
    Use `--check <name>` to rerun one check while iterating and `--skip-tests` to skip the suite during that loop. Those runs are recorded as partial. The final run must be the full one with no flags.
-   A full run also runs the new checks against the code from before your change (`against` step). At least one new check must fail there; a check that passes on both does not test your change. If it reports `FAIL against`, add the check that the old code fails, usually the rejection case.
+   A full run also runs the new checks, and the tests when test files changed, against the code from before your change (`against` step). At least one of them must fail there; a check or test that passes on both does not test your change. If it reports `FAIL against`, add the check or test that the old code fails, usually the rejection case.
 4. If something fails, read the failing step's output, fix the cause, and rerun. Never change an expectation to match a wrong result. Change it only when the requirement changed, and say so.
 5. If verify says something already answers on the server's port, it is not ours. Do not kill processes you did not start. Change the port in `verify.json` or ask the user.
 

@@ -403,12 +403,24 @@ function resolveAgainstRef(root, config, explicit) {
 	return earliest?.head ?? "HEAD";
 }
 
-function codeChangedSince(root, ref, config, keep) {
+function changedSince(root, ref) {
 	const paths = new Set(gitRun(root, ["diff", "--name-only", "-z", "--relative", ref, "--", "."]).stdout.split("\0").filter(Boolean));
 	for (const p of changedFiles(root) ?? []) paths.add(p);
-	const ignore = ignoreList(config.stopHookIgnore);
-	return [...paths].filter((p) => !p.startsWith(".stack-agent/") && !matchesAny(p, ignore) && !matchesAny(p, keep));
+	return [...paths];
 }
+
+function codeChangedSince(root, ref, config, keep) {
+	const ignore = ignoreList(config.stopHookIgnore);
+	return changedSince(root, ref).filter((p) => !p.startsWith(".stack-agent/") && !matchesAny(p, ignore) && !matchesAny(p, keep));
+}
+
+// test files (the against.keep globs) changed or added since the reference commit; a deleted test is not one
+function testsChangedSince(root, ref, keep) {
+	return changedSince(root, ref).filter((p) => matchesAny(p, keep) && fs.existsSync(path.join(root, p)));
+}
+
+// a test run that dies on an import the old code lacks proves nothing about the change
+const TEST_IMPORT_RE = /does not provide an export named|cannot import name|ImportError|Failed to import test module|SyntaxError: The requested module/;
 
 function copyInto(fromRoot, toRoot, rel) {
 	const to = path.join(toRoot, rel);
@@ -494,10 +506,13 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	const added = (config.checks ?? []).filter((c) => !oldKeys.has(assertionKey(c)));
 	const removed = (oldConfig.checks ?? []).filter((c) => !newKeys.has(assertionKey(c))).map((c) => c.name);
 	if (removed.length) step.removed = removed;
-	if (!added.length) return { ...step, skipped: "no new or changed checks" };
 	const keep = config.against?.keep ?? AGAINST_KEEP;
+	// new or changed tests count like new checks: a test written for the change should fail on the code before it
+	const changedTests = runs(config.test) ? testsChangedSince(root, ref, keep) : [];
+	if (!added.length && !changedTests.length) return { ...step, skipped: "no new or changed checks or tests" };
 	if (!codeChangedSince(root, ref, config, keep).length) return { ...step, skipped: "only checks or tests changed, no code" };
 	step.checks = added.map((c) => c.name);
+	if (changedTests.length) step.tests = changedTests;
 
 	const base = path.resolve(root, config.against?.tmpDir ?? os.tmpdir());
 	fs.mkdirSync(base, { recursive: true });
@@ -528,22 +543,44 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 			const r = await runCommand(wtRoot, config.against.setup, 600);
 			if (r.exitCode !== 0 || r.timedOut) return conclude(step, config, `against.setup failed on ${ref}: ${tail(r.output, 300)}`);
 		}
-		const steps = await runVerify({ root: wtRoot, config, skipTests: true, only: step.checks });
-		const server = steps.find((s) => s.step === "server");
-		if (server && !server.ok) return conclude(step, config, `the server did not start on the code at ${ref}: ${server.reason}`);
-		// a missing build, module, or program on the old checkout proves nothing about the change
-		const results = steps.filter((s) => s.step === "check").map((s) => (s.type === "command" && !s.ok && (s.exitCode === 127 || MISSING_RE.test(s.output ?? "")) ? { ...s, inconclusive: true } : s));
+		const results = [];
+		// the current test suite (with the new tests) on the old code: a failure means the tests catch the change
+		if (changedTests.length) {
+			const t = await runTests(wtRoot, config.test);
+			const label = `tests (${shown(config.test)})`;
+			const inconclusive = !t.ok && (t.timedOut || t.exitCode === 127 || t.exitCode === null || MISSING_RE.test(t.output ?? "") || TEST_IMPORT_RE.test(t.output ?? ""));
+			results.push({ name: label, ok: t.ok, inconclusive, kind: "tests" });
+		}
+		if (added.length) {
+			const steps = await runVerify({ root: wtRoot, config, skipTests: true, only: step.checks });
+			const server = steps.find((s) => s.step === "server");
+			// a missing build, module, or program on the old checkout proves nothing about the change
+			for (const s of steps.filter((x) => x.step === "check")) {
+				const inconclusive = !s.ok && (s.inconclusive || (s.type === "command" && (s.exitCode === 127 || MISSING_RE.test(s.output ?? ""))));
+				results.push({ name: s.name, ok: s.ok, inconclusive: Boolean(inconclusive), kind: "check" });
+			}
+			if (server && !server.ok) {
+				step.note = `the server did not start on the code at ${ref}: ${server.reason}`;
+				for (const name of step.checks) if (!results.some((r) => r.name === name)) results.push({ name, ok: false, inconclusive: true, kind: "check" });
+			}
+		}
 		step.detecting = results.filter((s) => !s.ok && !s.inconclusive).map((s) => s.name);
 		step.passingBefore = results.filter((s) => s.ok).map((s) => s.name);
 		const inconclusive = results.filter((s) => s.inconclusive).map((s) => s.name);
 		if (inconclusive.length) step.inconclusive = inconclusive;
 		if (step.detecting.length) return step;
-		if (!step.passingBefore.length) return conclude(step, config, `every new check was inconclusive on the code at ${ref}`);
-		return {
-			...step,
-			ok: false,
-			problems: [`new check(s) ${step.passingBefore.join(", ")} also pass on the code before your change (${ref}), so they do not test it. Add a check that fails without your change, usually the rejection case.`],
-		};
+		const weakChecks = results.filter((r) => r.ok && r.kind === "check").map((r) => r.name);
+		// New checks exist to test new behavior, so one that passes on the old code is a weak check. Changed tests
+		// passing on the old code is what a refactor looks like, so that alone is not a failure.
+		if (weakChecks.length)
+			return {
+				...step,
+				ok: false,
+				problems: [`new check(s) ${weakChecks.join(", ")} also pass on the code before your change (${ref}), so they do not test it. Add a check or test that fails without your change, usually the rejection case.`],
+			};
+		if (results.some((r) => r.ok && r.kind === "tests"))
+			return { ...step, skipped: `the changed tests also pass on the code at ${ref} (expected for a refactor; for new behavior, add a test or check that fails without the change)` };
+		return conclude(step, config, step.note ?? `every new check and test run was inconclusive on the code at ${ref}`);
 	} finally {
 		// cleanup problems must not hide the result; a missing link target is reported loudly
 		try {

@@ -233,9 +233,9 @@ function killTree(child) {
 
 // Starts the project's server on its own port and database (not the verify config's), runs fn(base),
 // and always kills the process tree. Returns { ok, detail } from fn, or a failure for setup problems.
-export async function withServer(dir, fn) {
+export async function withServer(dir, fn, extraEnv = {}) {
 	const port = await freePort();
-	const env = { ...process.env, PORT: String(port), DB_FILE: path.join(dir, "data", `probe-${process.pid}-${Date.now()}.db`) };
+	const env = { ...process.env, ...extraEnv, PORT: String(port), DB_FILE: path.join(dir, "data", `probe-${process.pid}-${Date.now()}.db`) };
 	fs.mkdirSync(path.join(dir, "data"), { recursive: true });
 	const migrated = spawnSync(process.execPath, ["scripts/migrate.mjs", "up"], { cwd: dir, env, encoding: "utf8", timeout: 60000 });
 	if (migrated.status !== 0) return { ok: false, detail: `migrate failed: ${(migrated.stderr || migrated.stdout || String(migrated.error)).slice(-300)}` };
