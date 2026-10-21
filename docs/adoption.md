@@ -141,11 +141,11 @@ CI: `.github/workflows/stack-agent.yml` runs the guard, runs `guard.mjs --compar
 
 The easiest way around a rule is to edit the guard itself. There are three layers against that:
 
-1. **While working:** hooks ask a human before Edit/Write or a shell command (Bash or PowerShell) changes `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/`, or `stack-agent.yml`.
+1. **While working:** hooks ask a human before Edit/Write or a shell command (Bash or PowerShell) changes `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/`, or `stack-agent.yml` (or deletes the `.github` or `.github/workflows` folder; adding or copying a workflow there does not ask). That includes inline scripts (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`), also when they build the path with `path.join` or `os.path.join`.
 2. **In CI:** `--compare-ref` fails when the baseline grows or a rule is removed or narrowed.
 3. **In review:** add `.github/CODEOWNERS` so a named owner must approve any change under `.stack-agent/`, for example `/.stack-agent/ @your-org/leads`. `init` does not create it because it does not know your team.
 
-Remaining gaps: the PostToolUse hook checks files edited through Edit/Write. Edits made through shell commands (`sed -i`) are caught later by CI and the Stop hook. The shell hooks match patterns, so they do not cover every possible form. CI is the gate that must always exist.
+Remaining gaps: the PostToolUse hook checks files edited through Edit/Write. Edits made through shell commands (`sed -i`) are caught later by CI and the Stop hook. The shell hooks match patterns, so they do not cover every possible form: a path assembled from variables, an interpreter they do not know, or a script file run with `node fix.js` passes them. CI is the gate that must always exist.
 
 ## 3. Feature map (backend-http)
 

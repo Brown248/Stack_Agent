@@ -224,6 +224,11 @@ test("a custom evidenceDir is protected from inline scripts and Git Bash paths t
 	sessionStart(dir);
 	const ask = (command) => decision(run("pre-bash.mjs", dir, { tool_name: "Bash", tool_input: { command } }));
 	assert.equal(ask(`node -e "require('fs').writeFileSync('build/ev/latest.json','{}')"`), "ask");
+	assert.equal(ask(`node -e "require('fs').writeFileSync(require('path').join('build','ev','latest.json'),'{}')"`), "ask");
+	assert.equal(ask(`node -e "require('fs').rmSync('build/ev',{recursive:true})"`), "ask");
+	assert.equal(ask(`node -e "require('fs').writeFileSync('build/ev-notes.txt','x')"`), undefined);
+	// the folder name needs a boundary in front: mybuild/ev is another folder
+	assert.equal(ask(`node -e "require('fs').rmSync('mybuild/ev',{recursive:true})"`), undefined);
 	if (process.platform === "win32") {
 		const msys = "/" + dir[0].toLowerCase() + dir.slice(2).replaceAll("\\", "/") + "/build/ev/latest.json";
 		assert.equal(ask(`cp x ${msys}`), "ask");

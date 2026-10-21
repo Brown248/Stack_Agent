@@ -141,11 +141,11 @@ CI: `.github/workflows/stack-agent.yml` รัน guard, รัน `guard.mjs --
 
 ทางเลี่ยงกฎที่ง่ายที่สุดคือแก้ตัว guard เอง ระบบกันไว้สามชั้น:
 
-1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/` หรือ `stack-agent.yml`
+1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/` หรือ `stack-agent.yml` (หรือลบโฟลเดอร์ `.github` หรือ `.github/workflows` ส่วนการเพิ่มหรือคัดลอก workflow เข้าไปไม่ต้องถาม) รวมถึง inline script (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`) แม้จะประกอบ path ด้วย `path.join` หรือ `os.path.join`
 2. **ใน CI:** `--compare-ref` fail เมื่อ baseline โตขึ้น หรือกฎถูกลบหรือแคบลง
 3. **ในการรีวิว:** เพิ่ม `.github/CODEOWNERS` ให้คนที่ระบุต้องอนุมัติทุกการแก้ใน `.stack-agent/` เช่น `/.stack-agent/ @your-org/leads` (init ไม่ได้สร้างให้ เพราะไม่รู้ชื่อทีม)
 
-ช่องโหว่ที่ยังเหลือ: hook PostToolUse ตรวจเฉพาะไฟล์ที่แก้ผ่าน Edit/Write ถ้าแก้ผ่านคำสั่ง shell (เช่น `sed -i`) CI และ Stop hook จะจับได้ทีหลัง ส่วน hook ที่ดักคำสั่ง shell ใช้การจับ pattern จึงไม่ครอบคลุมทุกรูปแบบ CI คือด่านที่ต้องมีเสมอ
+ช่องโหว่ที่ยังเหลือ: hook PostToolUse ตรวจเฉพาะไฟล์ที่แก้ผ่าน Edit/Write ถ้าแก้ผ่านคำสั่ง shell (เช่น `sed -i`) CI และ Stop hook จะจับได้ทีหลัง ส่วน hook ที่ดักคำสั่ง shell ใช้การจับ pattern จึงไม่ครอบคลุมทุกรูปแบบ: path ที่ประกอบจากตัวแปร, interpreter ที่ hook ไม่รู้จัก หรือไฟล์ script ที่รันด้วย `node fix.js` จะผ่านไปได้ CI คือด่านที่ต้องมีเสมอ
 
 ## 3. Feature map (backend-http)
 

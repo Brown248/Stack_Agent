@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { askForProtected, protectedMentioned, protectedWhat } from "./protected-paths.mjs";
+import { WORKFLOWS_FOLDER, askForProtected, protectedMentioned, protectedWhat, workflowsFolderMentioned } from "./protected-paths.mjs";
 import { projectContext } from "./project-context.mjs";
 import { readHookInput } from "./read-input.mjs";
 
@@ -100,16 +100,47 @@ function classifyGit({ env, globals, sub, rest }) {
 	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t));
 	if (sub === "branch" && (shortFlags(rest).includes("D") || ((shortFlags(rest).includes("d") || long("--delete", 5)) && (shortFlags(rest).includes("f") || long("--force", 6)))))
 		return { decision: "ask", reason: "`git branch -D` deletes a branch even when its commits are not merged anywhere, which can lose work. A human must approve it." };
+	// these point an existing branch somewhere else; its old commits survive only in the reflog. -M (force rename)
+	// is left alone: `git branch -M main` is the usual first step of a new repository.
+	const branchFlags = shortFlags(rest.filter((t, i) => !/^--(sort|format|contains|no-contains|merged|no-merged|points-at|set-upstream-to)$/.test(rest[i - 1] ?? "")));
+	const forceMoves =
+		(sub === "branch" && (/[fC]/.test(branchFlags) || long("--force", 6))) ||
+		(sub === "checkout" && shortFlags(rest).includes("B")) ||
+		(sub === "switch" && (shortFlags(rest).includes("C") || long("--force-create", 9)));
+	if (forceMoves)
+		return { decision: "ask", reason: `\`git ${sub}\` with a force flag points an existing branch at other commits; its old commits are then reachable only through the reflog. A human must approve it.` };
 	if (sub === "stash" && (rest[0] === "clear" || rest[0] === "drop"))
 		return { decision: "ask", reason: "this deletes stashed work permanently. A human must approve it." };
 	return null;
 }
 
+// An interpreter given its program as an argument: node -e / -pe / --eval=..., python -c / -Ic / -X utf8 -c,
+// py -3 -c, deno eval. Only the interpreter's own options are read, up to the first argument that is not one, so
+// a script's flags (node build.js -c x) are not mistaken for it.
+const INTERPRETER = /^(.*[\\/])?(node|nodejs|python[\d.]*w?|pythonw|py|deno|bun)(\.exe)?$/i;
+const OPTION_WITH_VALUE = /^(-X|-W|-r|--require|--import|--loader|--input-type|--env-file|-Q)$/;
+function hasInlineScript(tokens) {
+	return tokens.some((t, i) => {
+		if (!INTERPRETER.test(t)) return false;
+		for (let j = i + 1; j < tokens.length && j < i + 10; j++) {
+			const f = tokens[j];
+			if (/^-[A-Za-z]*[ecp]$/.test(f) || /^--(eval|print)(=|$)/.test(f)) return true;
+			if (j === i + 1 && f === "eval") return true;
+			if (OPTION_WITH_VALUE.test(f)) j++;
+			else if (!f.startsWith("-")) return false;
+		}
+		return false;
+	});
+}
+const DELETERS = /^(rm|rmdir|rd|del|erase|Remove-Item|ri)(\.exe)?$/i;
+const DELETE_CALL = /\b(rmSync|rmdirSync|rmdir|rm|rmtree|removedirs|unlinkSync|unlink|remove|Remove-Item)\s*\(/;
+
 // extra: optional (token) => what | null for paths only known at run time (a custom evidenceDir, E4)
 export function classify(command, depth = 0, extra = () => null) {
 	const protectedAt = (t) => protectedWhat(t) ?? extra(t);
 	const text = String(command ?? "");
-	if (SESSIONS_MENTION.test(text) && CHANGES_FILES.test(text)) return askForProtected("the Stop hook's session record");
+	if (SESSIONS_MENTION.test(text) && (CHANGES_FILES.test(text) || splitSegments(text).some((s) => hasInlineScript(tokenize(s)))))
+		return askForProtected("the Stop hook's session record");
 	for (const segment of splitSegments(String(command ?? ""))) {
 		const tokens = tokenize(segment);
 		if (tokens.includes("--allow-increase"))
@@ -122,8 +153,14 @@ export function classify(command, depth = 0, extra = () => null) {
 		const redirectHit = redirected.find((t) => protectedAt(t));
 		if (redirectHit) return askForProtected(protectedAt(redirectHit));
 		const target = tokens.find((t) => protectedAt(t));
-		const inlineScript = tokens.some((t, i) => /^(node|python3?|deno|bun)(\.exe)?$/i.test(t) && /^-(e|c|p|-eval|-print)$/.test(tokens[i + 1] ?? ""));
+		// an interpreter given its program as an argument: node -e / -pe / --eval=..., python -c / -Ic, py -3 -c, deno eval
+		const inlineScript = hasInlineScript(tokens);
 		if (target && tokens.some((t) => WRITERS.test(t))) return askForProtected(protectedAt(target));
+		const deletesWorkflows =
+			(tokens.some((t) => DELETERS.test(t)) && tokens.some((t) => WORKFLOWS_FOLDER.test(t))) ||
+			(inlineScript && DELETE_CALL.test(segment) && workflowsFolderMentioned(segment));
+		if (deletesWorkflows)
+			return { decision: "ask", reason: "this deletes the folder holding the Stack Agent CI workflow, the check that still holds when the hooks do not. A human must approve it." };
 		// the raw segment too: tokenizing drops a backslash inside double quotes ("\e"), but Python keeps it in the path
 		const scripted = inlineScript && ([...tokens, segment].map(protectedMentioned).find(Boolean) ?? tokens.map((t) => extra.mentions?.(t)).find(Boolean));
 		if (scripted) return askForProtected(scripted);

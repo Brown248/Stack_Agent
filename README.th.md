@@ -22,7 +22,7 @@ Stack Agent ย้ายกฎออกจาก prompt ไปไว้ในส
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | รันเทส เปิด server (ถ้ามี) รัน HTTP check และ command check แล้วเขียนหลักฐานลง `.stack-agent/evidence/` |
 | Hard constraint (CI) | `scripts/guard.mjs` | กฎแบบ regex ใช้ได้ทุกภาษา และกฎ import สำหรับ JS/TS และ Python มี baseline แบบ ratchet คือของเดิมผ่าน แต่ของใหม่ต้อง fail ส่วน `--compare-ref` ทำให้ PR ที่แอบผ่อนกฎ fail |
-| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบ branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และเตือนครั้งเดียวก่อน agent จบงานถ้ายังไม่ได้ verify |
+| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบหรือบังคับย้าย branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และเตือนครั้งเดียวก่อน agent จบงานถ้ายังไม่ได้ verify |
 | Soft constraint | `.stack-agent/rules.md` | วิธีเขียนที่ทีมชอบ โหลดเข้าทุก session |
 | Feature map (backend) | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่ endpoint จากโค้ด และ fail เมื่อแผนที่ไม่ตรงกับโค้ด |
 | Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals` และสำหรับ backend มี `add-endpoint`, `add-migration`, `api-map` |
