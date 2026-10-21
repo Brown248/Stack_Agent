@@ -21,6 +21,7 @@ description: Prove a change works by running the test suite and the project's re
    node .stack-agent/bin/verify.mjs
    ```
 
+   Read its output as it prints, or save it to a file outside the project (the system temp folder). The evidence records the project's files as they were when the run started, untracked ones included, so a file like `verify-out.txt` written into the project and deleted afterwards leaves the evidence stale, and the Stop hook asks for another run.
    Use `--check <name>` to rerun one check while iterating and `--skip-tests` to skip the suite during that loop. Those runs are recorded as partial. The final run must be the full one with no flags.
    A full run also runs the new checks, and the tests when test files changed, against the code from before your change (`against` step). At least one of them must fail there; a check or test that passes on both does not test your change. If it reports `FAIL against`, add the check or test that the old code fails, usually the rejection case.
 4. If something fails, read the failing step's output, fix the cause, and rerun. Never change an expectation to match a wrong result. Change it only when the requirement changed, and say so.

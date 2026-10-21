@@ -31,7 +31,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | รีวิวเทียบกับ spec นอกจากกฎของทีม (จาก mattpocock/skills `code-review`, MIT) | `source: spec` พร้อม `spec: { from, quote }` ที่ตรวจกับ commit message หรือไฟล์ spec | `tests/review-findings.test.mjs` |
 | ผลรีวิวเป็นข้อมูล และตรวจซ้ำโดย agent ที่ไม่ได้เป็นคนเจอ (จาก cloudflare/security-audit-skill) | candidate จาก `reviewer` คำตัดสิน `confirmed` / `hardening` / `needs_validation` / `rejected` จาก `finding-verifier` ตรวจด้วย `scripts/review-findings.mjs` (ฟิลด์ที่ต้องมีตามคำตัดสิน, คนเจอไม่ใช่คนตรวจ, โค้ดที่ยกมาต้องตรงกับบรรทัดที่อ้าง, finding ของ commit ต้องอ้างไฟล์ที่ commit นั้นแก้) | `tests/review-findings.test.mjs` รวมเทสว่า prompt ของ agent พูดถึงทุกฟิลด์ และทุก flag ของ script ที่เอกสารใช้มีอยู่จริง |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 295 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 296 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 10 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -58,7 +58,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 295 เทสบน Windows 11 กับ Node 26 |
+| Unit และ integration test | ผ่าน 296 เทสบน Windows 11 กับ Node 26 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -175,7 +175,13 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 
 **`/stack-agent:sample-review` พร้อม spec ($0.29)** commit เดียวที่ message สั่งให้ตอบ 400 เมื่อชื่อยาวเกิน 50 ตัวอักษร แต่โค้ดตัดชื่อเหลือ 50 แล้วบันทึก reviewer ยก candidate แบบ `spec` ที่อ้าง commit message, verifier ยืนยัน (blocking, repeatable) และ validator ผ่านทั้ง `--candidates` และการตรวจไฟล์ที่ commit แก้ candidate ตัวที่สองของ reviewer (ไม่มีเทสสำหรับขีดจำกัด โดยอ้างบรรทัด `rules.md` ที่พูดเรื่องโครงสร้างโมดูล) ถูก verifier ปฏิเสธ เป็นครั้งแรกที่เส้นทาง `rejected` ทำงานจริง คำสั่ง `git -C` ของ agent รันได้ทุกครั้ง, checkout สำหรับรีวิวถูกลบ และแถวใน log มีบรรทัด ledger
 
-รันสองครั้งเป็นแค่ smoke test ยังเอาไปคิดเป็นอัตราไม่ได้
+**รอบที่สอง (วันเดียวกัน) $0.63 สามครั้ง แต่ละครั้งเล็งเส้นทางที่รอบแรกยังไม่ได้ทดสอบ**
+
+- **บรรทัด debug ระหว่างทำงาน ($0.25)** บั๊ก: summary นับสอง item ที่ชื่อซ้ำกันเป็นหนึ่ง (`COUNT(DISTINCT name)` ใน helper ของ repository) ซึ่ง check เดิมไม่มีตัวไหนจับได้ และ prompt สั่งให้ใช้ debug log agent เพิ่มเทสที่ fail ใส่บรรทัด `[DEBUG-x7q2]` แล้ว hook หลังแก้ไฟล์ปล่อยผ่าน (`onEdit: "skip"`) จากนั้นลบออก แก้ query และผ่าน verify เต็ม: ขั้น against ระบุทั้งเทสและ check `reports-summary` ที่แก้ว่า detecting ไม่มี tag ค้าง และ guard ผ่าน Stop hook บล็อกหนึ่งครั้ง เพราะ agent เขียน output ของ verify ลง `.verify-out.txt` ในโปรเจคแล้วลบทิ้ง evidence จึงไม่ตรงกับโค้ด ตอนนี้ skill verify บอกให้อ่าน output ตอนที่พิมพ์ออกมา หรือบันทึกไว้นอกโปรเจค และขั้น against เคยรายงาน check `reports-summary` ที่แค่ถูกแก้ว่า "removed" ตอนนี้รายงานว่า changed
+- **บั๊กที่เกิดใน session เดียวกัน ($0.08)** บั๊กเป็นการแก้ที่ยังไม่ commit commit ตอนเริ่ม session จึงเป็นโค้ดที่ถูก agent เพิ่ม check ของ verify (แก้ `verify.json` ด้วย script ซึ่งการแก้ hook รอบก่อนอนุญาตแล้ว) เห็นมัน fail ด้วย 201 คืนบรรทัดเดิม แล้วรัน verify: ขั้น against ข้ามพร้อมเหตุผล "only checks or tests changed, no code" และ agent รายงานตามที่ skill บอก ว่าบั๊กและการแก้มาจาก session นี้ทั้งคู่ และรอบที่ fail คือหลักฐาน
+- **รีวิวงานที่ยังไม่ commit เทียบ spec ($0.30)** คำขออยู่ใน prompt skill บันทึกเป็น `spec.md` ในโฟลเดอร์ของรอบนั้น finding แบบ `spec` ของ reviewer อ้างไฟล์นั้นพร้อม commit `worktree` verifier ยืนยัน candidate แบบ `verify-evidence` ถูกตรวจซ้ำด้วยการรัน `--evidence-status` (`verified_by: script:...`) ไฟล์ผ่าน validate พร้อม `--candidates` ไม่มีการเขียนแถวใน log และไม่มีการแก้โค้ด
+
+รันห้าครั้งเป็นแค่ smoke test ยังเอาไปคิดเป็นอัตราไม่ได้
 
 ## บันทึกการตรวจงานตัวเอง
 

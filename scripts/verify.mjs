@@ -540,8 +540,13 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	const oldKeys = new Set((oldConfig.checks ?? []).map(assertionKey));
 	const newKeys = new Set((config.checks ?? []).map(assertionKey));
 	const added = (config.checks ?? []).filter((c) => !oldKeys.has(assertionKey(c)));
-	const removed = (oldConfig.checks ?? []).filter((c) => !newKeys.has(assertionKey(c))).map((c) => c.name);
+	// a check whose assertions changed but whose name is still there was changed, not removed; it runs as a new one
+	const newNames = new Set((config.checks ?? []).map((c) => c.name));
+	const gone = (oldConfig.checks ?? []).filter((c) => !newKeys.has(assertionKey(c)));
+	const removed = gone.filter((c) => !newNames.has(c.name)).map((c) => c.name);
+	const changed = gone.filter((c) => newNames.has(c.name)).map((c) => c.name);
 	if (removed.length) step.removed = removed;
+	if (changed.length) step.changed = changed;
 	const keep = config.against?.keep ?? AGAINST_KEEP;
 	// new or changed tests count like new checks: a test written for the change should fail on the code before it
 	const changedTests = runs(config.test) ? testsChangedSince(root, ref, keep) : [];
@@ -615,7 +620,9 @@ function summarize(steps) {
 	return steps.map((s) => {
 		const mark = s.ok ? "PASS" : "FAIL";
 		if (s.step === "against") {
-			const removed = s.removed?.length ? `\n  note: check(s) removed since ${s.ref}: ${s.removed.join(", ")}` : "";
+			const removed =
+				(s.removed?.length ? `\n  note: check(s) removed since ${s.ref}: ${s.removed.join(", ")}` : "") +
+				(s.changed?.length ? `\n  note: check(s) changed since ${s.ref} (run as new checks): ${s.changed.join(", ")}` : "");
 			if (s.skipped) return `SKIP against: ${s.skipped}${removed}`;
 			return (s.ok ? `PASS against ${s.ref}: ${s.detecting.join(", ")} fail(s) on the code before the change` : `FAIL against ${s.ref}: ${s.problems.join("; ")}`) + removed;
 		}

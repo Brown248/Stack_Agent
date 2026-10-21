@@ -31,7 +31,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Review against the spec as well as the rules (from mattpocock/skills `code-review`, MIT) | `source: spec` with a quoted `spec: { from, quote }`, checked against the commit message or spec file | `tests/review-findings.test.mjs` |
 | Review findings as data, verified by an agent that did not find them (from cloudflare/security-audit-skill) | candidates from `reviewer`, verdicts `confirmed` / `hardening` / `needs_validation` / `rejected` from `finding-verifier`, checked by `scripts/review-findings.mjs` (required fields per verdict, finder is not verifier, quoted excerpts must match the cited line, a finding about a commit must cite a file it changed) | `tests/review-findings.test.mjs`, including tests that the agent prompts name every field and every script flag the docs use |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 295 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 296 tests |
 | Skills: small, composable, with scripts, getting better each use | 10 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -58,7 +58,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 295 pass on Windows 11, Node 26 |
+| Unit and integration tests | 296 pass on Windows 11, Node 26 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -175,7 +175,13 @@ The run found a hook false positive. The agent first tried to add a verify check
 
 **`/stack-agent:sample-review` with a spec, $0.29.** One commit whose message asks for a 400 on names over 50 characters, while the code truncates them to 50 and stores them. The reviewer raised a `spec` candidate quoting the commit message, the verifier confirmed it (blocking, repeatable), and the validator passed the files, including `--candidates` coverage and the changed-file check. The reviewer's second candidate (no test for the limit, citing a `rules.md` line about module layout) was rejected by the verifier, the first time the `rejected` path ran live. The agents' `git -C` commands all ran; the review checkout was removed; the log row carried the ledger line.
 
-Two runs are a smoke test, not a rate.
+**Second round (same day), $0.63, three runs, each aimed at a path the first round missed.**
+
+- **Debug lines mid-task, $0.25.** Bug: the summary counted two items with the same name as one (`COUNT(DISTINCT name)` in a repository helper), which no existing check caught; the prompt asked for debug logging. The agent added a test that went red, added a `[DEBUG-x7q2]` line, and the after-edit hook let it through (`onEdit: "skip"`), then removed it, fixed the query, and passed the full verify: the against step listed both the test and the changed `reports-summary` check as detecting, no tag was left, and the guard passed. The Stop hook blocked once, because the agent had written verify's output to `.verify-out.txt` inside the project and then deleted it, which made the evidence stale; the verify skill now says to read the output as it prints or save it outside the project. The against step also listed the edited `reports-summary` check as "removed" although it was only changed; it is now reported as changed.
+- **Bug made in the same session, $0.08.** The bug was an uncommitted edit, so the session's start commit held correct code. The agent added a verify check (a scripted edit of `verify.json`, which the earlier hook fix allows), saw it fail with 201, restored the line, and ran verify: the against step skipped with "only checks or tests changed, no code", and the agent reported, as the skill says, that the bug and its fix both came from this session and that the red run is the proof.
+- **Spec review of an uncommitted change, $0.30.** The request came in the prompt. The skill saved it as `spec.md` in the run folder; the reviewer's `spec` finding cited that file with commit `worktree`, the verifier confirmed it, a `verify-evidence` candidate was rechecked by rerunning `--evidence-status` (`verified_by: script:...`), the files validated with `--candidates`, no log row was written, and no code changed.
+
+Five runs are a smoke test, not a rate.
 
 ## Self-review log
 

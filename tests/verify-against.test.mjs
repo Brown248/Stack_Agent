@@ -83,6 +83,23 @@ test("renaming a check or changing its timeout is not a new check, and removed c
 	assert.deepEqual(r.against.removed, ["create-item-rejects-empty"]);
 });
 
+test("a check whose expectations changed under the same name is listed as changed, not removed", async () => {
+	const dir = await repo();
+	addRule(dir);
+	editConfig(dir, (c) => {
+		c.checks.find((x) => x.name === "reports-summary").expectJson = { itemCount: 1 };
+		c.checks.push(reject51);
+	});
+	const r = run(dir);
+	assert.equal(r.code, 0, r.stdout);
+	assert.deepEqual(r.against.changed, ["reports-summary"]);
+	assert.equal(r.against.removed, undefined);
+	assert.ok(r.against.checks.includes("reports-summary"), "a changed check runs on the old code like a new one");
+	const text = runNode(verify, ["--root", dir]).stdout;
+	assert.match(text, /check\(s\) changed since \S+ \(run as new checks\): reports-summary/);
+	assert.doesNotMatch(text, /removed since/);
+});
+
 test("skipped outside git, without verify.json at the ref, and with --no-against or against: false", async () => {
 	const plain = copySample();
 	usePort(plain, await freePort());
