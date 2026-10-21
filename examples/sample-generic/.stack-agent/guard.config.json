@@ -28,6 +28,16 @@
       "pattern": "\\bnode:|\\brequire\\(|\\bprocess\\.|\\bconsole\\.",
       "message": "src/ must stay pure: no file access, process state, or printing",
       "fix": "return a value or throw from src/transform.js, and do the reading, writing, and printing in job.mjs"
+    },
+    {
+      "id": "no-debug-tags",
+      "type": "pattern",
+      "onEdit": "skip",
+      "files": ["**"],
+      "exclude": [".stack-agent/**", "**/*.md", "**/*.log", "dist/**", "build/**", "out/**", ".next/**", "coverage/**"],
+      "pattern": "\\[DEBUG-[0-9A-Za-z]+\\]",
+      "message": "a tagged debug line from /stack-agent:debug is still in the code",
+      "fix": "delete every line tagged [DEBUG-...] (grep for the tag); keep the regression test instead"
     }
   ]
 }

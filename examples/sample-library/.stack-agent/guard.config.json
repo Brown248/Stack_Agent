@@ -28,6 +28,16 @@
       "to": ["src/internal/**"],
       "message": "an example imports library internals, so it would keep working after a change that breaks real consumers",
       "fix": "import from the package name (\"tinyslug\") and export what the example needs from src/index.js"
+    },
+    {
+      "id": "no-debug-tags",
+      "type": "pattern",
+      "onEdit": "skip",
+      "files": ["**"],
+      "exclude": [".stack-agent/**", "**/*.md", "**/*.log", "dist/**", "build/**", "out/**", ".next/**", "coverage/**"],
+      "pattern": "\\[DEBUG-[0-9A-Za-z]+\\]",
+      "message": "a tagged debug line from /stack-agent:debug is still in the code",
+      "fix": "delete every line tagged [DEBUG-...] (grep for the tag); keep the regression test instead"
     }
   ]
 }

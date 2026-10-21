@@ -31,7 +31,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | รีวิวเทียบกับ spec นอกจากกฎของทีม (จาก mattpocock/skills `code-review`, MIT) | `source: spec` พร้อม `spec: { from, quote }` ที่ตรวจกับ commit message หรือไฟล์ spec | `tests/review-findings.test.mjs` |
 | ผลรีวิวเป็นข้อมูล และตรวจซ้ำโดย agent ที่ไม่ได้เป็นคนเจอ (จาก cloudflare/security-audit-skill) | candidate จาก `reviewer` คำตัดสิน `confirmed` / `hardening` / `needs_validation` / `rejected` จาก `finding-verifier` ตรวจด้วย `scripts/review-findings.mjs` (ฟิลด์ที่ต้องมีตามคำตัดสิน, คนเจอไม่ใช่คนตรวจ, โค้ดที่ยกมาต้องตรงกับบรรทัดที่อ้าง, finding ของ commit ต้องอ้างไฟล์ที่ commit นั้นแก้) | `tests/review-findings.test.mjs` รวมเทสว่า prompt ของ agent พูดถึงทุกฟิลด์ และทุก flag ของ script ที่เอกสารใช้มีอยู่จริง |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 296 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 299 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 10 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -58,7 +58,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 296 เทสบน Windows 11 กับ Node 26 |
+| Unit และ integration test | ผ่าน 299 เทสบน Windows 11 กับ Node 26 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |

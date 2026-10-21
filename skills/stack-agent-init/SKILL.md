@@ -82,4 +82,4 @@ Fill `.stack-agent/rules.md` with soft preferences. Add `@.stack-agent/rules.md`
 node "${CLAUDE_PLUGIN_ROOT}/scripts/init.mjs" . --check
 ```
 
-Report the output. Exit 0 means setup is complete. An `outdated: .stack-agent/bin/<file>` line means a vendored tool differs from the plugin's copy. Rerun step 2 to refresh it; your configs are kept. Do not commit. List the files you created and let the user review them.
+Report the output. Exit 0 means setup is complete. An `outdated: .stack-agent/bin/<file>` line means a vendored tool differs from the plugin's copy. Rerun step 2 to refresh it; your configs are kept. A `notes` block names guard rules every preset ships that this project's `guard.config.json` lacks; pass it on to the user, who decides whether to copy each rule in or list it in `declinedRules`. Do not commit. List the files you created and let the user review them.

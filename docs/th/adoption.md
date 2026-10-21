@@ -100,7 +100,7 @@ check หรือเทสที่ผ่านทั้งก่อนแล�
 - pattern เป็น regex ของ JavaScript ไม่ใช่ของ Python หรือ PCRE ไวยากรณ์ที่มีเฉพาะใน Python เช่น `(?P<name>...)` จะ error
 - pattern เป็นแบบ multiline เสมอ `^` และ `$` ตรงกับทุกบรรทัด ไม่ใช่แค่ต้นและท้ายไฟล์ ถ้าไม่สนตัวพิมพ์ใหญ่เล็กให้ใส่ `"flags": "i"`
 - pattern อยู่ใน JSON จึงต้องเขียน backslash ซ้ำสองตัวเสมอ เช่น regex `\bSELECT\b` ต้องเขียน `"\\bSELECT\\b"` ถ้าเขียน `\b` ตัวเดียวใน JSON จะกลายเป็นตัวอักษร backspace และ guard จะแจ้ง config error
-- `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore` ต้องเป็น array ของ string ถ้าใส่เป็น string เดี่ยว guard จะแจ้ง config error
+- `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`, `declinedRules` ต้องเป็น array ของ string ถ้าใส่เป็น string เดี่ยว guard จะแจ้ง config error
 - โฟลเดอร์เหล่านี้ถูกข้ามเสมอ: `node_modules`, `.git`, `dist`, `build`, `coverage`, `__pycache__`, `.venv`, `venv`, `.tox`, `.pytest_cache`, `.mypy_cache`, `target`, `.stack-agent/evidence`, `.stack-agent/bin` ถ้าต้องการข้ามเพิ่มให้ใส่ใน `ignore`
 - `to` เทียบกับไฟล์ที่ import ไปถึงจริง เช่น import `../db/index.js` ต้องเขียน `"to": ["src/db/**"]` ถ้าเขียน `"src/db"` จะไม่จับอะไรเลย
 - glob รองรับ `*`, `**`, `?` และ `{js,ts}`
@@ -189,6 +189,8 @@ exit 0 แปลว่าตั้งค่าครบ ถ้าไม่ใช
 
 `--check` ยังเทียบทุกไฟล์ใน `.stack-agent/bin/` กับไฟล์ปัจจุบันของ plugin ไฟล์ที่ต่างไปหรือหายไปจะขึ้นเป็น `outdated: .stack-agent/bin/<file>` และนับว่ายังตั้งค่าไม่ครบ (exit 1) แปลว่า guard หรือ verify ที่คัดลอกไว้เก่ากว่า plugin และอาจยังไม่มีการแก้บั๊กล่าสุด ให้อัปเดตด้วยการรัน `node <path-to-Stack_Agent>/scripts/init.mjs .` ซ้ำ คำสั่งนี้เขียนทับเฉพาะเครื่องมือ ไม่แตะ config ของคุณ ส่วน `.stack-agent/bin/VERSION` บอกว่าเครื่องมือมาจาก plugin เวอร์ชันไหน
 
+นอกจากนี้ยังแจ้งกฎที่ทุก preset มี (`no-merge-conflict-markers`, `no-private-keys`, `no-debug-tags`) แต่ guard config ของคุณไม่มี พร้อมบอกไฟล์ preset ที่ให้คัดลอก การแจ้งนี้ไม่เปลี่ยน exit code เพราะการไม่ใช้กฎบางข้ออาจเป็นการตัดสินใจ ถ้าตั้งใจไม่ใช้ ให้ใส่ id ของกฎใน `"declinedRules"` ใน `guard.config.json` แล้วการแจ้งจะหยุด
+
 ## 5. Skills
 
 - `verify` ใช้ได้กับทุกโปรเจค
@@ -197,7 +199,7 @@ exit 0 แปลว่าตั้งค่าครบ ถ้าไม่ใช
 - จบงานใหญ่แล้วใช้ `/stack-agent:reflect` เพื่อให้เสนอการแก้ skill จากสิ่งที่พลาด คุณต้องอนุมัติก่อนแก้
 - เมื่อต้องแก้ agent เรื่องเดิมซ้ำสองครั้ง ใช้ `/stack-agent:correct` เปลี่ยนเป็นกฎ guard พร้อมพิสูจน์ว่ากฎจับได้จริง
 - `/stack-agent:sample-review` สุ่มตรวจ commit ล่าสุด แล้วส่งปัญหาที่เจอซ้ำไปให้ `correct`
-- `/stack-agent:debug` แก้บั๊กโดยทำให้บั๊กโผล่ได้ตามสั่งก่อน: repro กลายเป็น check ของ verify หรือเทส ขั้น against จึงพิสูจน์ได้ว่ามัน fail กับโค้ดก่อนแก้ บรรทัด debug ติด tag `[DEBUG-xxxx]` และกฎ guard `no-debug-tags` (มีในทุก preset ยกเว้นไฟล์ Markdown, log และ build output) จะ fail ถ้ามีบรรทัดค้างอยู่ตอนรัน guard หรือ CI กฎนี้ตั้ง `"onEdit": "skip"` ไว้ hook หลังแก้ไฟล์จึงไม่ขวางตอน agent ใส่บรรทัด debug ระหว่างทำงาน กฎอื่นก็ใช้ option นี้ได้ โปรเจคที่ตั้งค่าก่อนมีกฎนี้คัดลอกได้จาก `templates/presets/<preset>/guard.config.json` เพราะ `init` ไม่เขียนทับ guard config ที่มีอยู่
+- `/stack-agent:debug` แก้บั๊กโดยทำให้บั๊กโผล่ได้ตามสั่งก่อน: repro กลายเป็น check ของ verify หรือเทส ขั้น against จึงพิสูจน์ได้ว่ามัน fail กับโค้ดก่อนแก้ บรรทัด debug ติด tag `[DEBUG-xxxx]` และกฎ guard `no-debug-tags` (มีในทุก preset ยกเว้นไฟล์ Markdown, log และ build output) จะ fail ถ้ามีบรรทัดค้างอยู่ตอนรัน guard หรือ CI กฎนี้ตั้ง `"onEdit": "skip"` ไว้ hook หลังแก้ไฟล์จึงไม่ขวางตอน agent ใส่บรรทัด debug ระหว่างทำงาน กฎอื่นก็ใช้ option นี้ได้ โปรเจคที่ตั้งค่าก่อนมีกฎนี้จะไม่ได้กฎนี้ เพราะ `init` ไม่เขียนทับ guard config ที่มีอยู่ แต่ `init.mjs --check` จะแจ้งให้ (ดูหัวข้อ 4)
 
 ### สุ่มตรวจ: ผลรีวิวเป็นข้อมูล และมี agent ตัวที่สองตรวจซ้ำ
 

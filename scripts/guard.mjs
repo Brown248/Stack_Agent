@@ -26,6 +26,8 @@ export function loadConfig(configPath) {
 	if (!Array.isArray(config.rules) || config.rules.length === 0) throw new ConfigError("guard config needs a non-empty rules array");
 	requireStringArray(config.ignore, "ignore", { optional: true });
 	requireStringArray(config.pythonRoots, "pythonRoots", { optional: true });
+	// rules init would suggest that this project leaves out on purpose; the guard itself ignores the list
+	requireStringArray(config.declinedRules, "declinedRules", { optional: true });
 	if (config.aliases !== undefined && (typeof config.aliases !== "object" || Array.isArray(config.aliases) || !Object.values(config.aliases).every((v) => typeof v === "string")))
 		throw new ConfigError('aliases must map an import prefix to a repo path, e.g. {"@/": "src/"}');
 	config.maxAllowDays ??= DEFAULT_MAX_ALLOW_DAYS;

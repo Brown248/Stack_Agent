@@ -10,7 +10,8 @@ const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--check] [--li
   and ignores the evidence dir.
   --preset NAME   project type: generic (default), backend-http, cli, library, frontend-web
   --check         only report setup that is still unfinished (EDIT ME placeholders, missing files,
-                  vendored tools in .stack-agent/bin that differ from this plugin's copy)
+                  vendored tools in .stack-agent/bin that differ from this plugin's copy), and note any rule
+                  every preset ships that the guard config lacks (a note only; "declinedRules" silences it)
   --list-presets  print the available presets
 exit codes: 0 done / setup complete, 1 setup still unfinished, 2 usage error`;
 
@@ -86,6 +87,28 @@ export function pendingSetup(target) {
 	return pending;
 }
 
+// Rules every preset ships. A project set up before one of them was added does not have it, because init never
+// rewrites an existing config, so the check names it. A rule left out on purpose goes in "declinedRules".
+export function universalRules() {
+	const per = listPresets().map((p) => JSON.parse(fs.readFileSync(path.join(PRESETS_DIR, p, "guard.config.json"), "utf8")).rules.map((r) => r.id));
+	return per.reduce((acc, ids) => acc.filter((id) => ids.includes(id)));
+}
+
+export function missingRules(target) {
+	const file = path.join(target, ".stack-agent/guard.config.json");
+	let config;
+	try {
+		config = JSON.parse(fs.readFileSync(file, "utf8"));
+	} catch {
+		return [];
+	}
+	// a config the guard would reject gets no advice here; the guard names what is wrong with it
+	if (!Array.isArray(config?.rules)) return [];
+	const have = new Set(config.rules.map((r) => r?.id));
+	const declined = new Set(Array.isArray(config.declinedRules) ? config.declinedRules : []);
+	return universalRules().filter((id) => !have.has(id) && !declined.has(id));
+}
+
 export function init(target, preset = "generic") {
 	const report = [];
 	for (const [tool, src] of vendoredFiles()) {
@@ -139,6 +162,11 @@ function main(argv) {
 	const lines = args.check ? [] : [`preset: ${preset}`, ...init(target, preset)];
 	const pending = pendingSetup(target);
 	lines.push(pending.length ? `\nsetup unfinished in ${toPosix(target)}:\n${pending.map((p) => "  - " + p).join("\n")}` : `\nsetup complete in ${toPosix(target)}`);
+	const missing = missingRules(target);
+	if (missing.length) {
+		const from = toPosix(path.join(PRESETS_DIR, recorded && listPresets().includes(recorded) ? recorded : preset, "guard.config.json"));
+		lines.push(`\nnotes (do not affect the exit code):`, ...missing.map((id) => `  - guard rule ${id} is in every preset but not in .stack-agent/guard.config.json; copy the rule from ${from} into it, or add "${id}" to "declinedRules" in your .stack-agent/guard.config.json to leave it out on purpose`));
+	}
 	return { code: args.check && pending.length ? 1 : 0, text: lines.join("\n") };
 }
 

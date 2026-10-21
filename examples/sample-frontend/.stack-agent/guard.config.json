@@ -28,6 +28,16 @@
       "to": ["src/server/**"],
       "message": "browser code must not import server-only code (it leaks secrets and bloats the bundle)",
       "fix": "move what both sides need to src/shared/ and import it from there, or fetch the data from the server over HTTP"
+    },
+    {
+      "id": "no-debug-tags",
+      "type": "pattern",
+      "onEdit": "skip",
+      "files": ["**"],
+      "exclude": [".stack-agent/**", "**/*.md", "**/*.log", "dist/**", "build/**", "out/**", ".next/**", "coverage/**"],
+      "pattern": "\\[DEBUG-[0-9A-Za-z]+\\]",
+      "message": "a tagged debug line from /stack-agent:debug is still in the code",
+      "fix": "delete every line tagged [DEBUG-...] (grep for the tag); keep the regression test instead"
     }
   ]
 }

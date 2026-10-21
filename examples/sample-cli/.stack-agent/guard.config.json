@@ -28,6 +28,16 @@
       "pattern": "\\b(print|input|sys\\.exit|open)\\(",
       "message": "core.py must stay pure: no printing, prompting, exiting, or file access",
       "fix": "return a value or raise ValueError from core.py, and do the I/O in wordfreq/cli.py"
+    },
+    {
+      "id": "no-debug-tags",
+      "type": "pattern",
+      "onEdit": "skip",
+      "files": ["**"],
+      "exclude": [".stack-agent/**", "**/*.md", "**/*.log", "dist/**", "build/**", "out/**", ".next/**", "coverage/**"],
+      "pattern": "\\[DEBUG-[0-9A-Za-z]+\\]",
+      "message": "a tagged debug line from /stack-agent:debug is still in the code",
+      "fix": "delete every line tagged [DEBUG-...] (grep for the tag); keep the regression test instead"
     }
   ]
 }

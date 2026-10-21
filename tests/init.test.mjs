@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { copySample, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
+import { copyExample, copySample, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
 const initScript = path.join(repoRoot, "scripts", "init.mjs");
 const emptyDir = () => tempDir("stack-agent-init-");
@@ -121,4 +121,56 @@ test("--check reports the workflow's EDIT ME install step on a fresh init, and e
 		assert.doesNotMatch(wf, /EDIT ME/, name);
 		assert.match(wf, /verify\.mjs --against/, name);
 	}
+});
+
+test("--check notes a rule every preset ships that the guard config lacks, without changing the exit code", async () => {
+	const { universalRules } = await import("../scripts/init.mjs");
+	assert.deepEqual(universalRules(), ["no-merge-conflict-markers", "no-private-keys", "no-debug-tags"]);
+	const dir = emptyDir();
+	runNode(initScript, [dir, "--preset", "cli"]);
+	const before = runNode(initScript, [dir, "--check"]);
+	assert.doesNotMatch(before.stdout, /notes/);
+	const file = path.join(dir, ".stack-agent/guard.config.json");
+	const config = JSON.parse(fs.readFileSync(file, "utf8"));
+	fs.writeFileSync(file, JSON.stringify({ ...config, rules: config.rules.filter((r) => r.id !== "no-debug-tags") }));
+	const after = runNode(initScript, [dir, "--check"]);
+	assert.equal(after.code, before.code);
+	assert.match(after.stdout, /guard rule no-debug-tags is in every preset but not in \.stack-agent\/guard\.config\.json; copy the rule from .*templates\/presets\/cli\/guard\.config\.json into it, or add "no-debug-tags" to "declinedRules" in your \.stack-agent\/guard\.config\.json/);
+	// a plain rerun says the same, since init never rewrites the config
+	assert.match(runNode(initScript, [dir]).stdout, /guard rule no-debug-tags is in every preset/);
+	// declining it on purpose silences the note
+	fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), declinedRules: ["no-debug-tags"] }));
+	assert.doesNotMatch(runNode(initScript, [dir, "--check"]).stdout, /no-debug-tags/);
+});
+
+test("declinedRules must be a list of rule ids, and every example carries the universal rules", async () => {
+	const { loadConfig } = await import("../scripts/guard.mjs");
+	const { missingRules } = await import("../scripts/init.mjs");
+	const dir = emptyDir();
+	write(dir, "g.json", JSON.stringify({ declinedRules: "no-debug-tags", rules: [{ id: "a", type: "pattern", files: ["**"], pattern: "x", message: "m", fix: "f" }] }));
+	assert.throws(() => loadConfig(path.join(dir, "g.json")), /declinedRules/);
+	for (const ex of fs.readdirSync(path.join(repoRoot, "examples")))
+		if (fs.existsSync(path.join(repoRoot, "examples", ex, ".stack-agent/guard.config.json"))) assert.deepEqual(missingRules(path.join(repoRoot, "examples", ex)), [], ex);
+});
+
+test("a missing universal rule leaves a finished setup finished (exit 0), and malformed configs get no notes", () => {
+	const dir = copyExample("sample-generic");
+	runNode(initScript, [dir]);
+	const done = runNode(initScript, [dir, "--check"]);
+	assert.equal(done.code, 0, done.stdout);
+	const file = path.join(dir, ".stack-agent/guard.config.json");
+	const config = JSON.parse(fs.readFileSync(file, "utf8"));
+	fs.writeFileSync(file, JSON.stringify({ ...config, rules: config.rules.filter((r) => r.id !== "no-private-keys") }));
+	const noted = runNode(initScript, [dir, "--check"]);
+	assert.equal(noted.code, 0, noted.stdout);
+	assert.match(noted.stdout, /setup complete/);
+	assert.match(noted.stdout, /guard rule no-private-keys is in every preset/);
+	for (const text of ["null", "[]", "{not json", JSON.stringify({ rules: {} }), '"x"']) {
+		fs.writeFileSync(file, text);
+		const r = runNode(initScript, [dir, "--check"]);
+		assert.ok(r.code === 0 || r.code === 1, `${text}: ${r.stderr}`);
+		assert.doesNotMatch(r.stdout + r.stderr, /notes|TypeError/, text);
+	}
+	fs.rmSync(file);
+	assert.doesNotMatch(runNode(initScript, [dir, "--check"]).stdout, /notes/);
 });

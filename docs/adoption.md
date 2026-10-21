@@ -100,7 +100,7 @@ Details that cause silent misses:
 - Patterns are JavaScript regular expressions, not Python or PCRE. Python-only syntax such as `(?P<name>...)` is an error.
 - Patterns are always multiline: `^` and `$` match at every line, not only at the start and end of the file. Add `"flags": "i"` to ignore case.
 - Patterns live in JSON, so every backslash is doubled: a regex `\bSELECT\b` is written `"\\bSELECT\\b"`. A single `\b` in JSON becomes a backspace character, and the guard rejects it as a config error.
-- `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, and `ignore` are arrays of strings. A plain string is a config error.
+- `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`, and `declinedRules` are arrays of strings. A plain string is a config error.
 - These folders are always skipped: `node_modules`, `.git`, `dist`, `build`, `coverage`, `__pycache__`, `.venv`, `venv`, `.tox`, `.pytest_cache`, `.mypy_cache`, `target`, `.stack-agent/evidence`, `.stack-agent/bin`. Add more with `ignore`.
 - `to` matches the file an import resolves to. Importing `../db/index.js` needs `"to": ["src/db/**"]`. `"src/db"` matches nothing.
 - Globs support `*`, `**`, `?`, and `{js,ts}`.
@@ -189,6 +189,8 @@ Exit 0 means setup is complete. Otherwise it lists what is left.
 
 `--check` also compares every file in `.stack-agent/bin/` with the plugin's current copy. A file that differs or is missing appears as `outdated: .stack-agent/bin/<file>` and counts as unfinished setup (exit 1). This tells you that your vendored guard or verify is older than the plugin and may lack recent fixes. Refresh them by rerunning `node <path-to-Stack_Agent>/scripts/init.mjs .`, which rewrites only the tools and never touches your configs. `.stack-agent/bin/VERSION` records which plugin version the tools came from.
 
+It also notes any rule that every preset ships (`no-merge-conflict-markers`, `no-private-keys`, `no-debug-tags`) and your guard config lacks, with the preset file to copy it from. The note does not change the exit code, since leaving a rule out can be a choice: list the rule id in `"declinedRules"` in `guard.config.json` to say so, and the note stops.
+
 ## 5. Skills
 
 - `verify` works for every project.
@@ -197,7 +199,7 @@ Exit 0 means setup is complete. Otherwise it lists what is left.
 - After a long task, `/stack-agent:reflect` proposes skill edits from what went wrong. You approve them first.
 - When you correct the agent twice for the same thing, `/stack-agent:correct` turns it into a guard rule with proof that it fires.
 - `/stack-agent:sample-review` spot-checks recent commits and feeds repeat problems to `correct`.
-- `/stack-agent:debug` fixes a bug by first making it fail on demand: the repro becomes a verify check or a test, so the against step proves it fails on the code before the fix. Debug lines carry a `[DEBUG-xxxx]` tag, and the `no-debug-tags` guard rule (in every preset; Markdown, logs, and build output excluded) fails on any left behind when the guard or CI runs. The rule carries `"onEdit": "skip"`, so the after-edit hook does not stop the agent from adding them mid-task; any rule can use that option. Projects set up before this rule can copy it from `templates/presets/<preset>/guard.config.json`; `init` never rewrites an existing guard config.
+- `/stack-agent:debug` fixes a bug by first making it fail on demand: the repro becomes a verify check or a test, so the against step proves it fails on the code before the fix. Debug lines carry a `[DEBUG-xxxx]` tag, and the `no-debug-tags` guard rule (in every preset; Markdown, logs, and build output excluded) fails on any left behind when the guard or CI runs. The rule carries `"onEdit": "skip"`, so the after-edit hook does not stop the agent from adding them mid-task; any rule can use that option. Projects set up before this rule do not get it, because `init` never rewrites an existing guard config; `init.mjs --check` names it (see section 4).
 
 ### Sampling review: findings as data, checked by a second agent
 
