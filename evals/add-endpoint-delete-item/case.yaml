@@ -4,3 +4,4 @@ description: Adding an endpoint should follow the module layers, add a test and 
 tags: [skills, verification]
 context:
   scaffold_script: scaffold.sh
+allowed_tools: [Read, Glob, Grep, Edit, Write, Bash]
