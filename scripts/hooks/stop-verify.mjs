@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { matchesAny } from "../lib/files.mjs";
 import { SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
+import { readConfig, readStart, readState, recordLost, writeState } from "./session-record.mjs";
 
 export { changedFiles, parsePorcelainZ };
 export const MAX_BLOCKS = 3;
@@ -48,6 +49,16 @@ export function decide({ root, files, ignore, evidence, reminded, current = null
 	return { block: true, fingerprint, why, files: existing };
 }
 
+// E1: an agent that cannot run commands (no Node, a read-only sandbox) declares the skip as the last line of its
+// final message; the hook, which runs outside the sandbox, records it. Only the last non-empty line counts, so
+// quoting or explaining the marker earlier in the message does not trigger it.
+export const SKIP_MARKER = "stack-agent-skip:";
+export function markerReason(message) {
+	const lines = String(message ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+	const m = /^stack-agent-skip:\s*(.*)$/i.exec(lines.at(-1) ?? "");
+	return m ? m[1].trim() : null;
+}
+
 export const validSkip = (skip, current) => Boolean(current && skip && skip.fingerprint === current.value && String(skip.reason ?? "").trim().length >= MIN_SKIP_REASON);
 
 // "block" mode: keep the agent working until the evidence matches the code or it records why it cannot verify.
@@ -55,21 +66,26 @@ export const validSkip = (skip, current) => Boolean(current && skip && skip.fing
 // work does not hide it and files the human left dirty before the session are not blamed on the agent.
 // Blocks are counted per session and reset on each new user turn (stop_hook_active false); after MAX_BLOCKS in
 // a row the stop is released with a message to the human, so a stuck agent cannot loop forever.
-export function decideBlock({ root, files, ignore, evidence, current, skip, state = {}, stopHookActive = false, sessionStart = null, againstOff = false }) {
+export function decideBlock({ root, files, ignore, evidence, current, skip, state = {}, stopHookActive = false, sessionStart = null, againstOff = false, lost = false }) {
 	const relevant = relevantFiles(root, files, ignore);
 	const next = { ...state, blocks: 0 };
 	const tracked = Boolean(sessionStart?.fingerprint && current);
-	const changed = tracked ? sessionStart.fingerprint !== current.value : relevant.length > 0;
+	// a baseline this session took and that has since been removed: nothing tells what the agent changed, so assume it did
+	const changed = lost || (tracked ? sessionStart.fingerprint !== current.value : relevant.length > 0);
 	if (!changed) return { action: "allow", state: next };
-	const why = staleReason(evidence, current, newestMtime(root, relevant), sessionStart, againstOff);
+	const stale = staleReason(evidence, current, newestMtime(root, relevant), sessionStart, againstOff);
+	// a removed record is worth a human's attention whatever else is going on
+	// evidence that matches the current code still settles it
+	const why = lost && stale ? `${stale}, and the session record under .stack-agent/evidence/sessions was removed` : stale;
 	if (!why) return { action: "allow", state: next };
 	if (validSkip(skip, current)) {
-		if (state.skipAnnounced === current.value) return { action: "allow", state: next };
-		return { action: "release", state: { ...next, skipAnnounced: current.value }, message: `stack-agent: the agent stopped without verifying and recorded why in ${SKIP_FILE}: "${String(skip.reason).trim().slice(0, 300)}"` };
+		if (state.skipAnnounced === current.value) return { action: "allow", state: next, viaSkip: true };
+		const where = skip.via === "message" && !skip.written ? "said why in its final message" : `recorded why in ${SKIP_FILE}`;
+		return { action: "release", viaSkip: true, state: { ...next, skipAnnounced: current.value }, message: `stack-agent: the agent stopped without verifying and ${where}: "${String(skip.reason).trim().slice(0, 300)}"` };
 	}
 	const dirty = sessionStart?.dirty;
 	const own = dirty && current ? relevant.filter((f) => dirty[f] !== current.entries.get(f)) : relevant;
-	const shown = own.length ? own : ["changes committed since the session started"];
+	const shown = own.length ? own : [lost ? "the session record under .stack-agent/evidence/sessions was removed" : "changes committed since the session started"];
 	const blocks = (stopHookActive ? (state.blocks ?? 0) : 0) + 1;
 	if (blocks > MAX_BLOCKS) {
 		const list = shown.slice(0, 5).join(", ") + (shown.length > 5 ? ", ..." : "");
@@ -87,8 +103,10 @@ export function reminderMessage({ why, files, verifyConfigChanged, mode = "remin
 			`the new behavior and not only the old checks. If nothing a user can see changed, say so. `;
 	const ending =
 		mode === "block"
-			? `If verification truly cannot run here, record why with \`node .stack-agent/bin/verify.mjs --skip "<reason>"\` ` +
-				`and tell the user the change is unverified. (Stop ${attempt} of ${MAX_BLOCKS}: stopping stays blocked until the evidence matches the code.)\n`
+			? `If verification truly cannot run here, record why with \`node .stack-agent/bin/verify.mjs --skip "<reason>"\`, or, if you ` +
+				`cannot run commands at all, end your final message with the line \`${SKIP_MARKER} <reason>\`; if the user asked you ` +
+				`not to verify, say so in the reason, and tell the user the change is unverified. ` +
+				`(Stop ${attempt} of ${MAX_BLOCKS}: stopping stays blocked until the evidence matches the code.)\n`
 			: `This reminder fires once per change set.\n`;
 	return (
 		`stack-agent: code changed but ${why} (${list}). Before you finish, ${addCheck ? addCheck + "Then run" : "run"} ` +
@@ -105,30 +123,29 @@ const readJsonOr = (file, fallback) => {
 	}
 };
 
-export const sessionFile = (evidenceDir, sessionId) => path.join(evidenceDir, "sessions", `${String(sessionId ?? "default").replace(/[^\w-]/g, "_")}.json`);
-
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const input = readHookInput();
 	const root = findUp(input.cwd ?? process.cwd(), VERIFY);
 	const files = root ? changedFiles(root) : null;
 	if (files) {
-		const config = readJsonOr(path.join(root, VERIFY), {});
-		const evidenceDir = path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence");
-		const stateFile = sessionFile(evidenceDir, input.session_id);
-		const state = readJsonOr(stateFile, {});
-		// settings come from the session-start snapshot when there is one, so editing verify.json mid-session
-		// (stopHook "remind", stopHookIgnore ["**"]) cannot switch the hook off for the work in progress
-		const settings = state.fingerprint ? state : config;
+		const config = readConfig(root);
+		// E0: with a session record, the settings that decide what the hook checks (mode, ignore list, evidence
+		// location, against) are the ones the session started with; editing verify.json mid-session changes nothing
+		const start = readStart(root, input.session_id);
+		const state = readState(root, input.session_id);
+		const settings = start ?? config;
 		const mode = settings.stopHook === "remind" ? "remind" : "block";
 		const ignore = ignoreList(settings.stopHookIgnore);
-		const againstOff = config.against === false;
+		const evidenceRel = typeof settings.evidenceDir === "string" && settings.evidenceDir ? settings.evidenceDir : ".stack-agent/evidence";
+		const evidenceDir = path.resolve(root, evidenceRel);
+		const againstOff = start ? start.againstOff === true : config.against === false;
 		const latest = path.join(evidenceDir, "latest.json");
 		let evidence = null;
 		if (fs.existsSync(latest)) {
 			const record = readJsonOr(latest, null);
 			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, mtimeMs: fs.statSync(latest).mtimeMs };
 		}
-		const current = codeFingerprint(root, { ignore, evidenceDir: config.evidenceDir ?? ".stack-agent/evidence" });
+		const current = codeFingerprint(root, { ignore, evidenceDir: evidenceRel });
 		const verifyConfigChanged = files.includes(VERIFY);
 		if (mode === "remind") {
 			if (!input.stop_hook_active) {
@@ -136,19 +153,36 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 				const reminded = fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8").trim() : null;
 				const verdict = decide({ root, files, ignore, evidence, reminded, current, againstOff });
 				if (verdict.block) {
-					fs.mkdirSync(evidenceDir, { recursive: true });
-					fs.writeFileSync(markerPath, verdict.fingerprint);
+					try {
+						fs.mkdirSync(evidenceDir, { recursive: true });
+						fs.writeFileSync(markerPath, verdict.fingerprint);
+					} catch {}
 					process.stderr.write(reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged }));
 					process.exitCode = 2;
 				}
 			}
 		} else {
-			const skip = readJsonOr(path.join(root, SKIP_FILE), null);
-			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: state.fingerprint ? state : null, againstOff });
-			fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-			fs.writeFileSync(stateFile, JSON.stringify(verdict.state));
+			let skip = readJsonOr(path.join(root, SKIP_FILE), null);
+			const reason = markerReason(input.last_assistant_message);
+			let shortMarker = false;
+			if (reason !== null && current) {
+				if (reason.length >= MIN_SKIP_REASON) {
+					skip = { at: new Date().toISOString(), reason, fingerprint: current.value, via: "message", written: false };
+				} else shortMarker = true;
+			}
+			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: start, againstOff, lost: !start && recordLost(root, input.session_id) });
+			// the hook runs outside any sandbox, so it can keep the agent's declared skip where reviewers see it
+			if (skip?.via === "message" && verdict.viaSkip) {
+				try {
+					const { written, ...record } = skip;
+					fs.writeFileSync(path.join(root, SKIP_FILE), JSON.stringify(record, null, 2) + "\n");
+					if (verdict.message) verdict.message = verdict.message.replace("said why in its final message", `recorded why in ${SKIP_FILE}`);
+				} catch {}
+			}
+			writeState(root, input.session_id, verdict.state);
 			if (verdict.action === "block") {
-				process.stderr.write(reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged, mode, attempt: verdict.attempt }));
+				const note = shortMarker ? `Your ${SKIP_MARKER} line needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run. ` : "";
+				process.stderr.write(note + reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged, mode, attempt: verdict.attempt }));
 				process.exitCode = 2;
 			} else if (verdict.action === "release") process.stdout.write(JSON.stringify({ systemMessage: verdict.message }));
 		}

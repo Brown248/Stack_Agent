@@ -32,4 +32,4 @@ description: Prove a change works by running the test suite and the project's re
 - The evidence file path (`.stack-agent/evidence/verify-*.json`).
 - Any check you could not run and exactly why (for example, it needs a third-party API key).
 
-If verification cannot run at all in this environment, record why with `node .stack-agent/bin/verify.mjs --skip "<reason>"` and say plainly that the change is unverified instead of claiming success. Never write `latest.json` or `verify-skip.json` by hand.
+If verification cannot run at all in this environment, record why with `node .stack-agent/bin/verify.mjs --skip "<reason>"` and say plainly that the change is unverified instead of claiming success. If you cannot run commands at all (no Node, a read-only sandbox), end your final message with the line `stack-agent-skip: <reason>` instead; the Stop hook records it. If the user told you not to verify, say that in the reason. Never write `latest.json` or `verify-skip.json` by hand.

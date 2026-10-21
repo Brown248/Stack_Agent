@@ -6,7 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
-import { SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff, gitTop, ignoreList } from "./lib/fingerprint.mjs";
+import { SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff, gitTop, ignoreList } from "./lib/fingerprint.mjs";
 
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
                       [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
@@ -377,14 +377,22 @@ function resolveAgainstRef(root, config, explicit) {
 		return explicit;
 	}
 	if (!isCommit("HEAD")) return null;
-	const dir = path.join(path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence"), "sessions");
+	// the hooks keep session records at a fixed path, never under the configurable evidenceDir
+	const dir = path.join(root, SESSIONS_DIR);
 	// among sessions active in the last day whose start is behind HEAD, the earliest start: with two sessions in one
 	// repo that compares with more history, never less, so neither session's checks are hidden by the other's commits
 	let earliest = null;
 	for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
 		try {
 			const file = path.join(dir, f);
-			if (Date.now() - fs.statSync(file).mtimeMs > 24 * 3600_000) continue;
+			if (!f.endsWith(".json")) continue;
+			// a start file is written once; the paired state file is rewritten on every stop, so take the newer of the two
+			const pair = f.endsWith(".start.json") ? f.replace(/\.start\.json$/, ".json") : f.replace(/\.json$/, ".start.json");
+			let active = fs.statSync(file).mtimeMs;
+			try {
+				active = Math.max(active, fs.statSync(path.join(dir, pair)).mtimeMs);
+			} catch {}
+			if (Date.now() - active > 24 * 3600_000) continue;
 			const { head, at } = JSON.parse(fs.readFileSync(file, "utf8"));
 			// a long-resumed session keeps a days-old start; comparing with it would count everyone's checks since then as new
 			if (!(Date.now() - Date.parse(at) <= 3 * 24 * 3600_000)) continue;

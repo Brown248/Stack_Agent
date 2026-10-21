@@ -10,6 +10,8 @@ import { matchesAny, toPosix } from "./files.mjs";
 export const VERIFY_CONFIG = ".stack-agent/verify.json";
 export const SKIP_FILE = ".stack-agent/verify-skip.json";
 export const STOP_IGNORE = ["**/*.md", ".stack-agent/**", "docs/**"];
+// the hooks' own records; a fixed path, whatever evidenceDir says
+export const SESSIONS_DIR = ".stack-agent/evidence/sessions";
 
 // one rule for every reader of stopHookIgnore, so verify, SessionStart, and Stop always agree on the list
 export const ignoreList = (value) => (Array.isArray(value) && value.every((g) => typeof g === "string") ? value : STOP_IGNORE);
@@ -54,10 +56,10 @@ export function changedFiles(root) {
 		.filter((p) => !p.startsWith("../") && !path.isAbsolute(p));
 }
 
-// The verify config, the skip record, and evidence never count, whatever stopHookIgnore says, so writing
-// evidence or a skip cannot change the fingerprint it records.
+// The verify config always counts. The skip record, evidence, and the hooks' session records never count,
+// whatever stopHookIgnore says, so writing them cannot change the fingerprint they record.
 function counts(rel, ignore, evidenceRel) {
-	if (rel === SKIP_FILE || rel === evidenceRel || rel.startsWith(evidenceRel + "/")) return false;
+	if (rel === SKIP_FILE || rel === evidenceRel || rel.startsWith(evidenceRel + "/") || rel.startsWith(SESSIONS_DIR + "/")) return false;
 	return rel === VERIFY_CONFIG || !matchesAny(rel, ignore);
 }
 

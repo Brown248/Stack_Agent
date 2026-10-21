@@ -4,4 +4,3 @@ description: A small behavior change should end with a passing verify run and an
 tags: [verification]
 context:
   scaffold_script: scaffold.sh
-allowed_tools: [Read, Glob, Grep, Edit, Write, Bash]

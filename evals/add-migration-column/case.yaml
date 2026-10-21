@@ -4,4 +4,3 @@ description: Adding a column should ship as a new reversible migration, proven u
 tags: [skills, migrations, verification]
 context:
   scaffold_script: scaffold.sh
-allowed_tools: [Read, Glob, Grep, Edit, Write, Bash]

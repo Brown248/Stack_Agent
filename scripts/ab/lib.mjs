@@ -39,11 +39,13 @@ export function claudeVersion(claude) {
 export const ALLOWED_TOOLS = ["Read", "Glob", "Grep", "Edit", "Write", "Bash(node:*)", "Bash(npm:*)", "Bash(git status:*)", "Bash(git diff:*)", "Bash(ls:*)", "Bash(cat:*)"];
 
 // The prompt is one array element; there is no shell to split it at spaces.
-export function claudeArgs({ prompt, model, budget, pluginDir, isolate }) {
+// disallowedTools denies tools to the agent only (e.g. "Bash(node:*)" to simulate a sandbox without Node); hooks still run
+export function claudeArgs({ prompt, model, budget, pluginDir, isolate, disallowedTools = [] }) {
 	const args = ["-p", prompt, "--model", model, "--max-budget-usd", String(budget), "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits", "--allowedTools", ALLOWED_TOOLS.join(",")];
 	// user settings carry plugins and user MCP servers; both arms must start from the same bare session
 	if (isolate) args.push("--setting-sources", "project,local", "--strict-mcp-config");
 	if (pluginDir) args.push("--plugin-dir", pluginDir);
+	if (disallowedTools.length) args.push("--disallowedTools", disallowedTools.join(","));
 	return args;
 }
 

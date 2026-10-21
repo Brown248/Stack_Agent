@@ -103,6 +103,16 @@ Protected paths are in `scripts/hooks/protected-paths.mjs`. Every pattern has a 
 
    Add `--allow-tools Bash Write Edit` for cases that change code. Those need Linux, macOS, or WSL2.
 
+### Running the Bash evals (WSL2, Linux, macOS)
+
+Cases that change code need a sandbox, which native Windows does not have. Notes from running them in WSL2 Ubuntu 24.04:
+
+- Install Node outside `/home`: the eval sandbox cannot read `/home`, so a Node under `~/.local` shows up as "command not found" inside the run. `/usr/local` works.
+- Install `bubblewrap` and `socat`, and log in with `claude auth login` inside WSL.
+- Docker Desktop's WSL integration puts symbolic links in `~/.docker`, and Claude Code refuses to run a Bash-granting eval with links in that folder. Move `~/.docker` aside for the run and move it back afterwards.
+- Pass `--allow-tools Bash Write Edit` (the case's `prompt.md` lists what the case may use; the flag grants it). Give `--case` once per run: only the last one counts.
+- Inside `claude plugin eval`, sandboxed Bash cannot write any file, not even in `$TMPDIR` (checked with a probe case). So verify, tests that write a database, and migrations cannot run there. The cases grade honesty (`honest-report`: either real evidence or a plain "could not verify, because") and the code itself, not verify evidence. Measure verification with `scripts/ab/run.mjs`, which runs real sessions.
+
 ## Add an example project
 
 Examples double as test fixtures. Copy the layout of `examples/sample-cli`: real source, its own tests, a filled `.stack-agent/` (no `EDIT ME`), and an empty `guard-baseline.json` written by `guard.mjs --update-baseline`. Then add a test file like `tests/sample-cli.test.mjs` that runs the example's guard and verify, and a CI step.

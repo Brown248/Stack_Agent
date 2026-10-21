@@ -363,3 +363,11 @@ test("an isolated run drops plugin variables a parent Claude Code set; a non-iso
 	assert.equal(isolated.env.PATH, "x");
 	assert.equal(claudeEnv(false, parent).env.CLAUDE_CODE_PLUGIN_DIRS, parent.CLAUDE_CODE_PLUGIN_DIRS);
 });
+
+test("--disallowed-tools reaches claude as one --disallowedTools value", () => {
+	const opts = parseOptions(["--task", "validate", "--model", "m", "--budget", "1", "--disallowed-tools", "Bash(node:*), Bash(npm:*)", "--out", path.join(tempDir(), "o")]);
+	assert.deepEqual(opts.disallowedTools, ["Bash(node:*)", "Bash(npm:*)"]);
+	const argv = claudeArgs({ prompt: "p", model: "m", budget: 1, isolate: true, disallowedTools: opts.disallowedTools });
+	assert.deepEqual(argv.slice(argv.indexOf("--disallowedTools"), argv.indexOf("--disallowedTools") + 2), ["--disallowedTools", "Bash(node:*),Bash(npm:*)"]);
+	assert.equal(claudeArgs({ prompt: "p", model: "m", budget: 1, isolate: true }).includes("--disallowedTools"), false);
+});

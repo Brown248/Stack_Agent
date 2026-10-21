@@ -164,7 +164,7 @@ test("session records older than a week are removed at session start", async () 
 	fs.utimesSync(old, past, past);
 	sessionStart(dir);
 	assert.equal(fs.existsSync(old), false);
-	assert.equal(fs.existsSync(path.join(dir, ".stack-agent/evidence/sessions/r3.json")), true);
+	assert.equal(fs.existsSync(path.join(dir, ".stack-agent/evidence/sessions/r3.start.json")), true);
 });
 
 test("with two sessions, the against step compares with the earlier start", async () => {
@@ -215,7 +215,7 @@ test("deleting the sessions folder or the evidence folder from the shell asks a 
 test("a session that started more than three days ago is not used as the against reference", async () => {
 	const dir = await repo();
 	sessionStart(dir);
-	const file = path.join(dir, ".stack-agent/evidence/sessions/r3.json");
+	const file = path.join(dir, ".stack-agent/evidence/sessions/r3.start.json");
 	const rec = JSON.parse(fs.readFileSync(file, "utf8"));
 	fs.writeFileSync(file, JSON.stringify({ ...rec, at: new Date(Date.now() - 4 * 24 * 3600_000).toISOString() }));
 	addRule(dir);

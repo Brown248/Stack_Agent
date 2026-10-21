@@ -19,6 +19,7 @@ const USAGE = `usage: node scripts/ab/run.mjs --task NAME [--task NAME ...] --mo
   --out DIR       output directory (default: a new folder under the system temp dir)
   --no-isolate    do not pass --setting-sources project,local --strict-mcp-config (default is isolated; --isolate is accepted)
   --dry-run       scaffold and grade an untouched copy of each project; never calls claude
+  --disallowed-tools LIST  comma list passed to claude --disallowedTools, e.g. "Bash(node:*)" for an agent that cannot run Node
   --json          print the results as JSON instead of the summary table
 exit codes: 0 done, 1 at least one run was invalid, 2 usage error`;
 
@@ -37,7 +38,7 @@ export async function loadTask(name) {
 }
 
 export function parseOptions(argv) {
-	const args = parseArgs(argv, { flags: ["dry-run", "json", "isolate", "no-isolate"], options: ["arms", "runs", "model", "budget", "plugin", "out"], multi: ["task"] });
+	const args = parseArgs(argv, { flags: ["dry-run", "json", "isolate", "no-isolate"], options: ["arms", "runs", "model", "budget", "plugin", "out", "disallowed-tools"], multi: ["task"] });
 	if (args._.length) throw new ConfigError(`unexpected argument ${args._[0]}`);
 	if (!args.task?.length) throw new ConfigError("--task is required");
 	if (!args.model) throw new ConfigError("--model is required");
@@ -53,7 +54,8 @@ export function parseOptions(argv) {
 	if (!fs.existsSync(path.join(plugin, ".claude-plugin", "plugin.json"))) throw new ConfigError(`--plugin ${plugin} has no .claude-plugin/plugin.json`);
 	const out = path.resolve(args.out ?? fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-ab-")));
 	if (out === plugin || out.startsWith(plugin + path.sep)) throw new ConfigError("--out must not be inside the plugin directory");
-	return { tasks: [...new Set(args.task)], arms, runs, model: args.model, budget, plugin, out, isolate: !args["no-isolate"], dryRun: Boolean(args["dry-run"]), json: Boolean(args.json) };
+	const disallowedTools = (args["disallowed-tools"] ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+	return { tasks: [...new Set(args.task)], arms, runs, model: args.model, budget, plugin, out, isolate: !args["no-isolate"], dryRun: Boolean(args["dry-run"]), json: Boolean(args.json), disallowedTools };
 }
 
 async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
@@ -63,12 +65,12 @@ async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
 	fs.mkdirSync(path.dirname(dir), { recursive: true });
 	fs.mkdirSync(path.dirname(transcript), { recursive: true });
 	scaffold(dir, opts.plugin);
-	const row = { id, task: task.name, arm, n, ...meta, prompt: task.prompt, budget: opts.budget, model: opts.model, isolate: opts.isolate, projectDir: dir, transcript: null, startedAt: new Date().toISOString() };
+	const row = { id, task: task.name, arm, n, ...meta, prompt: task.prompt, budget: opts.budget, model: opts.model, isolate: opts.isolate, disallowedTools: opts.disallowedTools, projectDir: dir, transcript: null, startedAt: new Date().toISOString() };
 	if (opts.dryRun) {
 		row.status = "dry-run";
 		row.isolation = { ok: true, skipped: "dry-run", reasons: [] };
 	} else {
-		const args = claudeArgs({ prompt: task.prompt, model: opts.model, budget: opts.budget, pluginDir, isolate: opts.isolate });
+		const args = claudeArgs({ prompt: task.prompt, model: opts.model, budget: opts.budget, pluginDir, isolate: opts.isolate, disallowedTools: opts.disallowedTools });
 		const { env, removed } = claudeEnv(opts.isolate);
 		if (removed.length) row.envRemoved = removed;
 		const r = spawnClaude(claude, args, dir, env);

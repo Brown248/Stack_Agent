@@ -2,9 +2,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { askForProtected, protectedMentioned, protectedWhat } from "./protected-paths.mjs";
+import { projectContext } from "./project-context.mjs";
 import { readHookInput } from "./read-input.mjs";
 
-const WRITERS = /^(sed|perl|ruby|tee|mv|cp|rm|del|truncate|dd|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|Clear-Content|sc|ac)$/i;
+const WRITERS = /^(sed|perl|ruby|tee|mv|cp|rm|del|erase|unlink|rmdir|rd|ri|find|shred|truncate|dd|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|Clear-Content|sc|ac)$/i;
+// the hooks' session records and their notes: a command that names them (globs included) and deletes, moves, or
+// writes asks, whatever program does it; reading them stays free. A soft barrier, like the evidence files.
+const SESSIONS_MENTION = /\.stack-agent[\\/]+evid[^\s'"]*[\\/]+sess|stack-agent-sessions/i;
+const CHANGES_FILES = /(^|[\s;&|(])(rm|del|erase|unlink|rmdir|rd|ri|shred|truncate|mv|move|ren|rename|tee|Remove-Item|Move-Item|Rename-Item|Set-Content|Out-File|Clear-Content)(\.exe)?(\s|$)|-delete\b|-exec\b|>|\b(node|python3?|deno|bun|perl|ruby)(\.exe)?\s+-[ecp]\b/i;
 
 const SHELL_TOOLS = ["Bash", "PowerShell"];
 const GIT_GLOBAL_WITH_VALUE = ["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"];
@@ -95,7 +100,11 @@ function classifyGit({ env, globals, sub, rest }) {
 	return null;
 }
 
-export function classify(command, depth = 0) {
+// extra: optional (token) => what | null for paths only known at run time (a custom evidenceDir, E4)
+export function classify(command, depth = 0, extra = () => null) {
+	const protectedAt = (t) => protectedWhat(t) ?? extra(t);
+	const text = String(command ?? "");
+	if (SESSIONS_MENTION.test(text) && CHANGES_FILES.test(text)) return askForProtected("the Stop hook's session record");
 	for (const segment of splitSegments(String(command ?? ""))) {
 		const tokens = tokenize(segment);
 		if (tokens.includes("--allow-increase"))
@@ -105,17 +114,17 @@ export function classify(command, depth = 0) {
 			if (glued) return [glued[1]];
 			return /^\d*>>?$/.test(t) && tokens[i + 1] ? [tokens[i + 1]] : [];
 		});
-		const redirectHit = redirected.find((t) => protectedWhat(t));
-		if (redirectHit) return askForProtected(protectedWhat(redirectHit));
-		const target = tokens.find((t) => protectedWhat(t));
+		const redirectHit = redirected.find((t) => protectedAt(t));
+		if (redirectHit) return askForProtected(protectedAt(redirectHit));
+		const target = tokens.find((t) => protectedAt(t));
 		const inlineScript = tokens.some((t, i) => /^(node|python3?|deno|bun)(\.exe)?$/i.test(t) && /^-(e|c|p|-eval|-print)$/.test(tokens[i + 1] ?? ""));
-		if (target && tokens.some((t) => WRITERS.test(t))) return askForProtected(protectedWhat(target));
-		const scripted = inlineScript && tokens.map(protectedMentioned).find(Boolean);
+		if (target && tokens.some((t) => WRITERS.test(t))) return askForProtected(protectedAt(target));
+		const scripted = inlineScript && (tokens.map(protectedMentioned).find(Boolean) ?? tokens.map((t) => extra.mentions?.(t)).find(Boolean));
 		if (scripted) return askForProtected(scripted);
 		const shellAt = tokens.findIndex((t) => NESTED_SHELLS.test(t));
 		if (shellAt !== -1 && depth < 3) {
 			const inner = tokens.slice(shellAt + 1).filter((t) => !/^-(c|Command|EncodedCommand|NoProfile|NonInteractive|lc|ic)$/i.test(t) && !/^\/c$/i.test(t)).join(" ");
-			const nested = classify(inner, depth + 1);
+			const nested = classify(inner, depth + 1, extra);
 			if (nested) return nested;
 		}
 		const git = parseGit(tokens);
@@ -129,8 +138,10 @@ export function classify(command, depth = 0) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const input = readHookInput();
-	const verdict = SHELL_TOOLS.includes(input.tool_name) ? classify(input.tool_input?.command) : null;
+	const ctx = projectContext(input);
+	const verdict = SHELL_TOOLS.includes(input.tool_name) ? classify(input.tool_input?.command, 0, ctx.guard) : null;
 	if (verdict) {
 		process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: verdict.decision, permissionDecisionReason: verdict.reason } }));
 	}
+	ctx.record();
 }

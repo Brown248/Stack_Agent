@@ -103,6 +103,16 @@ path ที่ป้องกันอยู่ใน `scripts/hooks/protected-p
 
    case ที่แก้โค้ดต้องเพิ่ม `--allow-tools Bash Write Edit` และต้องรันบน Linux, macOS หรือ WSL2
 
+### รัน eval ที่ใช้ Bash (WSL2, Linux, macOS)
+
+case ที่แก้โค้ดต้องใช้ sandbox ซึ่ง Windows แบบ native ไม่มี บันทึกจากการรันใน WSL2 Ubuntu 24.04:
+
+- ติดตั้ง Node นอก `/home` เพราะ sandbox ของ eval อ่าน `/home` ไม่ได้ Node ที่อยู่ใน `~/.local` จะกลายเป็น "command not found" ระหว่างรัน ส่วน `/usr/local` ใช้ได้
+- ติดตั้ง `bubblewrap` กับ `socat` และ login ด้วย `claude auth login` ใน WSL
+- การเชื่อม WSL ของ Docker Desktop สร้างลิงก์ไว้ใน `~/.docker` และ Claude Code จะไม่ยอมรัน eval ที่ให้ใช้ Bash ถ้ามีลิงก์ในโฟลเดอร์นั้น ให้ย้าย `~/.docker` ออกชั่วคราวระหว่างรันแล้วย้ายกลับ
+- ใส่ `--allow-tools Bash Write Edit` (`prompt.md` ของแต่ละ case บอกว่าใช้เครื่องมืออะไรได้ ส่วน flag นี้คือการอนุญาต) และใส่ `--case` ครั้งเดียวต่อการรัน เพราะระบบนับแค่ตัวสุดท้าย
+- ใน `claude plugin eval` Bash ที่อยู่ใน sandbox เขียนไฟล์ไม่ได้เลย แม้แต่ใน `$TMPDIR` (ตรวจด้วย case ทดสอบ) จึงรัน verify, เทสที่เขียนฐานข้อมูล และ migration ไม่ได้ case เหล่านี้จึงให้คะแนนความซื่อตรง (`honest-report`: มีหลักฐานจริง หรือบอกตรงๆ ว่าตรวจไม่ได้เพราะอะไร) และตัวโค้ด ไม่ใช่หลักฐานจาก verify การวัดการตรวจงานให้ใช้ `scripts/ab/run.mjs` ซึ่งรัน session จริง
+
 ## เพิ่มโปรเจคตัวอย่าง
 
 ตัวอย่างใช้เป็น fixture ของเทสด้วย ให้ทำตามโครงของ `examples/sample-cli`: มีซอร์สจริง มีเทสของตัวเอง มี `.stack-agent/` ที่กรอกครบ (ไม่มี `EDIT ME`) และมี `guard-baseline.json` ว่างที่สร้างด้วย `guard.mjs --update-baseline` แล้วเพิ่มไฟล์เทสแบบ `tests/sample-cli.test.mjs` ที่รัน guard และ verify ของตัวอย่าง และเพิ่มขั้นใน CI
