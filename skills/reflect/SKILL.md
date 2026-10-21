@@ -19,6 +19,8 @@ Go through this conversation and list each moment where:
 
 Skip one-offs that will not happen again.
 
+Every candidate must point to a concrete observation: a message the user wrote, a command and its failing output, or a step in this conversation you can quote. "This might help" is not a candidate. A change backed only by an expected improvement is rejected, even if it sounds reasonable.
+
 ## 2. Route each lesson to the right home
 
 For each candidate, decide the highest level that would have prevented it:
@@ -31,7 +33,7 @@ For each candidate, decide the highest level that would have prevented it:
 
 ## 3. Propose, then wait
 
-Show a table: lesson, evidence (what happened in this chat), target file, exact proposed edit. Then stop and wait for the user to approve. Skill changes affect every future session, so never apply them unasked.
+Show a table: lesson, evidence (the quoted observation from this chat), target file, exact proposed edit. One row per observation-to-edit pair; an edit with no observation in its row does not go in the table. Then stop and wait for the user to approve. Skill changes affect every future session, so never apply them unasked.
 
 ## 4. Apply what was approved
 

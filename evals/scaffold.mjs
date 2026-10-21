@@ -9,20 +9,24 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-export function scaffold(target, root = defaultRoot) {
+// example: a folder under examples/ (sample-backend unless a task names another)
+// port: written into verify.json before the commit, so parallel or leftover servers never share a port
+export function scaffold(target, root = defaultRoot, example = "sample-backend", { port } = {}) {
 	if (path.resolve(target).startsWith(root)) throw new Error(`refusing to scaffold inside the Stack Agent repo: ${target}`);
 
-	const sample = path.join(root, "examples", "sample-backend");
+	const sample = path.join(root, "examples", example);
 	fs.cpSync(sample, target, {
 		recursive: true,
 		// data/ holds local SQLite files; the eval starts from an empty, unmigrated database.
-		filter: (src) => !/[\\/]\.stack-agent[\\/](evidence|bin)([\\/]|$)/.test(src) && !/^data([\\/]|$)/.test(path.relative(sample, src)),
+		filter: (src) => !/[\\/]\.stack-agent[\\/](evidence|bin)([\\/]|$)/.test(src) && !/[\\/]__pycache__([\\/]|$)/.test(src) && !/^data([\\/]|$)/.test(path.relative(sample, src)),
 	});
 	execFileSync(process.execPath, [path.join(root, "scripts", "init.mjs"), target], { stdio: "ignore" });
+	const verifyFile = path.join(target, ".stack-agent", "verify.json");
+	if (port && fs.existsSync(verifyFile)) fs.writeFileSync(verifyFile, fs.readFileSync(verifyFile, "utf8").replaceAll("3999", String(port)));
 	const git = (...args) => execFileSync("git", ["-c", "user.name=eval", "-c", "user.email=eval@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: target, stdio: "ignore" });
 	git("init", "-q");
 	git("add", "-A");
-	git("commit", "-qm", "sample backend");
+	git("commit", "-qm", example);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) scaffold(process.cwd());

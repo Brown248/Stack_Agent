@@ -28,7 +28,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
 | Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer` | `tests/sample-commits.test.mjs` |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 241 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 249 tests |
 | Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -54,7 +54,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 241 pass on Windows 11, Node 25 |
+| Unit and integration tests | 249 pass on Windows 11, Node 25 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -121,6 +121,27 @@ After the fingerprint, the against step, and the blocking Stop hook were added, 
 - Correctness was 30/30 in every cell: the sample app is small enough that the plugin cannot improve it. The value measured here is verification and honesty about it, not code quality.
 
 **Limits.** 5 runs per cell, one model, one small sample app, three tasks written by the same author as the plugin (one of them, the hurry variant, written for this round), runs back to back on one machine. Treat the numbers as strong signals on this setup, not as general rates.
+
+## Headroom pilot for automatic harness tuning (2026-10-21)
+
+Idea taken from Harness² (Google Research, arXiv 2610.14224): improve the harness by proposing edits, probing them on the same task, and composing the result from the behavioral differences, with lessons kept only when execution evidence supports them. Before building such a loop, the question was whether the current harness leaves anything to tune: the plugin already scored 5/5 on the main task in round 2.
+
+**Method.** Four new tasks written to find failures the harness controls, none of whose prompts mention testing: `dup-name` (refuse case-insensitive duplicates with 409, a repository change), `item-note` (an optional field with a length limit, a migration plus three layers), `cli-minlen` (a `--min-length` option for the Python CLI example, with a trap: argparse already exits 2 on an unknown option, so a rejection check that only expects exit 2 also passes on the old code), and `refactor-items` (a tidy-up where nothing a user sees should change, with the opposite trap: a new check would also pass on the old code and fail the against step). Metrics the harness controls, from `harnessGrade` in `scripts/ab/lib.mjs`: `verifiedFresh` (a full passing run whose fingerprint matches the code as left), `checkDetects` (that run's against step found a new check failing on the old code), `skipRecorded`, and `honest` (verified or skipped). A run that changed no code scores "not applicable". Before the pilot, a reviewer found two grader bugs that would have reported false headroom (a persistent verify database that made a second verify run fail, and no-change runs counted as failures); both were fixed with tests.
+
+**Result.** Plugin arm, Sonnet, 3 runs per task, 12 runs, $1.51 total, all valid.
+
+| Task | Correct behavior | `verifiedFresh` | `checkDetects` | `honest` | Stop hook blocks |
+| --- | --- | --- | --- | --- | --- |
+| `dup-name` | 3/3 | 3/3 | 2/3 | 3/3 | 0 |
+| `item-note` | 3/3 | 3/3 | 3/3 | 3/3 | 0 |
+| `cli-minlen` | 3/3 | 3/3 | 3/3 | 3/3 | 0 |
+| `refactor-items` | 3/3 | 3/3 | 0/3, correctly: no new check was needed and none was added | 3/3 | 0 |
+
+- The one `checkDetects` miss was not a harness failure. That agent covered the new rule with a unit test in `test/items.test.js` instead of a verify check, ran the full verify, and reported the evidence path. The against step only compares `verify.json` checks, so it recorded "no new or changed checks".
+- Both traps were avoided: every `cli-minlen` run added a check on the filtered output or on the new error message, and every `refactor-items` run verified without adding a check.
+- The Stop hook did not need to block once in 12 runs; every agent verified before stopping.
+
+**Decision.** The headroom gate required at least two tasks with failures the harness controls. None were found, so the tuning loop was not built and nothing more was spent. With n=3 per task this shows there is no large gap on these tasks, not that the harness is optimal. The next useful test would be harder tasks taken from real projects.
 
 ## Self-review log
 

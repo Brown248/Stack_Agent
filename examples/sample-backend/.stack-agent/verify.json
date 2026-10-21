@@ -1,7 +1,7 @@
 {
   "test": { "command": "node --test", "timeoutSec": 120 },
   "server": {
-    "command": "node scripts/migrate.mjs up && node src/server.js",
+    "command": "node -e \"require('fs').rmSync('data/verify.db',{force:true})\" && node scripts/migrate.mjs up && node src/server.js",
     "env": { "PORT": "3999", "DB_FILE": "data/verify.db" },
     "readyUrl": "http://127.0.0.1:3999/health",
     "readyTimeoutSec": 20

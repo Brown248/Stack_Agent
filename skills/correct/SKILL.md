@@ -10,7 +10,7 @@ The goal is that the next agent cannot make the mistake, not that it is told not
 
 ## 1. Find the mistake classes
 
-Read, in this order: what the user just corrected in this conversation, recent review comments, reverts and "fix" commits (`git log --oneline -50`), and workaround comments in the code. Group them into classes. A class counts once it happened at least twice, or once if the user says so.
+Read, in this order: what the user just corrected in this conversation, recent review comments, reverts and "fix" commits (`git log --oneline -50`), and workaround comments in the code. Group them into classes. A class counts once it happened at least twice, or once if the user says so. Each class needs concrete observations you can cite: the commit, file and line, review comment, or failing output. A class you expect might happen, with nothing you can point to, is not a class.
 
 ## 2. Fix each class at the highest level that works
 
@@ -32,4 +32,4 @@ Raising the baseline (`--allow-increase`) and editing `guard.config.json` or `gu
 
 ## Report
 
-Each class with its evidence, the level you chose and why a higher level did not work, and the proof that the check fires.
+Each class with its cited observations, the level you chose and why a higher level did not work, and the proof that the check fires.

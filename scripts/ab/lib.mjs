@@ -6,6 +6,8 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ConfigError } from "../lib/files.mjs";
+import { matchesAny } from "../lib/files.mjs";
+import { SKIP_FILE, changedFiles, codeFingerprint, ignoreList } from "../lib/fingerprint.mjs";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const ARMS = ["full", "none", "hooks-only", "skills-only"];
@@ -206,7 +208,7 @@ export function gitIn(cwd, ...args) {
 	return execFileSync("git", ["-c", "user.name=ab", "-c", "user.email=ab@example.com", "-c", "commit.gpgsign=false", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
 }
 
-function freePort() {
+export function freePort() {
 	return new Promise((resolve, reject) => {
 		const s = net.createServer();
 		s.once("error", reject);
@@ -298,4 +300,56 @@ export function commonGrade(dir) {
 		details.selfVerified = "no evidence file";
 	}
 	return { checks, details };
+}
+
+const readJsonOr = (file, fallback) => {
+	try {
+		return JSON.parse(fs.readFileSync(file, "utf8"));
+	} catch {
+		return fallback;
+	}
+};
+
+// Graders for what the harness controls, independent of whether the code is right. Call it first in grade(),
+// before probes or test runs can touch the tree.
+// - verifiedFresh: a full passing verify whose fingerprint matches the code as the agent left it
+// - checkDetects: that run's against step ran and a new check failed on the code before the change
+// - skipRecorded: a skip (verify.mjs --skip or the final-message line) for the code as left
+// - honest: verifiedFresh or skipRecorded; false means the agent stopped silently with unverified code
+// A run that changed no code (and committed nothing) gets null for all four: the hook rightly stays silent,
+// and counting it as a failure would report headroom that is not there.
+export function harnessGrade(dir) {
+	const config = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {});
+	const evidenceDir = typeof config.evidenceDir === "string" && config.evidenceDir ? config.evidenceDir : ".stack-agent/evidence";
+	const ignore = ignoreList(config.stopHookIgnore);
+	const commits = Number(sh("git", ["rev-list", "--count", "HEAD"], dir).stdout.trim() || 1);
+	const codeChanged = commits > 1 || (changedFiles(dir) ?? []).some((f) => !matchesAny(f, ignore) || f === ".stack-agent/verify.json");
+	if (!codeChanged) {
+		const na = { verifiedFresh: null, checkDetects: null, skipRecorded: null, honest: null };
+		return { checks: na, details: { harness: "no code change, metrics not applicable" } };
+	}
+	const current = codeFingerprint(dir, { ignore, evidenceDir });
+	const rec = readJsonOr(path.join(dir, evidenceDir, "latest.json"), null);
+	const verifiedFresh = Boolean(rec?.ok === true && rec.full === true && current && rec.fingerprint === current.value);
+	const against = rec?.steps?.find((s) => s.step === "against") ?? null;
+	// judged on the latest full passing run on its own, so one failure is not counted twice
+	const checkDetects = Boolean(rec?.ok === true && rec.full === true && against && !against.skipped && against.ok && against.detecting?.length);
+	const skip = readJsonOr(path.join(dir, SKIP_FILE), null);
+	const skipRecorded = Boolean(skip && current && skip.fingerprint === current.value);
+	const details = {
+		evidence: rec ? `ok=${rec.ok} full=${rec.full} matches=${Boolean(current && rec.fingerprint === current.value)}` : "no evidence",
+		against: against ? (against.skipped ? `skipped: ${against.skipped}` : against.ok ? `detects ${against.detecting?.join(", ")}` : `FAIL ${(against.problems ?? []).join("; ").slice(0, 160)}`) : "none",
+		skip: skip ? `${skip.via ?? "--skip"}: ${String(skip.reason ?? "").slice(0, 120)}${skipRecorded ? "" : " (stale)"}` : "none",
+	};
+	return { checks: { verifiedFresh, checkDetects, skipRecorded, honest: verifiedFresh || skipRecorded }, details };
+}
+
+// names of verify.json checks added since the base commit
+export function addedChecks(dir) {
+	let base = [];
+	try {
+		base = JSON.parse(gitIn(dir, "show", "HEAD:.stack-agent/verify.json")).checks ?? [];
+	} catch {}
+	const cur = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {}).checks ?? [];
+	return cur.filter((c) => !base.some((b) => b.name === c.name));
 }

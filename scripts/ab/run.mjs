@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { scaffold } from "../../evals/scaffold.mjs";
 import { ConfigError, parseArgs } from "../lib/files.mjs";
-import { ARMS, checkIsolation, claudeArgs, claudeEnv, claudeVersion, harnessVersion, hookFeedbackSummary, makeArmPlugin, parseTranscript, pluginGitInfo, repoRoot, resolveClaude, skillCalls, spawnClaude, usageOf } from "./lib.mjs";
+import { ARMS, checkIsolation, claudeArgs, claudeEnv, claudeVersion, freePort, harnessVersion, hookFeedbackSummary, makeArmPlugin, parseTranscript, pluginGitInfo, repoRoot, resolveClaude, skillCalls, spawnClaude, usageOf } from "./lib.mjs";
 
 const USAGE = `usage: node scripts/ab/run.mjs --task NAME [--task NAME ...] --model MODEL --budget USD [options]
   --task NAME     task module in scripts/ab/tasks/ (endpoint, validate, ...); repeatable; required
@@ -64,8 +64,8 @@ async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
 	const transcript = path.join(opts.out, "runs", `${id}.jsonl`);
 	fs.mkdirSync(path.dirname(dir), { recursive: true });
 	fs.mkdirSync(path.dirname(transcript), { recursive: true });
-	scaffold(dir, opts.plugin);
-	const row = { id, task: task.name, arm, n, ...meta, prompt: task.prompt, budget: opts.budget, model: opts.model, isolate: opts.isolate, disallowedTools: opts.disallowedTools, projectDir: dir, transcript: null, startedAt: new Date().toISOString() };
+	scaffold(dir, opts.plugin, task.example, { port: await freePort() });
+	const row = { id, task: task.name, primary: task.primary ?? null, arm, n, ...meta, prompt: task.prompt, budget: opts.budget, model: opts.model, isolate: opts.isolate, disallowedTools: opts.disallowedTools, projectDir: dir, transcript: null, startedAt: new Date().toISOString() };
 	if (opts.dryRun) {
 		row.status = "dry-run";
 		row.isolation = { ok: true, skipped: "dry-run", reasons: [] };
@@ -105,8 +105,10 @@ export function summarize(rows) {
 		for (const arm of [...new Set(taskRows.map((r) => r.arm))]) {
 			const armRows = taskRows.filter((r) => r.arm === arm);
 			const valid = armRows.filter((r) => r.status !== "invalid");
+		// null means not applicable (e.g. no code change); such runs are left out of that grader's count
+		const applicable = (k) => valid.filter((r) => r.grade?.[k] !== null && r.grade?.[k] !== undefined);
 			const costs = valid.map((r) => r.usage?.cost).filter((c) => typeof c === "number");
-			lines.push([arm, `${valid.length}/${armRows.length}`, ...graders.map((k) => `${valid.filter((r) => r.grade?.[k] === true).length}/${valid.length}`), costs.length ? `$${(costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(3)}` : "-"]);
+			lines.push([arm, `${valid.length}/${armRows.length}`, ...graders.map((k) => `${applicable(k).filter((r) => r.grade?.[k] === true).length}/${applicable(k).length}`), costs.length ? `$${(costs.reduce((a, b) => a + b, 0) / costs.length).toFixed(3)}` : "-"]);
 		}
 		const widths = header.map((_, i) => Math.max(...lines.map((l) => l[i].length)));
 		out.push(`\n${taskName}`, ...lines.map((l) => "  " + l.map((c, i) => c.padEnd(widths[i])).join("  ").trimEnd()));
@@ -123,6 +125,9 @@ export async function main(argv) {
 	const opts = parseOptions(argv);
 	const tasks = [];
 	for (const t of opts.tasks) tasks.push(await loadTask(t));
+	// a task can check its environment first (e.g. python for the CLI example), so a missing tool stops the run
+	// instead of failing every arm the same way
+	for (const t of tasks) await t.preflight?.();
 	fs.mkdirSync(opts.out, { recursive: true });
 	const claude = opts.dryRun ? null : resolveClaude();
 	const git = pluginGitInfo(opts.plugin);
