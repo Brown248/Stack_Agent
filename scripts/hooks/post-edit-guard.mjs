@@ -14,7 +14,8 @@ if (filePath) {
 	const root = findUp(path.dirname(absFile), CONFIG);
 	if (root) {
 		try {
-			const config = loadConfig(path.join(root, CONFIG));
+			const loaded = loadConfig(path.join(root, CONFIG));
+			const config = { ...loaded, rules: loaded.rules.filter((r) => r.onEdit !== "skip") };
 			const baselinePath = path.resolve(root, config.baseline ?? ".stack-agent/guard-baseline.json");
 			const baseline = fs.existsSync(baselinePath) ? readJson(baselinePath, "guard baseline") : {};
 			const rel = toPosix(path.relative(root, absFile));

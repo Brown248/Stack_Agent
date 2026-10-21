@@ -15,7 +15,10 @@ Go through this conversation and list each moment where:
 - the user corrected you or repeated an instruction,
 - a step failed and you had to retry,
 - you searched for something a skill or the API map should have told you,
-- a check (guard, verify, api-map) caught something late.
+- a check (guard, verify, api-map) caught something late,
+- a tool call cost far more than its result was worth (a huge output, the same search repeated, a long loop of reads),
+- you lacked a piece of information the environment could have given (server logs, a read-only view of a service, a file you were not pointed at),
+- an instruction in a skill, `CLAUDE.md`, or `rules.md` was in front of you and changed nothing you did, or you followed it and it was wrong.
 
 Skip one-offs that will not happen again.
 
@@ -30,6 +33,8 @@ For each candidate, decide the highest level that would have prevented it:
 - The skill did not trigger when it should have → tighten that skill's `description`.
 - It is a team preference → `.stack-agent/rules.md`.
 - It is code an agent keeps rewriting → a script inside the skill's folder, called from the skill.
+- A costly tool call or missing information → a script, flag, or pointer that gives the answer cheaply (an existing script's `--json` output, a log file the agent is told where to find).
+- An instruction that changed nothing or misled → remove or correct it; a shorter steering file is easier to keep true.
 
 ## 3. Propose, then wait
 

@@ -36,8 +36,20 @@ export function protectedWhat(filePath) {
 	return PROTECTED.find((p) => p.re.test(String(filePath ?? "")))?.what ?? null;
 }
 
+// For inline scripts (node -e "..."), where a path sits inside a string. A pattern that ends at the end of a path
+// must end at the end of the path here too: ".stack-agent" or ".stack-agent/evidence" followed by a quote or a space
+// names the protected folder, but ".stack-agent/verify.json" names a file inside it that is not protected.
+// A folder pattern (one ending in a separator) also matches the folder named on its own: ".stack-agent/bin".
+// Separators are collapsed first and "./" and "x/../" resolved, so ".stack-agent\\evidence" or
+// ".stack-agent/evidence/../guard-baseline.json" name what they really name.
+const MENTION_RES = PROTECTED.map((p) => ({
+	what: p.what,
+	re: new RegExp(p.re.source.replace(/\$$/, "(?![\\w.\\\\/-])").replace(/\[\\\\\/\]$/, "(?:[\\\\/]|(?![\\w.-]))").replace("(^|[\\\\/])", "")),
+}));
 export function protectedMentioned(text) {
-	return PROTECTED.find((p) => new RegExp(p.re.source.replace(/\$$/, "").replace("(^|[\\\\/])", "")).test(String(text ?? "")))?.what ?? null;
+	let t = String(text ?? "").replace(/[\\/]+/g, "/").replace(/(^|\/)(\.\/)+/g, "$1");
+	for (let prev; prev !== t; ) [prev, t] = [t, t.replace(/(?!\.\.\/)[^/\s"'`]+\/\.\.\//, "")];
+	return MENTION_RES.find((p) => p.re.test(t))?.what ?? null;
 }
 
 export function askForProtected(what) {

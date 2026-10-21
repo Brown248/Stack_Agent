@@ -27,10 +27,12 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Turn repeated review comments into rules | skill `correct` (architecture, then types, then guard, then tests, docs last) | skill instructions |
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
 | Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer`, each commit read in its own checkout (`scripts/review-worktree.mjs`); the review log doubles as a ledger, so already-reviewed commits are skipped and files no review has covered are picked first | `tests/sample-commits.test.mjs`, `tests/review-findings.test.mjs` |
+| A bug fix starts from a repro that fails (from mattpocock/skills `diagnosing-bugs`, MIT) | skill `debug`: the repro is a verify check or test, so the against step proves it fails before the fix; `no-debug-tags` guard rule in every preset | `tests/presets.test.mjs`; one live run (below) |
+| Review against the spec as well as the rules (from mattpocock/skills `code-review`, MIT) | `source: spec` with a quoted `spec: { from, quote }`, checked against the commit message or spec file | `tests/review-findings.test.mjs` |
 | Review findings as data, verified by an agent that did not find them (from cloudflare/security-audit-skill) | candidates from `reviewer`, verdicts `confirmed` / `hardening` / `needs_validation` / `rejected` from `finding-verifier`, checked by `scripts/review-findings.mjs` (required fields per verdict, finder is not verifier, quoted excerpts must match the cited line, a finding about a commit must cite a file it changed) | `tests/review-findings.test.mjs`, including tests that the agent prompts name every field and every script flag the docs use |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 292 tests |
-| Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 295 tests |
+| Skills: small, composable, with scripts, getting better each use | 10 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
 
@@ -56,7 +58,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 292 pass on Windows 11, Node 26 |
+| Unit and integration tests | 295 pass on Windows 11, Node 26 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -162,6 +164,18 @@ One headless run of `/stack-agent:sample-review` (Sonnet, isolated as in the A/B
 - Agents' JSON came back with HTML-escaped characters (`&lt;`, `&amp;`) in some excerpts; the main session restored them before validation passed. The excerpt check is what would catch a quote that was not restored.
 
 One run is a smoke test, not a rate.
+
+## Debug skill and spec review, live check (2026-10-21)
+
+Two headless runs (Sonnet, isolated as in the A/B harness, $0.40 in total) on copies of `sample-backend`.
+
+**`/stack-agent:debug`, $0.11.** Planted bug, committed before the session started: the item service no longer trims names, so `{"name": "   "}` is stored with 201. The agent added a test that sends that body, ran it and saw 201 where 400 was expected, fixed the check, and ran the full verify. The against step listed `tests (node --test)` as detecting, `--evidence-status` reported ok, the guard passed, no `[DEBUG-` tag was left, and an independent call to `createItem({ name: "   " })` returned the error. It skipped the ranked hypotheses because the cause was plain from the code, and said so; it added no debug lines, so the `onEdit: "skip"` path was not exercised. A bug introduced within the same session was not tested.
+
+The run found a hook false positive. The agent first tried to add a verify check with `node -e` writing `.stack-agent/verify.json`; the shell hook asked for approval (refused in a headless run), because for inline scripts the pattern for the protected `.stack-agent` folder matched any path starting with `.stack-agent`. The agent then reported that the guard blocks edits to that folder, which is wrong: only the folder itself, the evidence (`latest.json`, the skip record, the session records), the guard files, the vendored tools, and the CI workflow are protected. Fixed, with tests: in an inline script a protected path must end where the pattern ends, so `.stack-agent/verify.json`, `rules.md`, and `api-map.md` can be written while `.stack-agent`, `.stack-agent/evidence`, every protected file, and `.stack-agent/bin` (with or without a trailing separator) still ask. A review of the fix found that the narrower match let Windows paths through (`.stack-agent\evidence` in a Python string, `\\` in single quotes); the check now also reads the raw command and collapses separators, `./`, and `x/../` before matching. Still conservative: `path.join('.stack-agent', 'verify.json')` asks, and so does a script that only reads a protected file.
+
+**`/stack-agent:sample-review` with a spec, $0.29.** One commit whose message asks for a 400 on names over 50 characters, while the code truncates them to 50 and stores them. The reviewer raised a `spec` candidate quoting the commit message, the verifier confirmed it (blocking, repeatable), and the validator passed the files, including `--candidates` coverage and the changed-file check. The reviewer's second candidate (no test for the limit, citing a `rules.md` line about module layout) was rejected by the verifier, the first time the `rejected` path ran live. The agents' `git -C` commands all ran; the review checkout was removed; the log row carried the ledger line.
+
+Two runs are a smoke test, not a rate.
 
 ## Self-review log
 

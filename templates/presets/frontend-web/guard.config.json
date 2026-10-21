@@ -22,6 +22,16 @@
       "fix": "remove it, rotate the key, and load it from a secret store or an untracked env file"
     },
     {
+      "id": "no-debug-tags",
+      "type": "pattern",
+      "onEdit": "skip",
+      "files": ["**"],
+      "exclude": [".stack-agent/**", "**/*.md", "**/*.log", "dist/**", "build/**", "out/**", ".next/**", "coverage/**"],
+      "pattern": "\\[DEBUG-[0-9A-Za-z]+\\]",
+      "message": "a tagged debug line from /stack-agent:debug is still in the code",
+      "fix": "delete every line tagged [DEBUG-...] (grep for the tag); keep the regression test instead"
+    },
+    {
       "id": "client-not-import-server",
       "type": "forbidden-import",
       "files": ["EDIT ME: glob of browser code, e.g. src/client/**"],

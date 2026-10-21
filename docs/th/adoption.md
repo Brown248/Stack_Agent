@@ -197,17 +197,20 @@ exit 0 แปลว่าตั้งค่าครบ ถ้าไม่ใช
 - จบงานใหญ่แล้วใช้ `/stack-agent:reflect` เพื่อให้เสนอการแก้ skill จากสิ่งที่พลาด คุณต้องอนุมัติก่อนแก้
 - เมื่อต้องแก้ agent เรื่องเดิมซ้ำสองครั้ง ใช้ `/stack-agent:correct` เปลี่ยนเป็นกฎ guard พร้อมพิสูจน์ว่ากฎจับได้จริง
 - `/stack-agent:sample-review` สุ่มตรวจ commit ล่าสุด แล้วส่งปัญหาที่เจอซ้ำไปให้ `correct`
+- `/stack-agent:debug` แก้บั๊กโดยทำให้บั๊กโผล่ได้ตามสั่งก่อน: repro กลายเป็น check ของ verify หรือเทส ขั้น against จึงพิสูจน์ได้ว่ามัน fail กับโค้ดก่อนแก้ บรรทัด debug ติด tag `[DEBUG-xxxx]` และกฎ guard `no-debug-tags` (มีในทุก preset ยกเว้นไฟล์ Markdown, log และ build output) จะ fail ถ้ามีบรรทัดค้างอยู่ตอนรัน guard หรือ CI กฎนี้ตั้ง `"onEdit": "skip"` ไว้ hook หลังแก้ไฟล์จึงไม่ขวางตอน agent ใส่บรรทัด debug ระหว่างทำงาน กฎอื่นก็ใช้ option นี้ได้ โปรเจคที่ตั้งค่าก่อนมีกฎนี้คัดลอกได้จาก `templates/presets/<preset>/guard.config.json` เพราะ `init` ไม่เขียนทับ guard config ที่มีอยู่
 
 ### สุ่มตรวจ: ผลรีวิวเป็นข้อมูล และมี agent ตัวที่สองตรวจซ้ำ
 
 `sample-review` รีวิวแต่ละ commit ที่สุ่มได้ใน checkout ของ commit นั้น (`review-worktree.mjs add <sha>`) เพราะ Read, Grep และ Glob เห็นแค่ไฟล์บนดิสก์ ถ้ารีวิวใน working tree หลัก ทุก `path:line` จะชี้ไปที่โค้ดของวันนี้ checkout นี้เป็น git worktree ชั่วคราว ปิด hook และลิงก์ `node_modules` เข้ามา แล้วลบทิ้งตอนจบ
 
-agent `reviewer` รายงานเป็น candidate ไม่ใช่คำตัดสิน ในรูป JSON array แต่ละรายการระบุ `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>` หรือ `correctness`) ตำแหน่ง และหลักฐาน ทุกตำแหน่งและหลักฐานต้องยกโค้ดที่ชี้มาด้วย agent `finding-verifier` อีกตัวได้แค่ข้อกล่าวหากับตำแหน่ง ไม่ได้หลักฐานของ reviewer พยายามหักล้างทีละข้อ แล้วตัดสินว่า:
+agent `reviewer` รายงานเป็น candidate ไม่ใช่คำตัดสิน ในรูป JSON array แต่ละรายการระบุ `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>`, `correctness` หรือ `spec`) ตำแหน่ง และหลักฐาน ทุกตำแหน่งและหลักฐานต้องยกโค้ดที่ชี้มาด้วย agent `finding-verifier` อีกตัวได้แค่ข้อกล่าวหากับตำแหน่ง ไม่ได้หลักฐานของ reviewer พยายามหักล้างทีละข้อ แล้วตัดสินว่า:
 
 - `confirmed`: พร้อม `severity` (`blocking` หรือ `non-blocking`), `kind` (`repeatable` ส่งต่อให้ `/stack-agent:correct` ส่วน `one-off` ไม่ส่ง), สิ่งที่ `observed` และ `fix`
 - `hardening`: ถ้าไม่มีอะไรกันไว้จะเป็นปัญหาจริง แต่มีอีกชั้นในโค้ดกันไว้แล้ว (validation ที่ขอบ, กฎ guard, constraint ของฐานข้อมูล) บันทึก `control` กับ `suggestion` และรายงานแยกจากปัญหา ข้อเสนอเสริมความแข็งแรงจึงไม่ไปปนกับรายการของที่พังจริง
 - `needs_validation`: เฉพาะเมื่อตัดสินได้จากข้อเท็จจริงที่โค้ดบอกไม่ได้ พร้อม `blockers` และ `how_to_check`
 - `rejected`: พร้อม `reason`
+
+finding แบบ `spec` เทียบการเปลี่ยนแปลงกับสิ่งที่ถูกสั่งให้ทำ แยกจากกฎของทีม: requirement ที่ขาด, พฤติกรรมที่ไม่มีใครสั่ง หรือ requirement ที่ทำผิด โดยยกคำสั่งมาใน `spec: { from, quote }` ซึ่ง `from` เป็น `commit-message` (sample-review ส่ง message ของแต่ละ commit ให้) หรือไฟล์ที่เก็บคำสั่ง (ถ้ารีวิวงานที่กำลังทำ skill จะบันทึกคำขอของผู้ใช้เป็น `spec.md` ในโฟลเดอร์ของรอบนั้น) และ validator ตรวจว่าข้อความที่ยกมามีอยู่จริง commit message ที่บอกแค่ชื่องาน ("fix bug") ไม่มีอะไรให้เทียบ reviewer จึงข้ามการตรวจ spec
 
 review log ยังเป็น ledger ของการสุ่มรอบถัดไปด้วย: `sample-commits.mjs` จะข้าม commit ที่ log บันทึกว่ารีวิวแล้ว (แถวที่ action ขึ้นต้นด้วย `not reviewed` ไม่นับ) และเลือก commit ที่แตะไฟล์ที่ยังไม่เคยมี commit ที่รีวิวแล้วแตะก่อน commit อื่น ถ้าใส่ `--no-ledger` จะสุ่มล้วนแบบเดิม commit ที่ finding ยังต้องรอตรวจสอบนับว่ารีวิวแล้ว เพราะรีวิวเกิดขึ้นแล้ว และคำถามที่ค้างอยู่ก็อยู่ใน log commit ที่แค่เพิ่มแถวใน log จะไม่ถูกสุ่มเลย และเมื่อเปิด ledger อยู่ `--seed` จะได้ชุดเดิมก็ต่อเมื่อ log ยังไม่เปลี่ยน ไฟล์จะนับว่ารีวิวแล้วทันทีที่มี commit ที่รีวิวแล้วแตะมัน ไฟล์ที่รีวิวไปนานแล้วและแก้ไปเยอะตั้งแต่นั้นจึงยังนับว่ารีวิวแล้ว
 

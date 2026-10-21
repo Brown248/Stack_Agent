@@ -25,7 +25,7 @@ Stack Agent ย้ายกฎออกจาก prompt ไปไว้ในส
 | Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบ branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และเตือนครั้งเดียวก่อน agent จบงานถ้ายังไม่ได้ verify |
 | Soft constraint | `.stack-agent/rules.md` | วิธีเขียนที่ทีมชอบ โหลดเข้าทุก session |
 | Feature map (backend) | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่ endpoint จากโค้ด และ fail เมื่อแผนที่ไม่ตรงกับโค้ด |
-| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `run-evals` และสำหรับ backend มี `add-endpoint`, `add-migration`, `api-map` |
+| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals` และสำหรับ backend มี `add-endpoint`, `add-migration`, `api-map` |
 | Agents | `agents/` | `judge` ให้คะแนนตาม rubric ส่วน `reviewer` ตรวจ diff ก่อนส่งให้คนและรายงานเป็น candidate แล้ว `finding-verifier` พยายามหักล้างทีละข้อ ทุกตัวห้ามแก้ไฟล์ |
 | Evals | `evals/` | case สำหรับ `claude plugin eval` ที่เทียบผลแบบมีและไม่มี plugin |
 

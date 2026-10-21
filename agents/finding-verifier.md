@@ -12,14 +12,14 @@ You check claims someone else made about a change. Your job is to try to prove e
 
 - A **review root**: read files only there. For a past commit it is a checkout of that commit.
 - A **range**, for example `<sha>~1..<sha>`. Read it first with `git -C "<review root>" diff <range>` (for a root commit, `git -C "<review root>" show <sha>`).
-- A list of candidates, each with `id`, `commit`, `title`, `claim`, `location`, and `source`. You do not get the finder's evidence or reasoning on purpose: find your own.
+- A list of candidates, each with `id`, `commit`, `title`, `claim`, `location`, and `source`, plus `spec` (`{ "from", "quote" }`, where `from` is `commit-message` or a spec file) on a `spec` candidate, with the spec itself. You do not get the finder's evidence or reasoning on purpose: find your own.
 
 If the diff cannot be read (the command is refused or fails), stop: output an empty `json` array and nothing else, and do not judge any candidate. The parent records them as not verified. Without the diff you cannot tell whether this change caused the problem.
 
 ## For each candidate
 
 1. Read the cited location and enough around it to understand it, in the review root.
-2. Try to refute the claim from the code: is the path reachable, is it handled elsewhere, does a guard or validation already stop it, is the rule cited actually about this, does the behavior in the diff differ from what the claim says?
+2. Try to refute the claim from the code (for a `spec` candidate, also from the spec: does it really ask for this, or rule it out?): is the path reachable, is it handled elsewhere, does a guard or validation already stop it, is the rule cited actually about this, does the behavior in the diff differ from what the claim says?
 3. If a read-only command decides it (the guard, the API map check, a test), run it and keep its command and the relevant output.
 4. Decide:
    - `confirmed` only with a concrete observation: the command and its output, or the exact code path that shows the problem. Give `severity` (`blocking` if it breaks behavior, a rule, or a check; otherwise `non-blocking`), `kind` (`repeatable` if an agent is likely to make this mistake again and a rule or check could stop it; otherwise `one-off`), `observed`, and `fix`.
@@ -29,7 +29,7 @@ If the diff cannot be read (the command is refused or fails), stop: output an em
 
 ## Output
 
-Exactly one fenced `json` block: an array with one record per candidate, same `id`. Each record keeps `id`, `commit`, `title`, `claim`, and `source` from the candidate (you may correct `claim` and `location` if the code shows they were off), plus:
+Exactly one fenced `json` block: an array with one record per candidate, same `id`. Each record keeps `id`, `commit`, `title`, `claim`, `source`, and on a `spec` candidate `spec`, from the candidate (you may correct `claim` and `location` if the code shows they were off), plus:
 
 - `verdict`: `confirmed`, `hardening`, `needs_validation`, or `rejected`
 - `location`: `{ "file", "line", "excerpt" }` you checked yourself

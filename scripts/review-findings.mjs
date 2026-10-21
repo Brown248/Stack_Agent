@@ -26,7 +26,9 @@ export const FINAL_VERDICTS = VERDICTS.filter((v) => v !== "candidate");
 export const SEVERITIES = ["blocking", "non-blocking"];
 export const KINDS = ["repeatable", "one-off"];
 // where a finding comes from; script-verifiable sources may be confirmed by re-running the script
-export const SOURCE_RE = /^(guard:[\w-]+|api-map|verify-evidence|rules\.md:\d+|correctness)$/;
+export const SOURCE_RE = /^(guard:[\w-]+|api-map|verify-evidence|rules\.md:\d+|correctness|spec)$/;
+// a `spec` finding quotes what was asked: { from: "commit-message" | <file relative to the root>, quote }
+export const SPEC_FROM_COMMIT = "commit-message";
 // rule ids the guard reports on its own, not from guard.config.json
 const GUARD_BUILTIN_RULES = ["invalid-allow"];
 const SCRIPT_SOURCES = /^(guard:[\w-]+|api-map|verify-evidence)$/;
@@ -76,7 +78,18 @@ export function checkRecords(records, { stage = "final" } = {}) {
 			if (ids.has(r.id)) errors.push(`${at}: duplicate id`);
 			ids.add(r.id);
 		}
-		if (r.source !== undefined && !(typeof r.source === "string" && SOURCE_RE.test(r.source))) errors.push(`${at}: source must be guard:<rule-id>, api-map, verify-evidence, rules.md:<line>, or correctness`);
+		if (r.source !== undefined && !(typeof r.source === "string" && SOURCE_RE.test(r.source))) errors.push(`${at}: source must be guard:<rule-id>, api-map, verify-evidence, rules.md:<line>, correctness, or spec`);
+		if (r.source === "spec") {
+			const s = r.spec;
+			if (!s || typeof s !== "object" || Array.isArray(s)) errors.push(`${at}: a spec finding needs spec: { from, quote }`);
+			else {
+				if (!isText(s.from) || (s.from !== SPEC_FROM_COMMIT && (path.isAbsolute(s.from) || s.from.split(/[\\/]/).includes("..")))) errors.push(`${at}: spec.from must be ${SPEC_FROM_COMMIT} or a file relative to the project root`);
+				if (!isText(s.quote) || norm(s.quote).length < 3) errors.push(`${at}: spec.quote must quote at least 3 characters of what was asked`);
+				const extraSpec = Object.keys(s).filter((k) => !["from", "quote"].includes(k));
+				if (extraSpec.length) errors.push(`${at}: spec has unknown field(s): ${extraSpec.join(", ")}`);
+				if (s.from === SPEC_FROM_COMMIT && r.commit === "worktree") errors.push(`${at}: an uncommitted change has no commit message; save the request to a file and cite that`);
+			}
+		} else if (r.spec !== undefined) errors.push(`${at}: only a spec finding has spec`);
 		if (r.location !== undefined) checkPlace(r.location, `${at}: location`, errors, { needDescription: false });
 		if (r.evidence !== undefined) {
 			if (!Array.isArray(r.evidence) || r.evidence.length === 0) errors.push(`${at}: evidence must be a non-empty array`);
@@ -86,7 +99,7 @@ export function checkRecords(records, { stage = "final" } = {}) {
 		if (!required) return;
 		for (const k of required) if (r[k] === undefined) errors.push(`${at}: ${r.verdict} needs ${k}`);
 		for (const k of ALL_OPTIONAL) if (!required.includes(k) && r[k] !== undefined) errors.push(`${at}: ${r.verdict} must not have ${k}`);
-		const unknown = Object.keys(r).filter((k) => !COMMON.includes(k) && !ALL_OPTIONAL.includes(k));
+		const unknown = Object.keys(r).filter((k) => !COMMON.includes(k) && !ALL_OPTIONAL.includes(k) && k !== "spec");
 		if (unknown.length) errors.push(`${at}: unknown field(s): ${unknown.join(", ")}`);
 		if (r.severity !== undefined && !SEVERITIES.includes(r.severity)) errors.push(`${at}: severity must be ${SEVERITIES.join(" | ")}`);
 		if (r.kind !== undefined && !KINDS.includes(r.kind)) errors.push(`${at}: kind must be ${KINDS.join(" | ")}`);
@@ -130,7 +143,8 @@ export function sourceReader(root, ref) {
 
 // every quoted excerpt must appear within EXCERPT_WINDOW lines of its cited line; sources must exist
 // readBefore(commit, rel) gives a file as it was before commit, for a file that commit deleted
-export function checkGrounding(records, read, readBefore = () => null) {
+// readMessage(commit) gives a commit's message, for a spec quoted from it
+export function checkGrounding(records, read, readBefore = () => null, readMessage = () => null) {
 	const errors = [];
 	const place = (p, where, commit) => {
 		if (!p || !isText(p.file) || !Number.isInteger(p.line) || !isText(p.excerpt)) return;
@@ -158,6 +172,11 @@ export function checkGrounding(records, read, readBefore = () => null) {
 				}
 			}
 			if (guardRules && !guardRules.has(src.slice(6)) && !GUARD_BUILTIN_RULES.includes(src.slice(6))) errors.push(`${at}: ${src} is not a rule in .stack-agent/guard.config.json`);
+		}
+		if (src === "spec" && isText(r?.spec?.quote) && isText(r?.spec?.from)) {
+			const text = r.spec.from === SPEC_FROM_COMMIT ? (isText(r.commit) && r.commit !== "worktree" ? readMessage(r.commit) : null) : read(r.spec.from);
+			if (text === null) errors.push(`${at}: the spec it quotes (${r.spec.from}) cannot be read`);
+			else if (!norm(text).includes(norm(r.spec.quote))) errors.push(`${at}: spec.quote does not appear in ${r.spec.from === SPEC_FROM_COMMIT ? `the message of commit ${r.commit}` : r.spec.from}`);
 		}
 		const ruleLine = /^rules\.md:(\d+)$/.exec(src);
 		if (ruleLine) {
@@ -209,6 +228,14 @@ export function deletedReader(root) {
 	};
 }
 
+export function messageReader(root) {
+	return (commit) => {
+		if (git(root, ["rev-parse", "--verify", "--quiet", `${commit}^{commit}`]).status !== 0) return null;
+		const r = git(root, ["log", "-1", "--format=%B", commit]);
+		return r.status === 0 ? r.stdout : null;
+	};
+}
+
 export function checkChangedFiles(records, root) {
 	const prefix = repoPrefix(root);
 	if (prefix === null) return [];
@@ -236,7 +263,7 @@ export function checkChangedFiles(records, root) {
 
 export function validateFindings(records, { stage = "final", root = process.cwd(), ref, candidates } = {}) {
 	const errors = checkRecords(records, { stage });
-	if (Array.isArray(records) && records.length <= MAX_RECORDS) errors.push(...checkGrounding(records, sourceReader(root, ref), deletedReader(root)), ...checkChangedFiles(records, root));
+	if (Array.isArray(records) && records.length <= MAX_RECORDS) errors.push(...checkGrounding(records, sourceReader(root, ref), deletedReader(root), messageReader(root)), ...checkChangedFiles(records, root));
 	if (candidates) errors.push(...checkCoverage(records, candidates));
 	return errors;
 }

@@ -197,17 +197,20 @@ Exit 0 means setup is complete. Otherwise it lists what is left.
 - After a long task, `/stack-agent:reflect` proposes skill edits from what went wrong. You approve them first.
 - When you correct the agent twice for the same thing, `/stack-agent:correct` turns it into a guard rule with proof that it fires.
 - `/stack-agent:sample-review` spot-checks recent commits and feeds repeat problems to `correct`.
+- `/stack-agent:debug` fixes a bug by first making it fail on demand: the repro becomes a verify check or a test, so the against step proves it fails on the code before the fix. Debug lines carry a `[DEBUG-xxxx]` tag, and the `no-debug-tags` guard rule (in every preset; Markdown, logs, and build output excluded) fails on any left behind when the guard or CI runs. The rule carries `"onEdit": "skip"`, so the after-edit hook does not stop the agent from adding them mid-task; any rule can use that option. Projects set up before this rule can copy it from `templates/presets/<preset>/guard.config.json`; `init` never rewrites an existing guard config.
 
 ### Sampling review: findings as data, checked by a second agent
 
 `sample-review` reviews each sampled commit in a checkout of that commit (`review-worktree.mjs add <sha>`), because Read, Grep, and Glob only see the files on disk: in the main working tree every `path:line` would point at today's code. The checkout is a temporary git worktree with hooks off and `node_modules` linked in, removed at the end.
 
-The `reviewer` agent reports candidates, not verdicts, as a JSON array. Each one names a `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>`, or `correctness`), a location, and evidence, and every location and evidence entry quotes the code it points at. A separate `finding-verifier` agent gets only the claims and locations, never the reviewer's evidence, tries to refute each one, and decides:
+The `reviewer` agent reports candidates, not verdicts, as a JSON array. Each one names a `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>`, `correctness`, or `spec`), a location, and evidence, and every location and evidence entry quotes the code it points at. A separate `finding-verifier` agent gets only the claims and locations, never the reviewer's evidence, tries to refute each one, and decides:
 
 - `confirmed`: with `severity` (`blocking` or `non-blocking`), `kind` (`repeatable` goes to `/stack-agent:correct`, `one-off` does not), what it `observed`, and a `fix`.
 - `hardening`: the problem would be real, but another layer in the code already stops it (validation at the boundary, a guard rule, a database constraint). It records the `control` and a `suggestion`, and is reported apart from problems, so defense-in-depth ideas do not crowd the list of things that are broken.
 - `needs_validation`: only when a fact the code cannot show decides it, with the `blockers` and `how_to_check`.
 - `rejected`: with a `reason`.
+
+A `spec` finding compares the change with what it was asked to do, separately from the rules: a missing requirement, behavior nobody asked for, or a requirement built wrongly. It quotes the request in `spec: { from, quote }`, where `from` is `commit-message` (sample-review passes each commit's message) or a file holding the request (for a review of the current change, the skill saves the user's request as `spec.md` in the run folder), and the validator checks that the quote is really there. A commit message that only names the change ("fix bug") gives the reviewer nothing to compare, so it skips the spec check.
 
 The review log is also the ledger for the next sample: `sample-commits.mjs` skips commits it already lists as reviewed (rows whose action starts with `not reviewed` do not count) and picks commits that touch files no reviewed commit has touched before the rest. `--no-ledger` samples at random as before. A commit whose findings still need validation counts as reviewed: the review happened, and the open question is listed in the log. A commit that only appends to the log is never sampled. With the ledger on, `--seed` repeats a pick only while the log is unchanged. A file counts as covered once any reviewed commit touched it, so a file that was reviewed long ago and has changed a lot since still counts as covered.
 

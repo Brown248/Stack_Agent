@@ -27,10 +27,12 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | เปลี่ยน comment ที่เตือนซ้ำให้เป็นกฎ | skill `correct` (ไล่จาก architecture → types → guard → test → docs) | ขั้นตอนใน skill |
 | Ratchet สำหรับ repo ที่ใช้ร่วมกัน | baseline, `--allow-increase`, `--compare-ref` | เทส ratchet และ compare-ref |
 | สุ่มตรวจแทนการรีวิวทุก PR | `scripts/sample-commits.mjs`, skill `sample-review` และ agent `reviewer` โดยอ่านแต่ละ commit ใน checkout ของมันเอง (`scripts/review-worktree.mjs`) และใช้ review log เป็น ledger ข้าม commit ที่รีวิวแล้วและเลือกไฟล์ที่ยังไม่มีใครรีวิวก่อน | `tests/sample-commits.test.mjs`, `tests/review-findings.test.mjs` |
+| แก้บั๊กโดยเริ่มจาก repro ที่ fail (จาก mattpocock/skills `diagnosing-bugs`, MIT) | skill `debug`: repro เป็น check ของ verify หรือเทส ขั้น against จึงพิสูจน์ว่ามัน fail ก่อนแก้ และมีกฎ guard `no-debug-tags` ในทุก preset | `tests/presets.test.mjs` รันจริงหนึ่งครั้ง (ด้านล่าง) |
+| รีวิวเทียบกับ spec นอกจากกฎของทีม (จาก mattpocock/skills `code-review`, MIT) | `source: spec` พร้อม `spec: { from, quote }` ที่ตรวจกับ commit message หรือไฟล์ spec | `tests/review-findings.test.mjs` |
 | ผลรีวิวเป็นข้อมูล และตรวจซ้ำโดย agent ที่ไม่ได้เป็นคนเจอ (จาก cloudflare/security-audit-skill) | candidate จาก `reviewer` คำตัดสิน `confirmed` / `hardening` / `needs_validation` / `rejected` จาก `finding-verifier` ตรวจด้วย `scripts/review-findings.mjs` (ฟิลด์ที่ต้องมีตามคำตัดสิน, คนเจอไม่ใช่คนตรวจ, โค้ดที่ยกมาต้องตรงกับบรรทัดที่อ้าง, finding ของ commit ต้องอ้างไฟล์ที่ commit นั้นแก้) | `tests/review-findings.test.mjs` รวมเทสว่า prompt ของ agent พูดถึงทุกฟิลด์ และทุก flag ของ script ที่เอกสารใช้มีอยู่จริง |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 292 เทส |
-| Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 9 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 295 เทส |
+| Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 10 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
 
@@ -56,7 +58,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 292 เทสบน Windows 11 กับ Node 26 |
+| Unit และ integration test | ผ่าน 295 เทสบน Windows 11 กับ Node 26 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -162,6 +164,18 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 - JSON จาก agent บาง excerpt มีอักขระที่ถูก escape เป็น HTML (`&lt;`, `&amp;`) main session แปลงกลับก่อนจะ validate ผ่าน และการตรวจ excerpt คือสิ่งที่จะจับได้ถ้ามีตัวไหนไม่ถูกแปลงกลับ
 
 รันครั้งเดียวเป็นแค่ smoke test ยังเอาไปคิดเป็นอัตราไม่ได้
+
+## ทดสอบ skill debug และรีวิวเทียบ spec กับ agent จริง (21 ต.ค. 2026)
+
+รันแบบ headless สองครั้ง (Sonnet แยก environment เหมือน A/B harness รวม $0.40) บนสำเนา `sample-backend`
+
+**`/stack-agent:debug` ($0.11)** บั๊กที่ฝังไว้และ commit ก่อนเริ่ม session: service ไม่ trim ชื่อแล้ว `{"name": "   "}` จึงถูกบันทึกพร้อม 201 agent เพิ่มเทสที่ส่ง body นั้น รันแล้วเห็น 201 ทั้งที่ควรได้ 400 แก้การตรวจ แล้วรัน verify เต็ม ขั้น against ระบุ `tests (node --test)` ว่า detecting, `--evidence-status` บอก ok, guard ผ่าน, ไม่มี tag `[DEBUG-` ค้าง และเมื่อเรียก `createItem({ name: "   " })` เองก็ได้ error กลับมา agent ข้ามขั้นตั้งสมมติฐานเพราะดูโค้ดก็เห็นสาเหตุชัด และบอกไว้ ไม่ได้ใส่บรรทัด debug เลย เส้นทาง `onEdit: "skip"` จึงยังไม่ได้ทดสอบ และยังไม่ได้ทดสอบกรณีบั๊กที่เกิดใน session เดียวกัน
+
+รอบนี้เจอ false positive ของ hook: agent พยายามเพิ่ม check ด้วย `node -e` ที่เขียน `.stack-agent/verify.json` ก่อน แล้ว shell hook ขออนุมัติ (ซึ่งรันแบบ headless จะถูกปฏิเสธ) เพราะกับ inline script pattern ของโฟลเดอร์ `.stack-agent` ที่ป้องกันไว้ไป match ทุก path ที่ขึ้นต้นด้วย `.stack-agent` agent จึงรายงานว่า guard ห้ามแก้โฟลเดอร์นั้น ซึ่งไม่จริง ที่ป้องกันมีแค่ตัวโฟลเดอร์, evidence (`latest.json`, skip record, session record), ไฟล์ guard, เครื่องมือที่ vendor ไว้ และ CI workflow แก้แล้วพร้อมเทส: ใน inline script path ที่ป้องกันต้องจบตรงที่ pattern จบ `.stack-agent/verify.json`, `rules.md` และ `api-map.md` จึงเขียนได้ ส่วน `.stack-agent`, `.stack-agent/evidence`, ไฟล์ที่ป้องกันทุกไฟล์ และ `.stack-agent/bin` (มีหรือไม่มีตัวคั่นท้าย) ยังต้องขออนุมัติ reviewer ที่ตรวจการแก้นี้เจอว่าการ match ที่แคบลงปล่อย path แบบ Windows ผ่าน (`.stack-agent\evidence` ใน string ของ Python, `\\` ใน single quote) ตอนนี้จึงอ่านคำสั่งดิบด้วย และรวมตัวคั่น, `./` และ `x/../` ก่อน match ยังเข้มอยู่บ้าง: `path.join('.stack-agent', 'verify.json')` ยังขออนุมัติ และ script ที่แค่อ่านไฟล์ที่ป้องกันก็ขอเช่นกัน
+
+**`/stack-agent:sample-review` พร้อม spec ($0.29)** commit เดียวที่ message สั่งให้ตอบ 400 เมื่อชื่อยาวเกิน 50 ตัวอักษร แต่โค้ดตัดชื่อเหลือ 50 แล้วบันทึก reviewer ยก candidate แบบ `spec` ที่อ้าง commit message, verifier ยืนยัน (blocking, repeatable) และ validator ผ่านทั้ง `--candidates` และการตรวจไฟล์ที่ commit แก้ candidate ตัวที่สองของ reviewer (ไม่มีเทสสำหรับขีดจำกัด โดยอ้างบรรทัด `rules.md` ที่พูดเรื่องโครงสร้างโมดูล) ถูก verifier ปฏิเสธ เป็นครั้งแรกที่เส้นทาง `rejected` ทำงานจริง คำสั่ง `git -C` ของ agent รันได้ทุกครั้ง, checkout สำหรับรีวิวถูกลบ และแถวใน log มีบรรทัด ledger
+
+รันสองครั้งเป็นแค่ smoke test ยังเอาไปคิดเป็นอัตราไม่ได้
 
 ## บันทึกการตรวจงานตัวเอง
 

@@ -39,6 +39,8 @@ export function loadConfig(configPath) {
 		if (!RULE_TYPES.includes(rule.type)) throw new ConfigError(`${where}: type must be one of ${RULE_TYPES.join(", ")}`);
 		if (!rule.message || !rule.fix) throw new ConfigError(`${where}: message and fix are required, the fix must name what to use instead`);
 		requireStringArray(rule.exclude, `${where}: exclude`, { optional: true });
+		// "skip": the after-edit hook leaves this rule out (for marks that are fine mid-task, like tagged debug lines); the guard and CI still enforce it
+		if (rule.onEdit !== undefined && rule.onEdit !== "skip") throw new ConfigError(`${where}: onEdit can only be "skip"`);
 		if (rule.type !== "module-boundary") requireStringArray(rule.files, `${where}: files`);
 		if (rule.type === "pattern") {
 			if (!rule.pattern || typeof rule.pattern !== "string") throw new ConfigError(`${where}: pattern rules need a pattern string`);

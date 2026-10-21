@@ -95,6 +95,11 @@ function classifyGit({ env, globals, sub, rest }) {
 	const onlyUnstages = sub === "restore" && (rest.includes("--staged") || rest.includes("-S")) && !rest.includes("--worktree") && !rest.includes("-W");
 	if ((sub === "checkout" || sub === "restore") && !onlyUnstages && rest.some((t) => t === "." || t === ":/" || t === "*"))
 		return { decision: "ask", reason: "this discards local changes to every file permanently. A human must approve it." };
+	// -d alone refuses to delete a branch whose commits are not merged anywhere; -D or --delete --force deletes them
+	// git accepts any unambiguous prefix of a long option: --del for --delete, --forc for --force
+	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t));
+	if (sub === "branch" && (shortFlags(rest).includes("D") || ((shortFlags(rest).includes("d") || long("--delete", 5)) && (shortFlags(rest).includes("f") || long("--force", 6)))))
+		return { decision: "ask", reason: "`git branch -D` deletes a branch even when its commits are not merged anywhere, which can lose work. A human must approve it." };
 	if (sub === "stash" && (rest[0] === "clear" || rest[0] === "drop"))
 		return { decision: "ask", reason: "this deletes stashed work permanently. A human must approve it." };
 	return null;
@@ -119,7 +124,8 @@ export function classify(command, depth = 0, extra = () => null) {
 		const target = tokens.find((t) => protectedAt(t));
 		const inlineScript = tokens.some((t, i) => /^(node|python3?|deno|bun)(\.exe)?$/i.test(t) && /^-(e|c|p|-eval|-print)$/.test(tokens[i + 1] ?? ""));
 		if (target && tokens.some((t) => WRITERS.test(t))) return askForProtected(protectedAt(target));
-		const scripted = inlineScript && (tokens.map(protectedMentioned).find(Boolean) ?? tokens.map((t) => extra.mentions?.(t)).find(Boolean));
+		// the raw segment too: tokenizing drops a backslash inside double quotes ("\e"), but Python keeps it in the path
+		const scripted = inlineScript && ([...tokens, segment].map(protectedMentioned).find(Boolean) ?? tokens.map((t) => extra.mentions?.(t)).find(Boolean));
 		if (scripted) return askForProtected(scripted);
 		const shellAt = tokens.findIndex((t) => NESTED_SHELLS.test(t));
 		if (shellAt !== -1 && depth < 3) {

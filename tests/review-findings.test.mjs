@@ -272,10 +272,11 @@ const read = (rel) => fs.readFileSync(path.join(repoRoot, rel), "utf8");
 test("the reviewer and verifier prompts name every field and value the validator expects", () => {
 	const reviewer = read("agents/reviewer.md");
 	const verifier = read("agents/finding-verifier.md");
+	for (const text of [reviewer, verifier]) assert.ok(text.includes("`spec`") && text.includes("commit-message"), "both prompts describe spec findings");
 	const skill = read("skills/sample-review/SKILL.md");
 	for (const k of [...COMMON, ...FIELDS.candidate]) assert.ok(reviewer.includes(`\`${k}\``), `agents/reviewer.md does not mention \`${k}\``);
 	assert.ok(reviewer.includes("`candidate`"));
-	for (const src of ["guard:<rule-id>", "api-map", "verify-evidence", "rules.md:<line>", "correctness"]) assert.ok(reviewer.includes(src), `reviewer.md does not mention ${src}`);
+	for (const src of ["guard:<rule-id>", "api-map", "verify-evidence", "rules.md:<line>", "correctness", "`spec`"]) assert.ok(reviewer.includes(src), `reviewer.md does not mention ${src}`);
 	const verifierFields = [...COMMON, ...new Set(FINAL_VERDICTS.flatMap((v) => FIELDS[v]))].filter((k) => !["found_by", "verified_by"].includes(k));
 	for (const k of verifierFields) assert.ok(verifier.includes(`\`${k}\``), `agents/finding-verifier.md does not mention \`${k}\``);
 	for (const v of [...VERDICTS.filter((v) => v !== "candidate"), ...SEVERITIES, ...KINDS]) assert.ok(verifier.includes(`\`${v}\``), `finding-verifier.md does not mention \`${v}\``);
@@ -446,4 +447,35 @@ test("agents run git with -C on the review root and never cd first, and stop on 
 		assert.match(text, /diff cannot be read/, `${rel} does not say what to do when the diff cannot be read`);
 		for (const m of text.matchAll(/`node ([^`]*\.stack-agent\/bin\/[^`]*)`/g)) assert.match(m[1], /--root "<review root>"/, `${rel}: \`node ${m[1]}\` should pass --root`);
 	}
+});
+
+test("spec findings quote what was asked, from the commit message or a spec file", () => {
+	const dir = tempDir("stack-agent-spec-");
+	git(dir, "init", "-q");
+	write(dir, "src/items.js", "export function create(name) {\n\treturn { name };\n}\n");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "items: add create\n\nPOST /items must return 400 when name is empty.");
+	const head = git(dir, "rev-parse", "HEAD").trim();
+	const at = { file: "src/items.js", line: 2, excerpt: "return { name };" };
+	const spec = (over = {}) =>
+		confirmed({ commit: head, source: "spec", spec: { from: "commit-message", quote: "must return 400 when name is empty" }, location: at, evidence: [{ ...at, description: "no check for an empty name" }], ...over });
+	assert.deepEqual(validateFindings([spec()], { root: dir }), []);
+	// whitespace in the quote does not matter, a quote the message does not contain does
+	assert.deepEqual(validateFindings([spec({ spec: { from: "commit-message", quote: "must  return 400\nwhen name is empty" } })], { root: dir }), []);
+	has(validateFindings([spec({ spec: { from: "commit-message", quote: "must return 404" } })], { root: dir }), /spec\.quote does not appear in the message of commit/);
+	// a spec file relative to the root
+	write(dir, ".stack-agent/evidence/review/x/spec.md", "Reject empty names with a 400.\n");
+	assert.deepEqual(validateFindings([spec({ spec: { from: ".stack-agent/evidence/review/x/spec.md", quote: "Reject empty names" } })], { root: dir }), []);
+	has(validateFindings([spec({ spec: { from: "missing.md", quote: "Reject empty names" } })], { root: dir }), /cannot be read/);
+	// shape
+	const { spec: _, ...noSpec } = spec();
+	has(checkRecords([noSpec]), /a spec finding needs spec/);
+	has(checkRecords([confirmed({ spec: { from: "commit-message", quote: "abc" } })]), /only a spec finding has spec/);
+	has(checkRecords([spec({ spec: { from: "../x.md", quote: "abc" } })]), /spec\.from must be commit-message or a file/);
+	has(checkRecords([spec({ spec: { from: "commit-message", quote: "x" } })]), /spec\.quote must quote at least 3 characters/);
+	has(checkRecords([spec({ spec: { from: "commit-message", quote: "abc", page: 1 } })]), /spec has unknown field\(s\): page/);
+	has(checkRecords([spec({ commit: "worktree" })]), /an uncommitted change has no commit message/);
+	// candidates carry spec too, and a spec finding needs an agent verifier
+	assert.deepEqual(checkRecords([candidate({ source: "spec", spec: { from: "commit-message", quote: "abc" } })], { stage: "candidates" }), []);
+	has(checkRecords([spec({ verified_by: "script:node x.mjs" })]), /only guard, api-map, and verify-evidence findings can be verified by a script/);
 });
