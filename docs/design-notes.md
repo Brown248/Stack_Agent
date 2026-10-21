@@ -31,7 +31,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Review against the spec as well as the rules (from mattpocock/skills `code-review`, MIT) | `source: spec` with a quoted `spec: { from, quote }`, checked against the commit message or spec file | `tests/review-findings.test.mjs` |
 | Review findings as data, verified by an agent that did not find them (from cloudflare/security-audit-skill) | candidates from `reviewer`, verdicts `confirmed` / `hardening` / `needs_validation` / `rejected` from `finding-verifier`, checked by `scripts/review-findings.mjs` (required fields per verdict, finder is not verifier, quoted excerpts must match the cited line, a finding about a commit must cite a file it changed) | `tests/review-findings.test.mjs`, including tests that the agent prompts name every field and every script flag the docs use |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 299 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 302 tests |
 | Skills: small, composable, with scripts, getting better each use | 10 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -58,7 +58,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 299 pass on Windows 11, Node 26 |
+| Unit and integration tests | 302 pass on Windows 11, Node 26 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -182,6 +182,27 @@ The run found a hook false positive. The agent first tried to add a verify check
 - **Spec review of an uncommitted change, $0.30.** The request came in the prompt. The skill saved it as `spec.md` in the run folder; the reviewer's `spec` finding cited that file with commit `worktree`, the verifier confirmed it, a `verify-evidence` candidate was rechecked by rerunning `--evidence-status` (`verified_by: script:...`), the files validated with `--candidates`, no log row was written, and no code changed.
 
 Five runs are a smoke test, not a rate.
+
+## Behavioral A/B: bug reports and spec review (2026-10-21)
+
+**Method.** Three bug-report tasks, each with a bug planted in a commit of its own before the session (`setup` in the task module; the commit is tagged `ab-start`, so the harness counts only the agent's changes): `bug-blank-name` (a name of only spaces is stored with 201), `bug-dup-count` (the summary counts distinct names, so duplicates count once), `bug-space-list` (the list query drops names with a space). The same neutral bug report goes to both arms; none mentions the plugin or a skill. Plus `review-spec`, a sampling review of a commit whose message asks for a 400 on names over 50 characters while the code truncates; it runs only in the plugin arm, since the bare arm has no reviewer. Sonnet, at most $1 per run, 3 runs per task and arm, 21 runs, about $2.9.
+
+| Task | Arm | Fixed (probe) | Verified, evidence matches the code | Repro caught the bug (against) | Mean cost |
+|---|---|---|---|---|---|
+| 3 bug tasks | plugin | 9/9 | 9/9 | 9/9 | about $0.10 |
+| 3 bug tasks | none | 9/9 | 0/9 | 0/9 | about $0.07 |
+
+| Task | Runs | Confirmed `spec` finding | Findings files valid | Logged | No code changed | Mean cost |
+|---|---|---|---|---|---|---|
+| review-spec | 3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.31 |
+
+**What it shows, and what it does not.**
+
+- Both arms fixed every bug: these bugs are easy enough that the plugin did not change whether the fix was right.
+- The plugin arm left proof every time: a check in `verify.json` (or a test) that the against step showed failing on the planted commit and passing now. The bare arm wrote a regression test in 5 of 9 runs but never ran a verification that ties it to the bug. The verification metrics only score what the plugin's tools produce, so the bare arm scoring 0 there is close to certain by construction; the useful part is that the plugin arm reached 9/9 without being told to.
+- **The `debug` skill was never invoked.** It was available in every plugin run (it appears in the session's skill list), but no run called it; the bug report alone did not trigger it. The proof came from the Stop hook, which blocked each run until verify evidence matched the code, and from the verify skill's instructions. So these runs measure the hooks, not the debug skill. The skill's description is the first thing to sharpen; the earlier live runs used it only because the prompt named `/stack-agent:debug`.
+- The first `review-spec` run was not a valid measurement: the harness allowed `git diff` but not `git -C <checkout> diff`, and not the temp folder holding the checkout, so the reviewer could not read the diff. The skill did what it says (it stopped and logged the commit as `not reviewed: diff could not be read`). A task can now add tools and folders for itself (`allowedTools`, `addDirs`), and the three runs above were made after that fix.
+- 3 runs per cell are enough to see an 9/9 against 0/9 split, not to measure small differences.
 
 ## Self-review log
 

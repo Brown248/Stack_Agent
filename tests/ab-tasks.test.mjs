@@ -184,3 +184,75 @@ test("rename-field: a correct rename passes the probe", async () => {
 	const g = await renameField.grade(dir);
 	assert.equal(g.checks.behavior, true, g.details.behavior);
 });
+
+// bug-report tasks: the bug is planted in a commit of its own before the session
+import * as bugBlankName from "../scripts/ab/tasks/bug-blank-name.mjs";
+import * as bugDupCount from "../scripts/ab/tasks/bug-dup-count.mjs";
+import * as bugSpaceList from "../scripts/ab/tasks/bug-space-list.mjs";
+import * as reviewSpec from "../scripts/ab/tasks/review-spec.mjs";
+import { plantBug } from "../scripts/ab/lib.mjs";
+import { git } from "./helpers.mjs";
+
+const planted = (task) => {
+	const dir = project(task.example);
+	task.setup(dir);
+	return dir;
+};
+
+test("bug tasks: the planted copy fails behavior, and with no fix the harness metrics are not applicable", async () => {
+	for (const task of [bugBlankName, bugDupCount, bugSpaceList]) {
+		const g = await task.grade(planted(task));
+		assert.equal(g.checks.behavior, false, `${task.name}: ${g.details.behavior}`);
+		for (const m of ["verifiedFresh", "checkDetects", "honest"]) assert.equal(g.checks[m], null, `${task.name} ${m}: the planted commit is the start, not a change`);
+	}
+	assert.throws(() => plantBug(project(), [["src/app.js", "no such text", "x"]], "m"), /does not contain/);
+});
+
+test("bug tasks: a fix with a repro check that fails on the planted commit scores every metric", async () => {
+	const fixes = [
+		[bugBlankName, () => ["src/modules/items/service.js", 'input.name : ""', 'input.name.trim() : ""'], { name: "blank-name-rejected", method: "POST", path: "/items", body: { name: "   " }, expectStatus: 400 }],
+		[bugDupCount, () => ["src/modules/items/repository.js", "COUNT(DISTINCT name)", "COUNT(*)"], null],
+		[bugSpaceList, () => ["src/modules/items/repository.js", " WHERE name NOT LIKE '% %'", ""], null],
+	];
+	for (const [task, fix, check] of fixes) {
+		const dir = planted(task);
+		usePort(dir, await freePort());
+		edit(dir, ...fix());
+		if (check) addCheck(dir, check);
+		else if (task === bugDupCount) {
+			addCheck(dir, { name: "seed-pen-again", method: "POST", path: "/items", body: { name: "pen" }, expectStatus: 201 });
+			addCheck(dir, { name: "summary-counts-duplicates", method: "GET", path: "/reports/summary", expectJson: { itemCount: 2 }, expectStatus: 200 });
+		} else {
+			addCheck(dir, { name: "seed-red-pen", method: "POST", path: "/items", body: { name: "red pen" }, expectStatus: 201 });
+			addCheck(dir, { name: "list-shows-red-pen", method: "GET", path: "/items", expectBodyIncludes: "red pen", expectStatus: 200 });
+		}
+		const run = verify(dir);
+		assert.equal(run.code, 0, `${task.name}: ${run.stdout}${run.stderr}`);
+		const g = await task.grade(dir);
+		for (const m of ["behavior", "verifiedFresh", "checkDetects"]) assert.equal(g.checks[m], true, `${task.name} ${m}: ${JSON.stringify(g.details)}`);
+	}
+});
+
+test("review-spec: graded from the review's files; only the plugin arm runs it", async () => {
+	assert.deepEqual(reviewSpec.arms, ["full"]);
+	const dir = planted(reviewSpec);
+	const untouched = await reviewSpec.grade(dir);
+	assert.deepEqual(untouched.checks, { specConfirmed: false, findingsValid: false, logged: false, noCodeChange: true });
+	const head = git(dir, "rev-parse", "HEAD").trim();
+	const at = { file: "src/modules/items/service.js", line: 6, excerpt: "name.slice(0, 50)" };
+	write(dir, ".stack-agent/evidence/review/r/x.findings.json", JSON.stringify([{
+		id: "a", commit: head, verdict: "confirmed", title: "truncates", claim: "names over 50 are cut, not refused", location: at, source: "spec",
+		spec: { from: "commit-message", quote: "must return 400 with an error when the name is longer than 50 characters" },
+		evidence: [{ ...at, description: "slice instead of an error" }], severity: "blocking", kind: "one-off", observed: "the branch returns an item", fix: "return an error", found_by: "reviewer", verified_by: "finding-verifier",
+	}]));
+	write(dir, ".stack-agent/review-log.md", `| 2026-10-21 | ${head.slice(0, 12)} | truncates (src/modules/items/service.js:6) | one-off (blocking): return an error |\n`);
+	const reviewed = await reviewSpec.grade(dir);
+	assert.deepEqual(reviewed.checks, { specConfirmed: true, findingsValid: true, logged: true, noCodeChange: true }, JSON.stringify(reviewed.details));
+	write(dir, "src/extra.js", "x\n");
+	assert.equal((await reviewSpec.grade(dir)).checks.noCodeChange, false);
+	// the runner skips arms a task does not list
+	const out = path.join(tempDir(), "o");
+	const r = runNode(path.join(repoRoot, "scripts/ab/run.mjs"), ["--task", "review-spec", "--arms", "full,none", "--model", "m", "--budget", "1", "--dry-run", "--json", "--out", out]);
+	assert.equal(r.code, 0, r.stderr);
+	assert.deepEqual(JSON.parse(r.stdout).runs.map((x) => x.arm), ["full"]);
+});

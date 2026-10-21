@@ -31,7 +31,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | รีวิวเทียบกับ spec นอกจากกฎของทีม (จาก mattpocock/skills `code-review`, MIT) | `source: spec` พร้อม `spec: { from, quote }` ที่ตรวจกับ commit message หรือไฟล์ spec | `tests/review-findings.test.mjs` |
 | ผลรีวิวเป็นข้อมูล และตรวจซ้ำโดย agent ที่ไม่ได้เป็นคนเจอ (จาก cloudflare/security-audit-skill) | candidate จาก `reviewer` คำตัดสิน `confirmed` / `hardening` / `needs_validation` / `rejected` จาก `finding-verifier` ตรวจด้วย `scripts/review-findings.mjs` (ฟิลด์ที่ต้องมีตามคำตัดสิน, คนเจอไม่ใช่คนตรวจ, โค้ดที่ยกมาต้องตรงกับบรรทัดที่อ้าง, finding ของ commit ต้องอ้างไฟล์ที่ commit นั้นแก้) | `tests/review-findings.test.mjs` รวมเทสว่า prompt ของ agent พูดถึงทุกฟิลด์ และทุก flag ของ script ที่เอกสารใช้มีอยู่จริง |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 299 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 302 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 10 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -58,7 +58,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 299 เทสบน Windows 11 กับ Node 26 |
+| Unit และ integration test | ผ่าน 302 เทสบน Windows 11 กับ Node 26 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -182,6 +182,27 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 - **รีวิวงานที่ยังไม่ commit เทียบ spec ($0.30)** คำขออยู่ใน prompt skill บันทึกเป็น `spec.md` ในโฟลเดอร์ของรอบนั้น finding แบบ `spec` ของ reviewer อ้างไฟล์นั้นพร้อม commit `worktree` verifier ยืนยัน candidate แบบ `verify-evidence` ถูกตรวจซ้ำด้วยการรัน `--evidence-status` (`verified_by: script:...`) ไฟล์ผ่าน validate พร้อม `--candidates` ไม่มีการเขียนแถวใน log และไม่มีการแก้โค้ด
 
 รันห้าครั้งเป็นแค่ smoke test ยังเอาไปคิดเป็นอัตราไม่ได้
+
+## ทดสอบ A/B: รายงานบั๊กและรีวิวเทียบ spec (21 ต.ค. 2026)
+
+**วิธีการ** งานรายงานบั๊ก 3 งาน แต่ละงานฝังบั๊กไว้ใน commit ของตัวเองก่อนเริ่ม session (`setup` ใน module ของงาน และติด tag `ab-start` ไว้ที่ commit นั้น harness จึงนับเฉพาะสิ่งที่ agent เปลี่ยน): `bug-blank-name` (ชื่อที่มีแต่ช่องว่างถูกบันทึกพร้อม 201), `bug-dup-count` (summary นับชื่อแบบไม่ซ้ำ ชื่อซ้ำจึงนับเป็นหนึ่ง), `bug-space-list` (query ของ list ตัดชื่อที่มีช่องว่างทิ้ง) ทั้งสองฝั่งได้รายงานบั๊กแบบเดียวกันที่ไม่พูดถึง plugin หรือ skill และมี `review-spec` คือการสุ่มรีวิว commit ที่ message สั่งให้ตอบ 400 เมื่อชื่อยาวเกิน 50 ตัวอักษร แต่โค้ดตัดชื่อแทน รันเฉพาะฝั่งที่มี plugin เพราะฝั่งที่ไม่มีไม่มี reviewer Sonnet ไม่เกิน $1 ต่อรัน งานละ 3 รันต่อฝั่ง รวม 21 รัน ประมาณ $2.9
+
+| งาน | ฝั่ง | แก้ถูก (probe) | verify ผ่านและ evidence ตรงกับโค้ด | repro จับบั๊กได้ (against) | ค่าใช้จ่ายเฉลี่ย |
+|---|---|---|---|---|---|
+| งานบั๊ก 3 งาน | plugin | 9/9 | 9/9 | 9/9 | ประมาณ $0.10 |
+| งานบั๊ก 3 งาน | ไม่มี | 9/9 | 0/9 | 0/9 | ประมาณ $0.07 |
+
+| งาน | รัน | finding `spec` ที่ยืนยันแล้ว | ไฟล์ findings ถูกต้อง | ลง log | ไม่แก้โค้ด | ค่าใช้จ่ายเฉลี่ย |
+|---|---|---|---|---|---|---|
+| review-spec | 3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.31 |
+
+**สิ่งที่ผลนี้บอกและไม่ได้บอก**
+
+- ทั้งสองฝั่งแก้บั๊กได้ทุกครั้ง บั๊กเหล่านี้ง่ายพอที่ plugin ไม่ได้ทำให้แก้ถูกมากขึ้น
+- ฝั่ง plugin ทิ้งหลักฐานไว้ทุกครั้ง: check ใน `verify.json` (หรือเทส) ที่ขั้น against แสดงว่า fail กับ commit ที่ฝังบั๊กและผ่านตอนนี้ ฝั่งที่ไม่มี plugin เขียน regression test 5 จาก 9 รัน แต่ไม่เคยรัน verification ที่ผูกเทสนั้นกับบั๊ก ตัวชี้วัด verification ให้คะแนนเฉพาะสิ่งที่เครื่องมือของ plugin สร้าง ฝั่งที่ไม่มีจึงได้ 0 แทบแน่นอนโดยโครงสร้าง ส่วนที่มีประโยชน์คือฝั่ง plugin ได้ 9/9 โดยไม่มีใครสั่ง
+- **skill `debug` ไม่ถูกเรียกเลย** มันอยู่ในรายการ skill ของทุกรันที่มี plugin แต่ไม่มีรันไหนเรียก รายงานบั๊กอย่างเดียวไม่ทำให้มันถูกเรียก หลักฐานมาจาก Stop hook ที่บล็อกแต่ละรันจนกว่า evidence ของ verify จะตรงกับโค้ด และจากคำสั่งใน skill verify ผลรอบนี้จึงวัด hook ไม่ใช่ skill debug คำอธิบายของ skill เป็นสิ่งแรกที่ควรปรับ การทดสอบจริงรอบก่อนใช้ skill นี้ได้ก็เพราะ prompt พิมพ์ `/stack-agent:debug`
+- `review-spec` รันแรกใช้วัดผลไม่ได้: harness อนุญาต `git diff` แต่ไม่อนุญาต `git -C <checkout> diff` และไม่อนุญาตโฟลเดอร์ temp ที่เก็บ checkout reviewer จึงอ่าน diff ไม่ได้ ตัว skill ทำตามที่เขียนไว้ (หยุดและบันทึก commit ว่า `not reviewed: diff could not be read`) ตอนนี้งานแต่ละงานเพิ่ม tool และโฟลเดอร์ของตัวเองได้ (`allowedTools`, `addDirs`) และ 3 รันข้างบนรันหลังแก้แล้ว
+- 3 รันต่อช่องพอเห็นความต่างแบบ 9/9 กับ 0/9 แต่ไม่พอวัดความต่างเล็กๆ
 
 ## บันทึกการตรวจงานตัวเอง
 

@@ -42,8 +42,11 @@ export const ALLOWED_TOOLS = ["Read", "Glob", "Grep", "Edit", "Write", "Bash(nod
 
 // The prompt is one array element; there is no shell to split it at spaces.
 // disallowedTools denies tools to the agent only (e.g. "Bash(node:*)" to simulate a sandbox without Node); hooks still run
-export function claudeArgs({ prompt, model, budget, pluginDir, isolate, disallowedTools = [] }) {
-	const args = ["-p", prompt, "--model", model, "--max-budget-usd", String(budget), "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits", "--allowedTools", ALLOWED_TOOLS.join(",")];
+// extraTools / addDirs: what one task needs beyond the defaults (a review runs `git -C <checkout>` and reads a checkout
+// in the system temp folder); both arms of that task get the same, so the comparison stays fair
+export function claudeArgs({ prompt, model, budget, pluginDir, isolate, disallowedTools = [], extraTools = [], addDirs = [] }) {
+	const args = ["-p", prompt, "--model", model, "--max-budget-usd", String(budget), "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits", "--allowedTools", [...ALLOWED_TOOLS, ...extraTools].join(",")];
+	for (const d of addDirs) args.push("--add-dir", d);
 	// user settings carry plugins and user MCP servers; both arms must start from the same bare session
 	if (isolate) args.push("--setting-sources", "project,local", "--strict-mcp-config");
 	if (pluginDir) args.push("--plugin-dir", pluginDir);
@@ -322,8 +325,10 @@ export function harnessGrade(dir) {
 	const config = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {});
 	const evidenceDir = typeof config.evidenceDir === "string" && config.evidenceDir ? config.evidenceDir : ".stack-agent/evidence";
 	const ignore = ignoreList(config.stopHookIgnore);
-	const commits = Number(sh("git", ["rev-list", "--count", "HEAD"], dir).stdout.trim() || 1);
-	const codeChanged = commits > 1 || (changedFiles(dir) ?? []).some((f) => !matchesAny(f, ignore) || f === ".stack-agent/verify.json");
+	// a bug-report task's planted commit (tagged ab-start) is where the session starts, not a change by the agent
+	const start = sh("git", ["rev-parse", "--verify", "--quiet", "ab-start"], dir).status === 0 ? "ab-start" : null;
+	const commits = Number(sh("git", ["rev-list", "--count", start ? "ab-start..HEAD" : "HEAD"], dir).stdout.trim() || 0);
+	const codeChanged = commits > (start ? 0 : 1) || (changedFiles(dir) ?? []).some((f) => !matchesAny(f, ignore) || f === ".stack-agent/verify.json");
 	if (!codeChanged) {
 		const na = { verifiedFresh: null, checkDetects: null, skipRecorded: null, honest: null };
 		return { checks: na, details: { harness: "no code change, metrics not applicable" } };
@@ -352,4 +357,19 @@ export function addedChecks(dir) {
 	} catch {}
 	const cur = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {}).checks ?? [];
 	return cur.filter((c) => !base.some((b) => b.name === c.name));
+}
+
+// Plant a bug for a bug-report task: apply exact text edits and commit them, so the session's start commit has the
+// bug and the against step can prove a repro the agent adds. Each edit is [file, from, to]; a missing `from` throws.
+export function plantBug(dir, edits, message) {
+	for (const [rel, from, to] of edits) {
+		const file = path.join(dir, rel);
+		const text = fs.readFileSync(file, "utf8");
+		if (!text.includes(from)) throw new Error(`plantBug: ${rel} does not contain ${JSON.stringify(from.slice(0, 60))}`);
+		fs.writeFileSync(file, text.replace(from, to));
+	}
+	const git = (...args) => execFileSync("git", ["-c", "user.name=eval", "-c", "user.email=eval@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: dir, stdio: "ignore" });
+	git("add", "-A");
+	git("commit", "-qm", message);
+	git("tag", "ab-start");
 }

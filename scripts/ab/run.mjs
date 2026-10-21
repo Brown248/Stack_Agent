@@ -65,12 +65,14 @@ async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
 	fs.mkdirSync(path.dirname(dir), { recursive: true });
 	fs.mkdirSync(path.dirname(transcript), { recursive: true });
 	scaffold(dir, opts.plugin, task.example, { port: await freePort() });
+	// a bug-report task plants its bug in a commit of its own, so the session starts from code that has it
+	await task.setup?.(dir);
 	const row = { id, task: task.name, primary: task.primary ?? null, arm, n, ...meta, prompt: task.prompt, budget: opts.budget, model: opts.model, isolate: opts.isolate, disallowedTools: opts.disallowedTools, projectDir: dir, transcript: null, startedAt: new Date().toISOString() };
 	if (opts.dryRun) {
 		row.status = "dry-run";
 		row.isolation = { ok: true, skipped: "dry-run", reasons: [] };
 	} else {
-		const args = claudeArgs({ prompt: task.prompt, model: opts.model, budget: opts.budget, pluginDir, isolate: opts.isolate, disallowedTools: opts.disallowedTools });
+		const args = claudeArgs({ prompt: task.prompt, model: opts.model, budget: opts.budget, pluginDir, isolate: opts.isolate, disallowedTools: opts.disallowedTools, extraTools: task.allowedTools ?? [], addDirs: task.addDirs?.() ?? [] });
 		const { env, removed } = claudeEnv(opts.isolate);
 		if (removed.length) row.envRemoved = removed;
 		const r = spawnClaude(claude, args, dir, env);
@@ -144,7 +146,8 @@ export async function main(argv) {
 	const rows = [];
 	for (let n = 1; n <= opts.runs; n++) {
 		for (const task of tasks) {
-			for (const arm of opts.arms) {
+			// a task that only makes sense with the plugin (a skill run by slash command) names its arms
+			for (const arm of opts.arms.filter((a) => !task.arms || task.arms.includes(a))) {
 				const row = await runOne({ opts, task, arm, n, pluginDir: armPlugins[arm], claude, meta });
 				rows.push(row);
 				fs.writeFileSync(path.join(opts.out, "results.json"), JSON.stringify({ meta: { ...meta, model: opts.model, budget: opts.budget, isolate: opts.isolate, dryRun: opts.dryRun }, runs: rows }, null, 2));

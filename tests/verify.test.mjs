@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { isSubset, joinUrl, main } from "../scripts/verify.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
-import { copySample, freePort, usePort, write } from "./helpers.mjs";
+import { copySample, freePort, processGone, usePort, write } from "./helpers.mjs";
 
 async function sampleOnFreePort() {
 	const dir = copySample();
@@ -102,9 +102,7 @@ test("a server that never becomes ready fails and is cleaned up", async () => {
 	const r = await main(["--root", dir, "--skip-tests"]);
 	assert.equal(r.code, 1);
 	assert.match(r.text, /not ready at/);
-	const pid = Number(fs.readFileSync(path.join(dir, "hang.pid"), "utf8"));
-	await new Promise((res) => setTimeout(res, 300));
-	assert.throws(() => process.kill(pid, 0), /ESRCH/, "the server process must be killed");
+	assert.ok(await processGone(path.join(dir, "hang.pid")), "the server process must be killed");
 });
 
 test("a server that crashes on start is reported with its log", async () => {
@@ -165,7 +163,5 @@ test("a test command that times out is killed with its whole process tree", asyn
 	assert.equal(r.code, 1);
 	assert.match(r.text, /timed out/);
 	assert.ok(Date.now() - started < 15000, "verify must return soon after the timeout");
-	const pid = Number(fs.readFileSync(path.join(dir, "slow.pid"), "utf8"));
-	await new Promise((res) => setTimeout(res, 300));
-	assert.throws(() => process.kill(pid, 0), /ESRCH/, "the test process must be killed");
+	assert.ok(await processGone(path.join(dir, "slow.pid")), "the test process must be killed");
 });

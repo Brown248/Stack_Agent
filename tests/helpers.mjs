@@ -76,3 +76,23 @@ export function git(dir, ...args) {
 	if (r.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${r.stderr}`);
 	return r.stdout;
 }
+
+// A process that verify killed is gone once kill(pid, 0) fails. Under a loaded machine killing a process tree takes
+// a while, and a process killed before it started never writes its pid file, so poll instead of sleeping a fixed time.
+export async function processGone(pidFile, { timeoutMs = 10000 } = {}) {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (fs.existsSync(pidFile)) {
+			const pid = Number(fs.readFileSync(pidFile, "utf8"));
+			try {
+				process.kill(pid, 0);
+			} catch (err) {
+				if (err.code === "ESRCH") return true;
+				throw err;
+			}
+		}
+		await new Promise((res) => setTimeout(res, 100));
+	}
+	// never wrote its pid: it was killed before it got that far
+	return !fs.existsSync(pidFile);
+}

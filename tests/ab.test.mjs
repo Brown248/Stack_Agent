@@ -197,7 +197,7 @@ test("--model and --budget are required, and bad values are usage errors", () =>
 test("an unknown task names the available ones", () => {
 	const r = runNode(runScript, ["--task", "nope", "--model", "m", "--budget", "1", "--dry-run", "--out", path.join(tempDir(), "o")]);
 	assert.equal(r.code, 2);
-	assert.match(r.stderr, /unknown task "nope" \(available: cli-minlen, dup-name, endpoint, item-note, multi-rule, refactor-items, rename-field, validate, validate-hurry, webhook\)/);
+	assert.match(r.stderr, /unknown task "nope" \(available: bug-blank-name, bug-dup-count, bug-space-list, cli-minlen, dup-name, endpoint, item-note, multi-rule, refactor-items, rename-field, review-spec, validate, validate-hurry, webhook\)/);
 });
 
 test("hooks-only and skills-only plugin copies really lack the removed part", () => {
@@ -370,4 +370,9 @@ test("--disallowed-tools reaches claude as one --disallowedTools value", () => {
 	const argv = claudeArgs({ prompt: "p", model: "m", budget: 1, isolate: true, disallowedTools: opts.disallowedTools });
 	assert.deepEqual(argv.slice(argv.indexOf("--disallowedTools"), argv.indexOf("--disallowedTools") + 2), ["--disallowedTools", "Bash(node:*),Bash(npm:*)"]);
 	assert.equal(claudeArgs({ prompt: "p", model: "m", budget: 1, isolate: true }).includes("--disallowedTools"), false);
+	// a task's extra tools and folders are added to the defaults, not swapped for them
+	const extra = claudeArgs({ prompt: "p", model: "m", budget: 1, isolate: true, extraTools: ["Bash(git:*)"], addDirs: ["/tmp/x"] });
+	const allowed = extra[extra.indexOf("--allowedTools") + 1].split(",");
+	assert.ok(allowed.includes("Read") && allowed.includes("Bash(git:*)"));
+	assert.deepEqual(extra.slice(extra.indexOf("--add-dir"), extra.indexOf("--add-dir") + 2), ["--add-dir", "/tmp/x"]);
 });

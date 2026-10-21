@@ -4,7 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { main } from "../scripts/verify.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
-import { freePort, tempDir, write } from "./helpers.mjs";
+import { freePort, processGone, tempDir, write } from "./helpers.mjs";
 
 function project(config, files = {}) {
 	const dir = tempDir("stack-agent-args-");
@@ -54,9 +54,7 @@ test("an args check that hangs is timed out and killed", async () => {
 	const r = await main(["--root", dir]);
 	assert.equal(r.code, 1);
 	assert.match(r.text, /timed out after 1s/);
-	const pid = Number(fs.readFileSync(path.join(dir, "hang.pid"), "utf8"));
-	await new Promise((res) => setTimeout(res, 300));
-	assert.throws(() => process.kill(pid, 0), /ESRCH/);
+	assert.ok(await processGone(path.join(dir, "hang.pid")), "the process must be killed");
 });
 
 test("a program that cannot start fails the check with a clear reason", async () => {
