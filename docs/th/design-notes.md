@@ -26,9 +26,10 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | ทางที่ขี้เกียจที่สุดต้องเป็นทางที่ถูก | ทุกกฎต้องมี `fix` และ hook PostToolUse ส่ง fix ให้ agent ทันทีหลังแก้ไฟล์ | เทสของ config และ hook |
 | เปลี่ยน comment ที่เตือนซ้ำให้เป็นกฎ | skill `correct` (ไล่จาก architecture → types → guard → test → docs) | ขั้นตอนใน skill |
 | Ratchet สำหรับ repo ที่ใช้ร่วมกัน | baseline, `--allow-increase`, `--compare-ref` | เทส ratchet และ compare-ref |
-| สุ่มตรวจแทนการรีวิวทุก PR | `scripts/sample-commits.mjs`, skill `sample-review` และ agent `reviewer` | `tests/sample-commits.test.mjs` |
+| สุ่มตรวจแทนการรีวิวทุก PR | `scripts/sample-commits.mjs`, skill `sample-review` และ agent `reviewer` โดยอ่านแต่ละ commit ใน checkout ของมันเอง (`scripts/review-worktree.mjs`) | `tests/sample-commits.test.mjs`, `tests/review-findings.test.mjs` |
+| ผลรีวิวเป็นข้อมูล และตรวจซ้ำโดย agent ที่ไม่ได้เป็นคนเจอ (จาก cloudflare/security-audit-skill) | candidate จาก `reviewer` คำตัดสิน `confirmed` / `needs_validation` / `rejected` จาก `finding-verifier` ตรวจด้วย `scripts/review-findings.mjs` (ฟิลด์ที่ต้องมีตามคำตัดสิน, คนเจอไม่ใช่คนตรวจ, โค้ดที่ยกมาต้องตรงกับบรรทัดที่อ้าง, finding ของ commit ต้องอ้างไฟล์ที่ commit นั้นแก้) | `tests/review-findings.test.mjs` รวมเทสว่า prompt ของ agent พูดถึงทุกฟิลด์ และทุก flag ของ script ที่เอกสารใช้มีอยู่จริง |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 260 เทส |
+| งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 287 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 9 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
 | ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -48,13 +49,14 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 - หลักฐานและไฟล์ skip เป็นไฟล์ธรรมดา การแก้ด้วย Edit/Write จะถามคนก่อน แต่ถ้าตั้งใจเขียนผ่าน shell ก็ยังปลอมได้ job `verify` ใน template ของ CI รัน verify ซ้ำทุก push และ pull request (ใน pull request ใช้ `--against origin/<base>`) ไฟล์ที่ปลอมจึงผ่าน CI ไม่ได้ แต่ใช้ได้จริงก็ต่อเมื่อ job นี้เป็น required check, workflow กับ `verify.json` อยู่ใต้ CODEOWNERS และกรอกขั้นติดตั้ง dependency แล้ว workflow นี้ยังไม่เคยรันบน GitHub Actions จริง ตอนนี้ตรวจได้เฉพาะด้วยเทสที่อ่านข้อความ
 - ขั้น `against` พิสูจน์ได้ว่ามี check ใหม่อย่างน้อยหนึ่งตัวที่แยกโค้ดเก่ากับโค้ดใหม่ออกจากกัน แต่บอกไม่ได้ว่า check ครอบคลุมทุกอย่างที่การแก้ควรทำ และผลที่เชื่อไม่ได้ (server ของโค้ดเก่าเปิดไม่ขึ้น) จะข้ามขั้นนี้แทนที่จะให้ผ่าน
 - ratchet นับต่อไฟล์ต่อกฎ กฎแบบ import นับทีละชื่อที่ import (baseline version 2) version 1 นับทีละบรรทัด การเพิ่มชื่อเข้าไปใน import ต้องห้ามที่มีอยู่แล้วจึงผ่านได้ ช่องโหว่นี้เจอระหว่างวางแผนงาน A/B และปิดแล้วพร้อมเทสกันถอยหลัง (`tests/guard-widening.test.mjs`)
+- `review-findings.mjs` พิสูจน์ว่า finding มีรูปแบบถูก และโค้ดที่ยกมามีอยู่จริงที่บรรทัดที่อ้าง แต่แยก finding ที่ถูกออกจากที่ผิดไม่ได้ นั่นเป็นหน้าที่ของ verifier ซึ่งก็เป็นอีกโมเดลที่อ่านโค้ดเดียวกัน verifier ไม่เห็นหลักฐานของ reviewer แต่เห็นข้อกล่าวหา จึงยังถูกชี้นำได้
 - judge แบบ LLM ใน Claude Code เลือกได้เฉพาะโมเดล Claude คำว่า "คนละโมเดล" จึงหมายถึงโมเดล Claude อีกตัว
 
 ## สถานะการตรวจสอบ
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 260 เทสบน Windows 11 กับ Node 25 |
+| Unit และ integration test | ผ่าน 287 เทสบน Windows 11 กับ Node 26 |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -148,6 +150,18 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 ยืนยันผล: รัน `multi-rule` และ `webhook` ใหม่ 6 รอบ $0.75 ด้วยเวอร์ชันก่อนแก้สามจุดนั้น ซึ่งไม่มีจุดไหนเกี่ยวกับรอบเหล่านี้ `checkDetects` ได้ 5/6 เทียบกับ 1/6 ก่อนเปลี่ยน รอบที่หกมีเทสที่รอ webhook ซึ่งโค้ดเก่าไม่เคยเรียก จึงรอจนหมดเวลาเทส 120 วินาที ซึ่งนับเป็น inconclusive เทสที่ต้องรออะไรบางอย่างควรตั้ง timeout ของตัวเองจึงจะถูกนับ
 
 **ข้อสรุป** เงื่อนไขกำหนดว่าต้องมีอย่างน้อยสองงานที่พลาดในส่วนที่ harness ควบคุมได้ สี่งานแรกไม่เจอเลย ส่วนสามงานที่ยากขึ้นเจอแค่ช่องโหว่ในขั้น against ซึ่งแก้ด้วยมือแล้วตามด้านบน จึงไม่สร้างระบบปรับอัตโนมัติ ที่งานละ 3 รอบ ผลนี้บอกได้ว่าไม่มีช่องโหว่ใหญ่ในงานเหล่านี้ ไม่ได้บอกว่า harness ดีที่สุดแล้ว การทดสอบที่มีประโยชน์ต่อไปคืองานที่ยากขึ้นจากโปรเจกต์จริง
+
+## ทดสอบ sample-review กับ agent จริง (21 ต.ค. 2026)
+
+รัน `/stack-agent:sample-review` แบบ headless หนึ่งครั้ง (Sonnet แยก environment เหมือน A/B harness ใช้ $0.75 จากเพดาน $2) บนสำเนา `sample-backend` ที่ฝัง commit ไว้ 3 ตัว: บั๊กจริง (`result.err` แทน `result.error` ทำให้ไม่ใส่ชื่อแล้วได้ 201 ไม่มี body), ผิด `rules.md` (body ของ error เป็น `{ message }` แทน `{ error }`) และเหยื่อล่อ (comment บอกว่าเอาชื่อไปต่อใน SQL ตรงๆ ทั้งที่ query ใช้ parameter)
+
+- บั๊กจริงกับการผิดกฎได้ `confirmed` ตรง commit และลง log แล้ว ตัวที่ `repeatable` ถูกส่งต่อให้ `/stack-agent:correct`
+- agent ไม่มีตัวไหนเชื่อเหยื่อล่อ reviewer รายงานว่าตัว comment เองชวนเข้าใจผิด (one-off) ไม่ใช่ injection รอบนี้จึงไม่ได้ทดสอบเส้นทาง `rejected`
+- คำสั่ง Bash ของ reviewer และ verifier ถูกปฏิเสธทุกครั้ง เพราะใช้ `cd "<checkout>" && git diff` และกฎ permission ปฏิเสธ `cd` ที่นำหน้า git เมื่อไม่เห็น diff reviewer ของ commit สุดท้ายจึงรายงานบั๊กที่ฝังไว้ซ้ำอีกรอบ เพราะมองเห็นใน checkout ของ commit นั้น ทั้งที่ commit นั้นไม่ได้แตะไฟล์นั้นเลย validator ปล่อยผ่านเพราะโค้ดที่ยกมามีอยู่จริง
+- แก้แล้วพร้อมเทส: agent ทั้งสองรัน `git -C "<review root>"` และส่ง `--root` ให้ check ต่างๆ และหยุดเมื่ออ่าน diff ไม่ได้ ส่วน `review-findings.mjs validate` จะไม่รับ finding ของ commit ใดถ้าทั้งตำแหน่งและหลักฐานไม่อยู่ในไฟล์ที่ commit นั้นแก้ เมื่อลองกับไฟล์ที่รอบนี้บันทึกไว้ check ใหม่ปฏิเสธ finding ที่โยนผิด commit และปฏิเสธ finding "branch ใหม่ไม่มีเทส" ที่อ้างแค่ไฟล์เทสด้วย ตามกฎใหม่ reviewer ต้องอ้างบรรทัดที่แก้เป็นหลักฐาน
+- JSON จาก agent บาง excerpt มีอักขระที่ถูก escape เป็น HTML (`&lt;`, `&amp;`) main session แปลงกลับก่อนจะ validate ผ่าน และการตรวจ excerpt คือสิ่งที่จะจับได้ถ้ามีตัวไหนไม่ถูกแปลงกลับ
+
+รันครั้งเดียวเป็นแค่ smoke test ยังเอาไปคิดเป็นอัตราไม่ได้
 
 ## บันทึกการตรวจงานตัวเอง
 

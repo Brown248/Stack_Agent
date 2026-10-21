@@ -11,6 +11,7 @@ import { SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
                       [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
        node verify.mjs --skip "REASON"   record why verification cannot run for the current code
+       node verify.mjs --evidence-status  say whether the latest evidence is a full pass for the code as it is now (runs nothing)
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
 const MIN_SKIP_REASON = 15;
 
@@ -451,7 +452,7 @@ function unlinkLinks(dir, depth = 0) {
 	}
 }
 
-function removeWorktree(top, tmp, links) {
+export function removeWorktree(top, tmp, links) {
 	for (const { at, target } of links) {
 		try {
 			if (fs.lstatSync(at).isSymbolicLink()) {
@@ -472,13 +473,48 @@ function removeWorktree(top, tmp, links) {
 }
 
 // worktrees left by a crashed or killed run; only old ones, so a concurrent run is not disturbed
-function cleanStaleWorktrees(top, base) {
+function cleanStaleWorktrees(top, base, prefix = AGAINST_PREFIX) {
 	for (const name of fs.existsSync(base) ? fs.readdirSync(base) : []) {
-		if (!name.startsWith(AGAINST_PREFIX)) continue;
+		if (!name.startsWith(prefix)) continue;
 		const tmp = path.join(base, name);
 		try {
 			if (Date.now() - fs.statSync(tmp).mtimeMs > 2 * 3600_000) removeWorktree(top, tmp, []);
 		} catch {}
+	}
+}
+
+// A detached checkout of ref in a temp folder (git hooks off during checkout), with dependency folders linked in
+// from the project. Returns { top, tmp, wtRoot, links } or { error, top, tmp }; always pair with
+// removeWorktree(top, tmp, links). Used by the against step and by sample-review for past commits.
+export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, link = ["node_modules"] } = {}) {
+	const top = gitTop(root);
+	if (!top) return { error: "not a git repository" };
+	const rel = toPosix(path.relative(realpath(top), realpath(root)));
+	const base = path.resolve(root, tmpDir ?? os.tmpdir());
+	fs.mkdirSync(base, { recursive: true });
+	cleanStaleWorktrees(top, base, prefix);
+	const tmp = fs.mkdtempSync(path.join(base, prefix));
+	const links = [];
+	try {
+		const noHooks = path.join(tmp, "no-hooks");
+		fs.mkdirSync(noHooks);
+		const wt = path.join(tmp, "wt");
+		const add = gitRun(top, ["-c", `core.hooksPath=${noHooks}`, "worktree", "add", "--detach", "--quiet", wt, ref]);
+		if (add.status !== 0) return { error: `could not check out ${ref}: ${add.stderr.trim()}`, top, tmp };
+		const wtRoot = path.join(wt, rel);
+		fs.mkdirSync(wtRoot, { recursive: true });
+		for (const name of link) {
+			const target = path.join(root, name);
+			const at = path.join(wtRoot, name);
+			if (!fs.existsSync(target) || fs.existsSync(at)) continue;
+			fs.mkdirSync(path.dirname(at), { recursive: true });
+			fs.symlinkSync(target, at, process.platform === "win32" ? "junction" : "dir");
+			links.push({ at, target });
+		}
+		return { top, tmp, wtRoot, links };
+	} catch (err) {
+		removeWorktree(top, tmp, links);
+		return { error: `could not set up a checkout of ${ref}: ${err.message}` };
 	}
 }
 
@@ -514,31 +550,15 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	step.checks = added.map((c) => c.name);
 	if (changedTests.length) step.tests = changedTests;
 
-	const base = path.resolve(root, config.against?.tmpDir ?? os.tmpdir());
-	fs.mkdirSync(base, { recursive: true });
-	cleanStaleWorktrees(top, base);
-	const tmp = fs.mkdtempSync(path.join(base, AGAINST_PREFIX));
-	const links = [];
+	// with a setup step (often an install) nothing is linked unless asked: an install through a link would rewrite the real folder
+	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : ["node_modules"]) });
+	const { tmp, links = [] } = made;
 	try {
-		const noHooks = path.join(tmp, "no-hooks");
-		fs.mkdirSync(noHooks);
-		const wt = path.join(tmp, "wt");
-		const add = gitRun(top, ["-c", `core.hooksPath=${noHooks}`, "worktree", "add", "--detach", "--quiet", wt, ref]);
-		if (add.status !== 0) return conclude(step, config, `could not check out ${ref}: ${add.stderr.trim()}`);
-		const wtRoot = path.join(wt, prefix);
-		fs.mkdirSync(wtRoot, { recursive: true });
+		if (made.error) return conclude(step, config, made.error);
+		const { wtRoot } = made;
 		copyInto(root, wtRoot, configRel);
 		for (const rel of gitRun(root, ["ls-files", "-co", "--exclude-standard", "-z"]).stdout.split("\0").filter(Boolean))
 			if (matchesAny(rel, keep) && fs.existsSync(path.join(root, rel))) copyInto(root, wtRoot, rel);
-		// with a setup step (often an install) nothing is linked unless asked: an install through a link would rewrite the real folder
-		for (const rel of config.against?.link ?? (config.against?.setup ? [] : ["node_modules"])) {
-			const target = path.join(root, rel);
-			const at = path.join(wtRoot, rel);
-			if (!fs.existsSync(target) || fs.existsSync(at)) continue;
-			fs.mkdirSync(path.dirname(at), { recursive: true });
-			fs.symlinkSync(target, at, process.platform === "win32" ? "junction" : "dir");
-			links.push({ at, target });
-		}
 		if (config.against?.setup) {
 			const r = await runCommand(wtRoot, config.against.setup, 600);
 			if (r.exitCode !== 0 || r.timedOut) return conclude(step, config, `against.setup failed on ${ref}: ${tail(r.output, 300)}`);
@@ -584,7 +604,7 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	} finally {
 		// cleanup problems must not hide the result; a missing link target is reported loudly
 		try {
-			removeWorktree(top, tmp, links);
+			if (tmp) removeWorktree(top, tmp, links);
 		} catch (err) {
 			process.stderr.write(`verify: could not fully remove the against worktree at ${tmp}: ${err.message}\n`);
 		}
@@ -607,12 +627,13 @@ function summarize(steps) {
 }
 
 async function main(argv) {
-	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against"], options: ["root", "config", "skip", "against"], multi: ["check"] });
+	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status"], options: ["root", "config", "skip", "against"], multi: ["check"] });
 	if (args.help) return { code: 0, text: USAGE };
 	const root = path.resolve(args.root ?? process.cwd());
 	const configPath = path.resolve(root, args.config ?? ".stack-agent/verify.json");
 	const config = loadVerifyConfig(configPath);
 	if (args.skip !== undefined) return writeSkip(root, config, args.skip);
+	if (args["evidence-status"]) return evidenceStatus(root, config, args.json);
 	const before = codeFingerprint(root, fingerprintOptions(config));
 	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse });
 	if (steps.length === 0) throw new ConfigError("nothing ran: every step was skipped");
@@ -631,6 +652,27 @@ async function main(argv) {
 	const scope = full ? "" : ` (partial run: ${flags.join(" ")}; run with no flags before calling the change done)`;
 	const wrote = changedByRun.length ? [`  note: this run changed ${changedByRun.slice(0, 5).join(", ")}${changedByRun.length > 5 ? ", ..." : ""}; gitignore files that tests or the server write`] : [];
 	return { code: record.ok ? 0 : 1, text: [...summarize(steps), ...wrote, `verify: ${record.ok ? "ok" : "FAIL"}, evidence ${file}${scope}`].join("\n") };
+}
+
+// Read-only: whether latest.json is a full passing run whose fingerprint matches the code as it is now.
+// The reviewer uses it for an uncommitted change; it says nothing about past commits.
+function evidenceStatus(root, config, json) {
+	const latest = path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence", "latest.json");
+	let rec = null;
+	try {
+		rec = JSON.parse(fs.readFileSync(latest, "utf8"));
+	} catch {}
+	const current = codeFingerprint(root, fingerprintOptions(config));
+	const matches = Boolean(rec?.fingerprint && current && rec.fingerprint === current.value);
+	const ok = Boolean(rec?.ok === true && rec.full === true && matches);
+	let skip = null;
+	try {
+		skip = JSON.parse(fs.readFileSync(path.join(root, SKIP_FILE), "utf8"));
+	} catch {}
+	const skipped = !ok && current && skip?.fingerprint === current.value ? `verification was skipped for this code: ${skip.reason}` : null;
+	const why = skipped ?? (!rec ? "no evidence yet" : rec.ok !== true ? "the latest run failed" : rec.full !== true ? "the latest run was partial" : !current ? "not a git repository, so the evidence cannot be matched to the code" : !rec.fingerprint ? "the evidence has no fingerprint (written by an older verify)" : !matches ? "the code changed after the latest run" : "matches the code");
+	const status = { ok, full: rec?.full === true, passed: rec?.ok === true, matches, why, evidence: rec ? toPosix(path.relative(root, latest)) : null, at: rec?.at ?? null };
+	return { code: ok ? 0 : 1, text: json ? JSON.stringify(status, null, 2) : `evidence: ${ok ? "ok" : "NOT ok"}, ${why}${rec?.at ? ` (run at ${rec.at})` : ""}` };
 }
 
 // Written outside the gitignored evidence dir on purpose: the skip shows up in the diff a reviewer reads.

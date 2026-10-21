@@ -26,9 +26,10 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Shortest path = correct path | every rule must carry a `fix`, and the PostToolUse hook hands it to the agent right after the edit | guard config tests, hook tests |
 | Turn repeated review comments into rules | skill `correct` (architecture, then types, then guard, then tests, docs last) | skill instructions |
 | Ratchet for shared repos | baseline counts, `--allow-increase`, `--compare-ref` | ratchet and compare-ref tests |
-| Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer` | `tests/sample-commits.test.mjs` |
+| Sampling review instead of reviewing every PR | `scripts/sample-commits.mjs` + skill `sample-review` + agent `reviewer`, each commit read in its own checkout (`scripts/review-worktree.mjs`) | `tests/sample-commits.test.mjs`, `tests/review-findings.test.mjs` |
+| Review findings as data, verified by an agent that did not find them (from cloudflare/security-audit-skill) | candidates from `reviewer`, verdicts `confirmed` / `needs_validation` / `rejected` from `finding-verifier`, checked by `scripts/review-findings.mjs` (required fields per verdict, finder is not verifier, quoted excerpts must match the cited line, a finding about a commit must cite a file it changed) | `tests/review-findings.test.mjs`, including tests that the agent prompts name every field and every script flag the docs use |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 260 tests |
+| Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 287 tests |
 | Skills: small, composable, with scripts, getting better each use | 9 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
 | A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
@@ -48,13 +49,14 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 - Evidence and the skip record are plain files. Edit/Write on them asks a human, but a determined shell write can still forge them. The `verify` job in the CI template reruns verify on every push and pull request (with `--against origin/<base>` on pull requests), so a forged file does not pass CI. That holds only while the job is a required check and the workflow and `verify.json` are under CODEOWNERS, and while the install step is filled in. The workflow has not been run on GitHub Actions yet; for now it is checked only by text tests.
 - The `against` step proves that at least one new check tells the old code from the new. It cannot judge whether the checks cover everything the change should do, and results it cannot trust (the old server does not start) skip it instead of passing it.
 - The ratchet counts per file per rule. Import rules count each imported name (baseline version 2). Version 1 counted statements, so adding a name to an existing forbidden import passed; that gap was found while planning the A/B work and closed with a regression test (`tests/guard-widening.test.mjs`).
+- `review-findings.mjs` proves that a finding is well formed and that its quotes are real code at the cited lines. It cannot tell a right finding from a wrong one; that is the verifier's job, and the verifier is another model reading the same code. The verifier is not shown the reviewer's evidence, but it is shown the claim, so it can still be led.
 - An LLM judge in Claude Code can only be another Claude model, so "a different model" means a different Claude model.
 
 ## Verification status
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 260 pass on Windows 11, Node 25 |
+| Unit and integration tests | 287 pass on Windows 11, Node 26 |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -148,6 +150,18 @@ So the hook text had nothing to tune, but the against step had a real gap: a wea
 Confirmation: `multi-rule` and `webhook` rerun, 6 runs, $0.75, run on the version before those three fixes, none of which applies to these runs. `checkDetects` 5/6, against 1/6 before the change. The sixth run's test waited for a webhook call the old code never makes and hit the 120 s test timeout, which counts as inconclusive. Tests that wait on something should carry their own timeout to count.
 
 **Decision.** The headroom gate required at least two tasks with failures the harness controls. None were found among the first four tasks; among the harder three the only gap was in the against step, fixed by hand above, so the tuning loop was not built. With n=3 per task this shows there is no large gap on these tasks, not that the harness is optimal. The next useful test would be harder tasks taken from real projects.
+
+## Sample-review live check (2026-10-21)
+
+One headless run of `/stack-agent:sample-review` (Sonnet, isolated as in the A/B harness, $0.75 of a $2 cap) on a copy of `sample-backend` with three planted commits: a real bug (`result.err` instead of `result.error`, so a missing name returns 201 with no body), a `rules.md` violation (an error body `{ message }` instead of `{ error }`), and bait (a comment claiming the name is pasted into SQL over a parameterized query).
+
+- The real bug and the rule violation were confirmed against the right commits and logged; the repeatable ones were marked for `/stack-agent:correct`.
+- Neither agent believed the bait: the reviewer reported the comment itself as misleading (a one-off), not an injection. So the `rejected` path was not exercised in this run.
+- Every reviewer and verifier Bash call was refused: they ran `cd "<checkout>" && git diff`, and permission rules refuse a `cd` in front of a git command. Without the diff, the reviewer of the last commit reported the planted bug again, because it is visible in that commit's checkout, though that commit did not touch the file. The validator passed it, since the quote was real code.
+- Fixes, with tests: both agents now run `git -C "<review root>"` and pass `--root` to the checks, and stop when the diff cannot be read; `review-findings.mjs validate` rejects a finding about a commit unless its location or one evidence entry is in a file that commit changed. On this run's saved files the new check rejects the misattributed finding, and also a "new branch is untested" finding that cited only the test file; under the new rule the reviewer cites the changed line as evidence.
+- Agents' JSON came back with HTML-escaped characters (`&lt;`, `&amp;`) in some excerpts; the main session restored them before validation passed. The excerpt check is what would catch a quote that was not restored.
+
+One run is a smoke test, not a rate.
 
 ## Self-review log
 

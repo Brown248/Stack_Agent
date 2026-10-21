@@ -26,10 +26,11 @@ claude plugin marketplace add <you>/<your-fork>
 
 ```
 .claude-plugin/   plugin.json, marketplace.json
-agents/           judge.md, reviewer.md
+agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (wires scripts/hooks/*.mjs into Claude Code)
 skills/<name>/    one SKILL.md per skill, plus any scripts it calls
-scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs, lib/, hooks/
+scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs,
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),

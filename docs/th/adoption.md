@@ -198,6 +198,24 @@ exit 0 แปลว่าตั้งค่าครบ ถ้าไม่ใช
 - เมื่อต้องแก้ agent เรื่องเดิมซ้ำสองครั้ง ใช้ `/stack-agent:correct` เปลี่ยนเป็นกฎ guard พร้อมพิสูจน์ว่ากฎจับได้จริง
 - `/stack-agent:sample-review` สุ่มตรวจ commit ล่าสุด แล้วส่งปัญหาที่เจอซ้ำไปให้ `correct`
 
+### สุ่มตรวจ: ผลรีวิวเป็นข้อมูล และมี agent ตัวที่สองตรวจซ้ำ
+
+`sample-review` รีวิวแต่ละ commit ที่สุ่มได้ใน checkout ของ commit นั้น (`review-worktree.mjs add <sha>`) เพราะ Read, Grep และ Glob เห็นแค่ไฟล์บนดิสก์ ถ้ารีวิวใน working tree หลัก ทุก `path:line` จะชี้ไปที่โค้ดของวันนี้ checkout นี้เป็น git worktree ชั่วคราว ปิด hook และลิงก์ `node_modules` เข้ามา แล้วลบทิ้งตอนจบ
+
+agent `reviewer` รายงานเป็น candidate ไม่ใช่คำตัดสิน ในรูป JSON array แต่ละรายการระบุ `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>` หรือ `correctness`) ตำแหน่ง และหลักฐาน ทุกตำแหน่งและหลักฐานต้องยกโค้ดที่ชี้มาด้วย agent `finding-verifier` อีกตัวได้แค่ข้อกล่าวหากับตำแหน่ง ไม่ได้หลักฐานของ reviewer พยายามหักล้างทีละข้อ แล้วตัดสินว่า:
+
+- `confirmed`: พร้อม `severity` (`blocking` หรือ `non-blocking`), `kind` (`repeatable` ส่งต่อให้ `/stack-agent:correct` ส่วน `one-off` ไม่ส่ง), สิ่งที่ `observed` และ `fix`
+- `needs_validation`: เฉพาะเมื่อตัดสินได้จากข้อเท็จจริงที่โค้ดบอกไม่ได้ พร้อม `blockers` และ `how_to_check`
+- `rejected`: พร้อม `reason`
+
+agent ทั้งสองตัวรัน git แบบ `git -C "<review root>" ...` และส่ง `--root` ให้ check ของ Stack Agent แทนการเปลี่ยน directory เพราะกฎ permission ปฏิเสธ `cd` ที่นำหน้าคำสั่ง git ถ้าอ่าน diff ไม่ได้ reviewer จะหยุดโดยไม่มี candidate (log ว่า commit นั้นไม่ได้รีวิว) ส่วน verifier ก็หยุดด้วย candidate ของมันจึงถูกบันทึกเป็น `needs_validation` ไฟล์ที่ commit ลบไปให้อ้างตามที่เป็นก่อน commit นั้น validator จะอ่านจาก parent ของ commit
+
+candidate จาก guard และ API map ไม่ส่งให้ verifier แต่ skill รัน check นั้นซ้ำเองแล้วบันทึก `verified_by: "script:<command>"` คนตั้ง `found_by` กับ `verified_by` คือ skill ไม่ใช่ agent ส่งให้ verifier ได้ไม่เกิน 8 รายการต่อรอบ ที่เหลือเป็น `needs_validation`
+
+`review-findings.mjs validate` ตรวจทุกไฟล์ก่อนใช้: ฟิลด์ที่แต่ละคำตัดสินต้องมีหรือห้ามมี, id ไม่ซ้ำ, คนเจอไม่ได้ตรวจของตัวเอง, ใช้ script เป็นผู้ตรวจได้เฉพาะ finding จาก guard, API map หรือ evidence, กฎ guard และบรรทัดใน `rules.md` ที่อ้างมีอยู่จริง โค้ดที่ยกมาต้องอยู่ภายใน 3 บรรทัดจากบรรทัดที่อ้างใน commit ที่รีวิว (`--root <checkout>` หรือ `--ref <commit>`), finding ของ commit ใดต้องอ้าง (ในตำแหน่งหรือหลักฐานอย่างน้อยหนึ่งรายการ) ไฟล์ที่ commit นั้นแก้ จะได้ไม่โยนปัญหาที่มีอยู่ก่อนแล้วให้ commit ที่กำลังรีวิว และถ้าใส่ `--candidates` ก็ตรวจว่าไม่มี candidate ไหนหายไประหว่างทาง มันพิสูจน์แค่รูปแบบกับการอ้างอิงโค้ด ไม่ได้พิสูจน์ว่า finding ถูก `review-findings.mjs rows` แปลงไฟล์สุดท้ายเป็นแถวใน review log ไฟล์เหล่านี้อยู่ใน `.stack-agent/evidence/review/<date>-<seed>/` ซึ่ง gitignore ไว้พร้อม evidence อื่น ส่วน `.stack-agent/review-log.md` คือบันทึกที่ commit
+
+สำหรับงานที่กำลังทำอยู่ reviewer จะรัน `node .stack-agent/bin/verify.mjs --evidence-status` ด้วย ซึ่งบอกว่า evidence ล่าสุดเป็นการรันครบที่ผ่านสำหรับโค้ดตอนนี้หรือไม่ โดยไม่รันอะไรเลย โปรเจคที่ตั้งค่าก่อนมี flag นี้ต้องอัปเดตเครื่องมือที่ vendor ไว้: รัน `node <path-to-Stack_Agent>/scripts/init.mjs .` อีกครั้ง (`init.mjs --check` จะแจ้ง `.stack-agent/bin/verify.mjs` ว่า outdated จนกว่าจะทำ)
+
 ## 6. Evals
 
 ทำเมื่อมี skill ให้วัดแล้ว ดู `/stack-agent:run-evals` ควรมีอย่างน้อย 1 case ต่อ skill และให้ดูส่วนต่างระหว่างมีกับไม่มี plugin ไม่ใช่ดูแค่คะแนน

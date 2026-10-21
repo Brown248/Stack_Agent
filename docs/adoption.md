@@ -198,6 +198,24 @@ Exit 0 means setup is complete. Otherwise it lists what is left.
 - When you correct the agent twice for the same thing, `/stack-agent:correct` turns it into a guard rule with proof that it fires.
 - `/stack-agent:sample-review` spot-checks recent commits and feeds repeat problems to `correct`.
 
+### Sampling review: findings as data, checked by a second agent
+
+`sample-review` reviews each sampled commit in a checkout of that commit (`review-worktree.mjs add <sha>`), because Read, Grep, and Glob only see the files on disk: in the main working tree every `path:line` would point at today's code. The checkout is a temporary git worktree with hooks off and `node_modules` linked in, removed at the end.
+
+The `reviewer` agent reports candidates, not verdicts, as a JSON array. Each one names a `source` (`guard:<rule-id>`, `api-map`, `verify-evidence`, `rules.md:<line>`, or `correctness`), a location, and evidence, and every location and evidence entry quotes the code it points at. A separate `finding-verifier` agent gets only the claims and locations, never the reviewer's evidence, tries to refute each one, and decides:
+
+- `confirmed`: with `severity` (`blocking` or `non-blocking`), `kind` (`repeatable` goes to `/stack-agent:correct`, `one-off` does not), what it `observed`, and a `fix`.
+- `needs_validation`: only when a fact the code cannot show decides it, with the `blockers` and `how_to_check`.
+- `rejected`: with a `reason`.
+
+Both agents run git as `git -C "<review root>" ...` and pass `--root` to the Stack Agent checks instead of changing directory, because permission rules refuse a `cd` in front of a git command. If the diff cannot be read, the reviewer stops with no candidates (the commit is logged as not reviewed), and the verifier stops too, so its candidates are recorded as `needs_validation`. A file the commit deleted is cited as it was before the commit; the validator reads it from the commit's parent.
+
+Guard and API-map candidates are not sent to the verifier: the skill reruns the check itself and records `verified_by: "script:<command>"`. The skill, not the agents, sets `found_by` and `verified_by`. At most 8 candidates per run go to the verifier; the rest become `needs_validation`.
+
+`review-findings.mjs validate` checks every file before it is used: the fields each verdict needs or must not have, unique ids, that the finder is not its own verifier, that a script verifier is used only for a guard, API-map, or evidence finding, that a cited guard rule and `rules.md` line exist, that each quoted excerpt appears within 3 lines of its cited line in the reviewed commit (`--root <checkout>` or `--ref <commit>`), that a finding about a commit cites (in its location or one evidence entry) a file that commit changed, so a problem that was already there is not pinned on the commit under review, and, with `--candidates`, that no candidate was dropped on the way. It proves format and grounding only, not that a finding is right. `review-findings.mjs rows` turns the final file into review-log rows. The files live in `.stack-agent/evidence/review/<date>-<seed>/`, which is gitignored with the rest of the evidence; `.stack-agent/review-log.md` is the record you commit.
+
+For the change you are working on, the reviewer also runs `node .stack-agent/bin/verify.mjs --evidence-status`, which says whether the latest evidence is a full pass for the code as it is now and runs nothing. Projects set up before this flag existed need their vendored tools refreshed: rerun `node <path-to-Stack_Agent>/scripts/init.mjs .` (`init.mjs --check` lists `.stack-agent/bin/verify.mjs` as outdated until you do).
+
 ## 6. Evals
 
 Add evals once you have skills to measure. See `/stack-agent:run-evals`. Aim for one case per skill, and read the delta between with and without the plugin, not only the score.
