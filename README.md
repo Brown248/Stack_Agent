@@ -26,7 +26,7 @@ Stack Agent moves rules out of prompts and into things that fail loudly: a verif
 | Soft constraints | `.stack-agent/rules.md` | Team preferences loaded into every session. |
 | Feature map (backends) | `scripts/api-map.mjs`, skill `api-map` | Drafts an endpoint map from code and fails when the map drifts. |
 | Feature map (other presets) | `scripts/feature-map.mjs`, skill `feature-map` | A table of what a user does and where it lives (`path`, `path:line`, or `path#text`); fails when a file, a line, an anchor text, or a named verify check is gone. |
-| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals`, `feature-map`, and for backends `add-endpoint`, `add-migration`, `api-map`. |
+| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals`, `feature-map`, `mine-corrections`, and for backends `add-endpoint`, `add-migration`, `api-map`. |
 | Agents | `agents/` | `judge` scores work against a rubric. `reviewer` checks a diff before a human does and reports candidates; `finding-verifier` tries to refute each one. None of them edits files. |
 | Evals | `evals/` | `claude plugin eval` cases that compare runs with and without the plugin. |
 

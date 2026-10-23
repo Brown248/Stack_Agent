@@ -221,6 +221,7 @@ hook รัน script ของ plugin เอง ส่วน CI รันชุ
 - สำหรับ backend มี `add-endpoint`, `add-migration` และ `api-map`
 - เพิ่ม skill ของงานที่ทีมทำบ่อยที่สุด 2–3 อย่างใน `.claude/skills/<name>/SKILL.md` ถ้า agent ต้องเขียนโค้ดเดิมซ้ำ ให้เก็บเป็น script ไว้ในโฟลเดอร์ของ skill
 - จบงานใหญ่แล้วใช้ `/stack-agent:reflect` เพื่อให้เสนอการแก้ skill จากสิ่งที่พลาด คุณต้องอนุมัติก่อนแก้
+- `/stack-agent:mine-corrections` ทำแบบเดียวกันแต่ข้ามหลาย session: `scripts/mine-transcripts.mjs` อ่าน transcript ที่ Claude Code เก็บไว้ของโปรเจกต์นี้ในเครื่องคุณ (อ่านอย่างเดียว ไม่ส่งอะไรออกไป) แสดงสิ่งที่คุณพิมพ์หลังคำตอบของ agent แล้ว skill จะจัดกลุ่มการแก้ที่เกิดซ้ำอย่างน้อยสอง session และเสนอ check การแก้ skill หรือกฎให้แต่ละกลุ่ม พร้อมยกข้อความเป็นหลักฐาน คุณต้องอนุมัติก่อนแก้
 - เมื่อต้องแก้ agent เรื่องเดิมซ้ำสองครั้ง ใช้ `/stack-agent:correct` เปลี่ยนเป็นกฎ guard พร้อมพิสูจน์ว่ากฎจับได้จริง
 - `/stack-agent:sample-review` สุ่มตรวจ commit ล่าสุด แล้วส่งปัญหาที่เจอซ้ำไปให้ `correct`
 - `/stack-agent:debug` แก้บั๊กโดยทำให้บั๊กโผล่ได้ตามสั่งก่อน: repro กลายเป็น check ของ verify หรือเทส ขั้น against จึงพิสูจน์ได้ว่ามัน fail กับโค้ดก่อนแก้ บรรทัด debug ติด tag `[DEBUG-xxxx]` และกฎ guard `no-debug-tags` (มีในทุก preset ยกเว้นไฟล์ Markdown, log และ build output) จะ fail ถ้ามีบรรทัดค้างอยู่ตอนรัน guard หรือ CI กฎนี้ตั้ง `"onEdit": "skip"` ไว้ hook หลังแก้ไฟล์จึงไม่ขวางตอน agent ใส่บรรทัด debug ระหว่างทำงาน กฎอื่นก็ใช้ option นี้ได้ โปรเจคที่ตั้งค่าก่อนมีกฎนี้จะไม่ได้กฎนี้ เพราะ `init` ไม่เขียนทับ guard config ที่มีอยู่ แต่ `init.mjs --check` จะแจ้งให้ (ดูหัวข้อ 4)

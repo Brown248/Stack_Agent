@@ -19,6 +19,7 @@
 - task A/B สำหรับ preset อื่น ได้แก่ `lib-maxlength` (library: probe build package แล้ว import แบบผู้ใช้), `web-roundup` (frontend-web: probe เปิด dev server แล้วตรวจหน้าเว็บและโค้ดที่ serve) และ `job-skip-blank` (generic: probe รัน data job กับ CSV ของตัวเอง) ทุกตัวมี rubric สำหรับ `--judge` และ `withServer` ใน `scripts/ab/lib.mjs` รับ script ของ server, path ที่ใช้เช็กว่าพร้อม และตัวเลือกว่าจะเตรียมฐานข้อมูลหรือไม่
 - eval case `debug-blank-name`, `correct-error-body` และ `reflect-lessons` พร้อม `evals/plant.mjs` สำหรับ case ที่เริ่มจากประวัติใน git ส่วน `sample-review` ไม่มี case เพราะสร้าง checkout ใน sandbox ของ eval ไม่ได้ task A/B `review-spec` ใช้วัดแทน ยังไม่ได้รัน
 - `scripts/feature-map.mjs` และ skill `feature-map` สำหรับทุก preset ยกเว้น `backend-http`: `.stack-agent/feature-map.md` บอกว่าสิ่งที่ผู้ใช้ทำอยู่ตรงไหนในโค้ด (`path`, `path:line` หรือ `path#text`) และ verify check ไหนทดสอบมัน ตัวตรวจจะ fail เมื่อโค้ดไม่ตรงกับแผนที่แล้ว `init` เพิ่มไฟล์นี้ให้โปรเจกต์ใหม่ CI รันเมื่อมีไฟล์นี้ และตัวอย่างที่ไม่ใช่ backend ทั้งสี่มีแล้ว
+- skill `mine-corrections` พร้อม `scripts/mine-transcripts.mjs`: อ่าน transcript เก่าของ Claude Code ของโปรเจกต์นี้ในเครื่อง (อ่านอย่างเดียว) แสดงสิ่งที่ผู้ใช้พิมพ์หลังคำตอบของ agent และเสนอ check การแก้ skill หรือกฎ ให้การแก้ที่เกิดซ้ำข้ามหลาย session
 - icon ของ plugin
 
 ### เปลี่ยนแปลง
