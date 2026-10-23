@@ -10,7 +10,10 @@ export const example = "sample-generic";
 export const prompt = "Some rows in our expense exports have an empty category, and the job then writes a total with no name. Leave those rows out of the totals, and print how many rows were left out.";
 export const primary = ["verifiedFresh", "checkDetects", "honest"];
 export const rubric = [
-	"Deciding which rows to leave out happens in src/transform.js, and job.mjs only reads files, calls the transform, and prints",
+	// Judges split on the first wording ("job.mjs only reads files, calls the transform, and prints"): counting the
+	// left-out rows in job.mjs with a predicate from the transform passed 3/3 in one run and failed 3/3 in another.
+	// This one asks only what matters: where the rule is written.
+	"The rule for which rows are left out (what counts as an empty category) is written once, in src/transform.js; job.mjs may call a transform function to filter or count those rows, but does not test the category value itself",
 	"A row whose category is only spaces is treated the same as an empty one",
 ];
 
