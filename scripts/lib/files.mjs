@@ -88,19 +88,20 @@ const gitIn = (root, args, input) => spawnSync("git", args, { cwd: root, encodin
 
 // The files git would commit under root (tracked, plus untracked ones not gitignored), so a gitignored .env or key
 // file is judged the same way locally as in CI, where it does not exist. Outside a git repo, every file under root.
+// One git call lists them. Nothing is stat'ed here (that, or git's own -d, costs more than the listing on a large
+// repo): a reader checks that each path is a regular file when it opens it, which it does anyway, so a tracked file
+// deleted from disk, a submodule, or a symbolic link is skipped there.
 export function projectFiles(root, ignore = []) {
 	const r = gitIn(root, ["ls-files", "-co", "--exclude-standard", "-z"]);
 	if (r.error || r.status !== 0) return walk(root, ignore);
 	const skip = [...DEFAULT_IGNORE, ...ignore];
+	// a plain folder name matches any path segment; anything with a slash or a glob is matched as before
+	const names = new Set(skip.filter((s) => !s.includes("/") && !s.includes("*")));
+	const others = skip.filter((s) => !names.has(s));
 	const out = [];
 	for (const rel of new Set(r.stdout.split("\0").filter(Boolean))) {
-		if (skip.some((s) => isIgnored(rel, s))) continue;
-		// a deleted tracked file, a submodule, or a symbolic link is not a file to scan
-		try {
-			if (!fs.lstatSync(path.join(root, rel)).isFile()) continue;
-		} catch {
-			continue;
-		}
+		if (rel.split("/").some((seg) => names.has(seg))) continue;
+		if (others.length && others.some((s) => isIgnored(rel, s))) continue;
 		out.push(rel);
 	}
 	return out.sort();

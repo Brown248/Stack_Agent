@@ -44,7 +44,14 @@ export function routesFromCode(root, config, warnings = []) {
 		const matched = files.filter((f) => matchesAny(f, source.files));
 		if (matched.length === 0) warnings.push(`source ${JSON.stringify(source.files)} matches no files; check its globs`);
 		for (const rel of matched) {
-			const text = fs.readFileSync(path.join(root, rel), "utf8");
+			let text;
+			try {
+				// a symbolic link or a submodule folder that git lists is not a source file
+				if (!fs.lstatSync(path.join(root, rel)).isFile()) continue;
+				text = fs.readFileSync(path.join(root, rel), "utf8");
+			} catch {
+				continue;
+			}
 			source.regex.lastIndex = 0;
 			for (let m; (m = source.regex.exec(text)); ) {
 				if (m[0] === "") source.regex.lastIndex++;

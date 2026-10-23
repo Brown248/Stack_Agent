@@ -64,16 +64,30 @@ test("outside a git repo every file is scanned, as before", () => {
 	assert.equal(guard(dir).code, 1);
 });
 
-test("projectFiles leaves out deleted tracked files and the default ignores", () => {
+test("projectFiles leaves out the default ignores, and the guard skips a tracked file deleted from disk", () => {
 	const dir = keyRepo();
 	write(dir, "gone.js", "x\n");
 	write(dir, "node_modules/x/index.js", "x\n");
+	write(dir, "deep/node_modules/y/index.js", "x\n");
 	git(dir, "add", "-A");
 	fs.rmSync(path.join(dir, "gone.js"));
 	const files = projectFiles(dir);
 	assert.ok(files.includes("src/app.js"));
-	assert.ok(!files.includes("gone.js"));
-	assert.ok(!files.some((f) => f.startsWith("node_modules/")));
+	assert.ok(!files.some((f) => f.split("/").includes("node_modules")));
+	// projectFiles does not stat (that costs more than the listing); the reader skips what is not a regular file
+	const r = guard(dir);
+	assert.equal(r.code, 0, r.text);
+});
+
+test("projectFiles honours ignore entries with a slash or a glob", () => {
+	const dir = keyRepo();
+	write(dir, "gen/out/a.js", "x\n");
+	write(dir, "gen/keep/b.js", "x\n");
+	write(dir, "src/a.snap.js", "x\n");
+	const files = projectFiles(dir, ["gen/out", "**/*.snap.js"]);
+	assert.ok(!files.includes("gen/out/a.js"));
+	assert.ok(files.includes("gen/keep/b.js"));
+	assert.ok(!files.includes("src/a.snap.js"));
 });
 
 test("a file over 1 MB is named in a warning instead of being skipped silently", () => {

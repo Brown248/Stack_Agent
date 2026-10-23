@@ -383,7 +383,10 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 		const abs = path.join(root, rel);
 		let size;
 		try {
-			size = fs.statSync(abs).size;
+			// lstat, so a symbolic link or a submodule folder is skipped, not followed or read as a file
+			const st = fs.lstatSync(abs);
+			if (!st.isFile()) continue;
+			size = st.size;
 		} catch {
 			continue;
 		}
