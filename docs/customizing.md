@@ -58,7 +58,7 @@ Ideas: `mobile` (simulator commands as command checks), `data-pipeline` (a sampl
 
 ## Add a guard rule
 
-Rules live in each project's `.stack-agent/guard.config.json`, not in this repo. To ship a rule to every project on your team, add it to the preset templates (new projects), or put the rules in a shared JSON file that each project's config lists in `extends` (projects in one repository; see adoption, "Shared rules").
+Rules live in each project's `.stack-agent/guard.config.json`, not in this repo. To ship a rule to every project on your team, add it to the preset templates (new projects), or put the rules in a shared JSON file that each project's config lists in `extends` (projects in one repository; see adoption, "Shared rules"), or vendor one rules file into projects in other repositories with `init.mjs --shared-rules <file>`.
 
 - `message` says what is wrong. `fix` names the file, function, or module to use instead. The guard rejects a rule without `fix`.
 - Prove each rule on a real past mistake before relying on it (`guard.mjs --strict`, or a test fixture).

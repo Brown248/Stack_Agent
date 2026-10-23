@@ -22,6 +22,7 @@
 - skill `mine-corrections` พร้อม `scripts/mine-transcripts.mjs`: อ่าน transcript เก่าของ Claude Code ของโปรเจกต์นี้ในเครื่อง (อ่านอย่างเดียว) แสดงสิ่งที่ผู้ใช้พิมพ์หลังคำตอบของ agent และเสนอ check การแก้ skill หรือกฎ ให้การแก้ที่เกิดซ้ำข้ามหลาย session
 - กฎกลางของ guard: `"extends"` ใน `guard.config.json` ระบุไฟล์ JSON ของกฎที่หลายโปรเจกต์ใน repository เดียวกันใช้ร่วมกัน โปรเจกต์นิยามกฎกลางซ้ำไม่ได้ `--compare-ref` อ่านไฟล์กลางที่ commit ฐาน และ hook ป้องกันไฟล์เหล่านี้
 - task A/B `job-new-export` ที่ออกแบบให้เกิดกรณีเทสที่เปลี่ยน import export ใหม่ พร้อมคะแนน `importCase` และ `checkAfterImport` ที่อ่านจากประวัติหลักฐานของ session (`importCaseGrade` ใน `scripts/ab/lib.mjs`) ยังไม่ได้รันกับ agent จริง
+- `init.mjs --shared-rules FILE` คัดลอกไฟล์กฎของทีมไปที่ `.stack-agent/shared-rules.json` สำหรับโปรเจกต์ใน repository อื่น อัปเดตทุกครั้งที่รัน `init` และ `--check` จะรายงานสำเนาที่ไม่ตรงกับที่มา
 - icon ของ plugin
 
 ### เปลี่ยนแปลง

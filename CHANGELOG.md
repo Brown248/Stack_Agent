@@ -22,6 +22,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 - Skill `mine-corrections` with `scripts/mine-transcripts.mjs`: reads this project's past Claude Code transcripts on the machine (read-only), lists what the user wrote after an agent reply, and proposes a check, skill edit, or rule for each correction repeated across sessions.
 - Shared guard rules: `"extends"` in `guard.config.json` lists JSON files of rules that several projects in one repository share. A project cannot redefine a shared rule, `--compare-ref` reads shared files at the base commit, and the hooks protect them.
 - A/B task `job-new-export`, built to reach the case where the changed tests import a new export, with `importCase` and `checkAfterImport` graded from the session's evidence history (`importCaseGrade` in `scripts/ab/lib.mjs`). Not run with agents yet.
+- `init.mjs --shared-rules FILE` vendors a team's rules file into `.stack-agent/shared-rules.json` for projects in other repositories, refreshes it on every `init`, and `--check` reports a copy that differs from its source.
 - A plugin icon.
 
 ### Changed

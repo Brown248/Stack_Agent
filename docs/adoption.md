@@ -143,6 +143,14 @@ Baselines written before this rule have `"version": 1` and counted statements. T
 - The hooks ask a human before an edit or a shell write to a shared file. Put it under CODEOWNERS too.
 - Each project still has its own baseline.
 
+To share rules across repositories, keep the team's rules in one JSON file (its own `rules` array, no `extends`) and vendor it into each project, like the tools:
+
+```bash
+node <path-to-Stack_Agent>/scripts/init.mjs . --shared-rules <path>/stack-agent-rules.json
+```
+
+It copies the file to `.stack-agent/shared-rules.json` and records its source in `.stack-agent/shared-rules.source`. Add `"extends": ["shared-rules.json"]` to `guard.config.json` (`--check` asks for it until you do). Every later `init` refreshes the copy from the source, and `--check` reports a copy that differs from it as `outdated`. If this machine cannot read the source (a teammate's path), `--check` only notes it. Commit the copy: CI reads it from the repository, and `--compare-ref` fails a pull request whose copy drops or narrows a rule.
+
 Inline exceptions need a reason, an expiry date, and an approver:
 
 ```js

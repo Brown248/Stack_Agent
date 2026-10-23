@@ -14,6 +14,9 @@ const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--check] [--li
   --check         only report setup that is still unfinished (EDIT ME placeholders, missing files,
                   vendored tools in .stack-agent/bin that differ from this plugin's copy), and note any rule
                   every preset ships that the guard config lacks (a note only; "declinedRules" silences it)
+  --shared-rules FILE  copy a team's guard rules file (a JSON file with a rules array) to
+                  .stack-agent/shared-rules.json and remember where it came from; every later init refreshes the
+                  copy, and --check reports one that differs from its source
   --list-presets  print the available presets
 exit codes: 0 done / setup complete, 1 setup still unfinished, 2 usage error`;
 
@@ -202,6 +205,61 @@ export function missingRules(target) {
 	return universalRules().filter((id) => !have.has(id) && !declined.has(id));
 }
 
+// Rules shared across repositories. "extends" only reads files inside the repository (so CI and --compare-ref can
+// read them), so a team's rules file kept elsewhere is vendored like the tools: copied to
+// .stack-agent/shared-rules.json, with its source recorded so every later init refreshes it and --check reports a
+// copy that differs from the source.
+export const SHARED_RULES = ".stack-agent/shared-rules.json";
+const SHARED_SOURCE = ".stack-agent/shared-rules.source";
+
+export function vendorSharedRules(target, source) {
+	const abs = path.resolve(source);
+	let text;
+	try {
+		text = fs.readFileSync(abs, "utf8");
+	} catch {
+		throw new ConfigError(`--shared-rules: cannot read ${abs}`);
+	}
+	let parsed;
+	try {
+		parsed = JSON.parse(text);
+	} catch (err) {
+		throw new ConfigError(`--shared-rules: ${abs} is not valid JSON: ${err.message}`);
+	}
+	if (!Array.isArray(parsed?.rules) || !parsed.rules.length) throw new ConfigError(`--shared-rules: ${abs} needs a non-empty rules array`);
+	if (parsed.extends !== undefined) throw new ConfigError(`--shared-rules: ${abs} uses extends; vendor one self-contained file`);
+	const dest = path.join(target, SHARED_RULES);
+	const same = fs.existsSync(dest) && fs.readFileSync(dest, "utf8") === text;
+	fs.mkdirSync(path.dirname(dest), { recursive: true });
+	if (!same) fs.writeFileSync(dest, text);
+	fs.writeFileSync(path.join(target, SHARED_SOURCE), abs + "\n");
+	return `${same ? "unchanged" : "updated  "} ${SHARED_RULES} (from ${toPosix(abs)})`;
+}
+
+export function sharedRulesSource(target) {
+	const file = path.join(target, SHARED_SOURCE);
+	return fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() || null : null;
+}
+
+// what --check says about the vendored shared rules: pending when the copy differs from a source that is still there,
+// or when guard.config.json does not extend it; a note when the source cannot be read from this machine
+export function sharedRulesStatus(target) {
+	const source = sharedRulesSource(target);
+	if (!source) return { pending: [], notes: [] };
+	const pending = [];
+	const notes = [];
+	const dest = path.join(target, SHARED_RULES);
+	if (!fs.existsSync(source)) notes.push(`${SHARED_RULES} comes from ${toPosix(source)}, which this machine cannot read, so it was not compared`);
+	else if (!fs.existsSync(dest) || fs.readFileSync(dest, "utf8") !== fs.readFileSync(source, "utf8")) pending.push(`outdated: ${SHARED_RULES} differs from ${toPosix(source)}; rerun init to refresh it`);
+	let config = null;
+	try {
+		config = JSON.parse(fs.readFileSync(path.join(target, ".stack-agent/guard.config.json"), "utf8"));
+	} catch {}
+	const extendsIt = Array.isArray(config?.extends) && config.extends.some((e) => path.resolve(target, ".stack-agent", e) === path.resolve(dest));
+	if (config && !extendsIt) pending.push(`.stack-agent/guard.config.json does not use ${SHARED_RULES}; add "extends": ["shared-rules.json"] to it`);
+	return { pending, notes };
+}
+
 export function init(target, preset = "generic") {
 	const report = [];
 	for (const [tool, src] of vendoredFiles()) {
@@ -252,7 +310,7 @@ export function init(target, preset = "generic") {
 }
 
 function main(argv) {
-	const args = parseArgs(argv, { flags: ["check", "help", "list-presets"], options: ["preset"] });
+	const args = parseArgs(argv, { flags: ["check", "help", "list-presets"], options: ["preset", "shared-rules"] });
 	if (args.help) return { code: 0, text: USAGE };
 	if (args["list-presets"]) return { code: 0, text: listPresets().join("\n") };
 	if (args._.length > 1) throw new ConfigError("give at most one target directory");
@@ -265,9 +323,13 @@ function main(argv) {
 	if (!args.check && recorded && recorded !== preset)
 		throw new ConfigError(`this repo was set up with preset ${recorded}; mixing in ${preset} would keep ${recorded}'s configs. To switch, delete ${PRESET_MARKER} and the .stack-agent/*.json files you want replaced, then rerun`);
 	const lines = args.check ? [] : [`preset: ${preset}`, ...init(target, preset)];
-	const pending = pendingSetup(target);
+	// the shared rules are refreshed like the tools: from --shared-rules, or from the source recorded last time
+	const sharedFrom = args["shared-rules"] ?? (!args.check && sharedRulesSource(target) && fs.existsSync(sharedRulesSource(target)) ? sharedRulesSource(target) : null);
+	if (sharedFrom && !args.check) lines.push(vendorSharedRules(target, sharedFrom));
+	const shared = sharedRulesStatus(target);
+	const pending = [...pendingSetup(target), ...shared.pending];
 	lines.push(pending.length ? `\nsetup unfinished in ${toPosix(target)}:\n${pending.map((p) => "  - " + p).join("\n")}` : `\nsetup complete in ${toPosix(target)}`);
-	const notes = [];
+	const notes = shared.notes.map((n) => `  - ${n}`);
 	const missing = missingRules(target);
 	if (missing.length) {
 		const from = toPosix(path.join(PRESETS_DIR, recorded && listPresets().includes(recorded) ? recorded : preset, "guard.config.json"));

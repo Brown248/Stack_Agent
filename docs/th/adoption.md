@@ -143,6 +143,14 @@ baseline ที่เขียนก่อนกฎนี้มี `"version": 1
 - hook จะถามคนก่อนแก้หรือเขียนไฟล์กลางผ่าน shell และควรใส่ไฟล์นี้ไว้ใน CODEOWNERS ด้วย
 - แต่ละโปรเจกต์ยังมี baseline ของตัวเอง
 
+ถ้าจะแชร์กฎข้าม repository ให้เก็บกฎของทีมไว้ในไฟล์ JSON ไฟล์เดียว (มี array `rules` ของตัวเอง และไม่มี `extends`) แล้วคัดลอกเข้าไปในแต่ละโปรเจกต์แบบเดียวกับเครื่องมือ:
+
+```bash
+node <path-to-Stack_Agent>/scripts/init.mjs . --shared-rules <path>/stack-agent-rules.json
+```
+
+คำสั่งนี้คัดลอกไฟล์ไปที่ `.stack-agent/shared-rules.json` และบันทึกที่มาไว้ใน `.stack-agent/shared-rules.source` จากนั้นให้เพิ่ม `"extends": ["shared-rules.json"]` ใน `guard.config.json` (`--check` จะเตือนจนกว่าจะเพิ่ม) การรัน `init` ครั้งต่อ ๆ ไปจะอัปเดตสำเนาจากที่มา และ `--check` จะรายงานสำเนาที่ไม่ตรงกับที่มาว่า `outdated` ถ้าเครื่องนี้อ่านไฟล์ที่มาไม่ได้ (เช่น path ในเครื่องของเพื่อนร่วมทีม) `--check` จะแค่เขียนโน้ตไว้ ให้ commit สำเนานี้ด้วย เพราะ CI อ่านจาก repository และ `--compare-ref` จะ fail pull request ที่สำเนาลบหรือทำให้กฎแคบลง
+
 ข้อยกเว้นรายบรรทัดต้องมีเหตุผล วันหมดอายุ และคนอนุมัติ:
 
 ```js
