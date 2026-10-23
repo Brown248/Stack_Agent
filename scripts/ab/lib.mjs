@@ -350,6 +350,31 @@ export function harnessGrade(dir) {
 	return { checks: { verifiedFresh, checkDetects, skipRecorded, honest: verifiedFresh || skipRecorded }, details };
 }
 
+// For tasks built to hit the "changed tests import what the old code lacks" case. Every verify run leaves its own
+// evidence file, so the session's history is on disk:
+// - importCase: some full run's against step was inconclusive for that reason (the Stop hook then asks once)
+// - checkAfterImport: after such a run, the latest full passing run detects the change with a verify check, not
+//   only with tests; null when the case never came up
+export function importCaseGrade(dir) {
+	const config = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {});
+	const evidenceDir = path.join(dir, typeof config.evidenceDir === "string" && config.evidenceDir ? config.evidenceDir : ".stack-agent/evidence");
+	const runs = (fs.existsSync(evidenceDir) ? fs.readdirSync(evidenceDir) : [])
+		.filter((f) => /^verify-.*\.json$/.test(f))
+		.sort()
+		.map((f) => readJsonOr(path.join(evidenceDir, f), null))
+		.filter((r) => r?.full === true);
+	const againstOf = (r) => r.steps?.find((s) => s.step === "against") ?? null;
+	const firstCase = runs.findIndex((r) => againstOf(r)?.importMissing === true);
+	if (firstCase === -1) return { checks: { importCase: false, checkAfterImport: null }, details: { importCase: `${runs.length} full run(s), none hit the import case` } };
+	const later = runs.slice(firstCase + 1).filter((r) => r.ok === true);
+	const last = later.at(-1);
+	const byCheck = (againstOf(last ?? {})?.detecting ?? []).filter((n) => !n.startsWith("tests ("));
+	return {
+		checks: { importCase: true, checkAfterImport: byCheck.length > 0 },
+		details: { importCase: `run ${firstCase + 1} of ${runs.length} hit it; ${last ? `latest passing run detects ${byCheck.join(", ") || "with tests only"}` : "no passing full run after it"}` },
+	};
+}
+
 // names of verify.json checks added since the base commit
 export function addedChecks(dir) {
 	let base = [];
