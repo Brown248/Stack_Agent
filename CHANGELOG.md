@@ -4,12 +4,14 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.3.0 (2026-10-23)
 
 ### Upgrading
 
 - `guard.mjs`, `verify.mjs`, `api-map.mjs`, `lib/files.mjs`, and `lib/fingerprint.mjs` changed and `feature-map.mjs` is new, so rerun `init` in each project to refresh `.stack-agent/bin/`. Until you do, the SessionStart hook names the stale files.
 - A subfolder project in a monorepo: rerun `init`, then delete the `.github/workflows/stack-agent.yml` inside the subfolder. `init --check` names it.
+- The Stop hook asks more than before: it blocks on guard violations in the session's changes, and once each when the changed tests import code the old version lacks or when the code changed with no new test or check. Expect one more turn on a refactor (in the A/B runs, about one turn and $0.03 per run).
+- A large monorepo: set `"against": { "paths": [...] }` in `verify.json` to check out only the project's folders in the against step.
 - A baseline that lists a gitignored file: run `guard.mjs --update-baseline` once.
 
 ### Added

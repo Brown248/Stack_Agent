@@ -4,12 +4,14 @@
 
 [English](CHANGELOG.md)
 
-## ยังไม่ออกรุ่น
+## 0.3.0 (2026-10-23)
 
 ### อัปเกรด
 
 - `guard.mjs`, `verify.mjs`, `api-map.mjs`, `lib/files.mjs` และ `lib/fingerprint.mjs` มีการเปลี่ยนแปลง และมี `feature-map.mjs` เพิ่มเข้ามา ให้รัน `init` ซ้ำในทุกโปรเจกต์เพื่ออัปเดต `.stack-agent/bin/` ระหว่างที่ยังไม่ได้รัน SessionStart hook จะแจ้งชื่อไฟล์ที่เก่า
 - โปรเจกต์ที่อยู่ใน subfolder ของ monorepo: รัน `init` ซ้ำ แล้วลบ `.github/workflows/stack-agent.yml` ที่อยู่ใน subfolder `init --check` จะบอกชื่อไฟล์นี้
+- Stop hook ถามมากกว่าเดิม: บล็อกเมื่อการแก้ใน session ผิดกฎ guard และถามหนึ่งครั้งเมื่อเทสที่เปลี่ยน import โค้ดที่รุ่นเก่าไม่มี หรือเมื่อโค้ดเปลี่ยนโดยไม่มีเทสหรือ check ใหม่ refactor จะใช้เพิ่มอีกหนึ่ง turn (ใน A/B ราวหนึ่ง turn และ $0.03 ต่อรอบ)
+- monorepo ขนาดใหญ่: ตั้ง `"against": { "paths": [...] }` ใน `verify.json` เพื่อให้ขั้น against checkout เฉพาะ folder ของโปรเจกต์
 - baseline ที่มีไฟล์ที่ gitignore ไว้: รัน `guard.mjs --update-baseline` หนึ่งครั้ง
 
 ### เพิ่ม
