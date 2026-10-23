@@ -16,6 +16,7 @@
 
 - `run.mjs --judge MODEL` ให้คะแนน `rubric` ของ task (เกณฑ์ที่ script ตรวจไม่ได้) ด้วย `agents/judge.md` บนสำเนาแบบ blind ของแต่ละรอบ มี rubric ให้ `endpoint`, `item-note` และ `dup-name`
 - `scripts/bench-hooks.mjs` จับเวลา fingerprint, Stop hook และการ checkout ของขั้น against บน repository จำลอง ผลอยู่ใน design notes
+- task A/B สำหรับ preset อื่น ได้แก่ `lib-maxlength` (library: probe build package แล้ว import แบบผู้ใช้), `web-roundup` (frontend-web: probe เปิด dev server แล้วตรวจหน้าเว็บและโค้ดที่ serve) และ `job-skip-blank` (generic: probe รัน data job กับ CSV ของตัวเอง) ทุกตัวมี rubric สำหรับ `--judge` และ `withServer` ใน `scripts/ab/lib.mjs` รับ script ของ server, path ที่ใช้เช็กว่าพร้อม และตัวเลือกว่าจะเตรียมฐานข้อมูลหรือไม่
 - icon ของ plugin
 
 ### เปลี่ยนแปลง
@@ -28,6 +29,7 @@
 - template ของ CI เดิมรันตอน push เฉพาะ `main` repository ที่ default branch เป็น `master`, `develop` หรือชื่ออื่น จึงมี CI เฉพาะตอนเปิด pull request ตอนนี้ `init` เขียน default branch จาก `origin/HEAD` ลงไป ถ้าไม่มี `init --check` จะเขียนโน้ตว่ายังไม่รู้ชื่อ branch และ `--check` ยังเขียนโน้ตเมื่อ workflow ที่มีอยู่แล้วไม่มี default branch ใน `branches`
 - guard และแผนที่ API อ่านเฉพาะไฟล์ที่ git จะ commit ไฟล์ `.env` หรือไฟล์ key ที่ gitignore ไว้จึงไม่ทำให้ guard ในเครื่อง fail ขณะที่ CI ผ่านอีก และ `--update-baseline` ไม่เขียนชื่อไฟล์นั้นลง baseline ที่ commit อีก baseline ที่มีไฟล์แบบนั้นอยู่แล้วจะแสดงเป็น `improved` ให้รัน `--update-baseline` เพื่อเอาออก ถ้าไม่ได้อยู่ใน git จะสแกนทุกไฟล์เหมือนเดิม
 - guard หลังแก้ไฟล์ทำงานกับ NotebookEdit ด้วย
+- `evals/scaffold.mjs` (ใช้โดย eval และ A/B harness) เดิมข้าม folder `data/` ของทุกตัวอย่าง ซึ่งเป็นที่เก็บ CSV ขาเข้าของ `sample-generic` ทำให้ verify ในสำเนาที่ scaffold ไม่มีวันผ่าน ตอนนี้ข้ามเฉพาะไฟล์ฐานข้อมูลใน `data/`
 - ไฟล์ที่ใหญ่เกิน 1 MB ที่มีกฎครอบคลุม จะถูกแจ้งชื่อเป็น warning แทนการข้ามเงียบ ๆ
 - Monorepo: โปรเจกต์ที่อยู่ใน subfolder เดิม `init` เขียน workflow ไว้ใน subfolder นั้น ซึ่ง GitHub ไม่เคยรัน ตอนนี้จะเขียน `.github/workflows/stack-agent-<folder>.yml` ไว้ที่ root ของ repository โดยรันใน folder ของโปรเจกต์ และรันเฉพาะเมื่อไฟล์ของโปรเจกต์เปลี่ยน `init --check` จะแจ้งถ้ามี workflow ค้างใน subfolder ถ้าเคยติดตั้งโปรเจกต์ใน subfolder ไว้ ให้รัน `init` ซ้ำแล้วลบไฟล์เก่า
 - เครื่องมือที่คัดลอกไว้ซึ่งต่างจากของ plugin จะถูกแจ้งชื่อตอนเริ่มทุก session พร้อมคำสั่งที่ใช้อัปเดต เพราะ hook รัน script ของ plugin ส่วน CI รัน `.stack-agent/bin` ชุดที่เก่าจึงทำให้ทั้งสองตัดสินต่างกันโดยไม่มีใครรู้

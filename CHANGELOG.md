@@ -16,6 +16,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 - `run.mjs --judge MODEL` scores a task's `rubric` (criteria a script cannot check) with `agents/judge.md` on a blind copy of each run. Rubrics for `endpoint`, `item-note`, and `dup-name`.
 - `scripts/bench-hooks.mjs` times the fingerprint, the Stop hook, and the against step's checkout on synthetic repositories. Results are in the design notes.
+- A/B tasks for the other presets: `lib-maxlength` (library: the probe builds the package and imports it as a consumer), `web-roundup` (frontend-web: the probe starts the dev server and checks the page and the served code), and `job-skip-blank` (generic: the probe runs the data job on its own CSV). Each has a rubric for `--judge`. `withServer` in `scripts/ab/lib.mjs` takes the server script, the ready path, and whether to set up the database.
 - A plugin icon.
 
 ### Changed
@@ -28,6 +29,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 - The CI template ran on pushes only to `main`, so a repository whose default branch is `master`, `develop`, or anything else got CI on pull requests only. `init` now writes the default branch from `origin/HEAD`; without it, `init --check` notes that the branch is not known yet. `--check` also notes an existing workflow whose `branches` leaves out the default branch.
 - The guard and the API map read only the files git would commit, so a gitignored `.env` or key file no longer fails the guard locally while CI passes, and `--update-baseline` no longer writes its name into the committed baseline. A baseline that already lists such a file shows it as `improved`; run `--update-baseline` to drop it. Outside git, every file is scanned as before.
 - The after-edit guard runs on NotebookEdit too.
+- `evals/scaffold.mjs` (used by the evals and the A/B harness) left out every example's `data/` folder, which holds `sample-generic`'s input CSV, so verify could never pass in a scaffolded copy of it. Only database files in `data/` are left out now.
 - Files over 1 MB that a rule covers are named in a warning instead of being skipped silently.
 - Monorepos: for a project in a subfolder, `init` wrote the workflow inside that subfolder, where GitHub never runs it. It now writes `.github/workflows/stack-agent-<folder>.yml` at the top of the repository, running in the project's folder and only when its files change. `init --check` names a workflow left in the subfolder. If you set up a subfolder project before, rerun `init` and delete the old file.
 - Vendored tools that differ from the plugin's copy are named at the start of every session, with the command that refreshes them. The hooks run the plugin's scripts and CI runs `.stack-agent/bin`, so a stale copy could make them disagree without anyone noticing.

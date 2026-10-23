@@ -236,13 +236,14 @@ function killTree(child) {
 
 // Starts the project's server on its own port and database (not the verify config's), runs fn(base),
 // and always kills the process tree. Returns { ok, detail } from fn, or a failure for setup problems.
-export async function withServer(dir, fn, extraEnv = {}) {
+// The defaults fit sample-backend; another example names its server script and a path that answers once it is up.
+export async function withServer(dir, fn, extraEnv = {}, { server = "src/server.js", readyPath = "/health", migrate = true } = {}) {
 	const port = await freePort();
 	const env = { ...process.env, ...extraEnv, PORT: String(port), DB_FILE: path.join(dir, "data", `probe-${process.pid}-${Date.now()}.db`) };
 	fs.mkdirSync(path.join(dir, "data"), { recursive: true });
-	const migrated = spawnSync(process.execPath, ["scripts/migrate.mjs", "up"], { cwd: dir, env, encoding: "utf8", timeout: 60000 });
+	const migrated = !migrate ? { status: 0 } : spawnSync(process.execPath, ["scripts/migrate.mjs", "up"], { cwd: dir, env, encoding: "utf8", timeout: 60000 });
 	if (migrated.status !== 0) return { ok: false, detail: `migrate failed: ${(migrated.stderr || migrated.stdout || String(migrated.error)).slice(-300)}` };
-	const child = spawn(process.execPath, ["src/server.js"], { cwd: dir, env, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+	const child = spawn(process.execPath, [server], { cwd: dir, env, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
 	let log = "";
 	child.stdout.on("data", (d) => (log += d));
 	child.stderr.on("data", (d) => (log += d));
@@ -253,7 +254,7 @@ export async function withServer(dir, fn, extraEnv = {}) {
 		let ready = false;
 		for (let i = 0; i < 80 && !ready && !exited; i++) {
 			try {
-				await fetch(`${base}/health`, { signal: AbortSignal.timeout(2000) });
+				await fetch(`${base}${readyPath}`, { signal: AbortSignal.timeout(2000) });
 				ready = true;
 			} catch {
 				await new Promise((r) => setTimeout(r, 250));

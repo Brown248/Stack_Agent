@@ -17,8 +17,9 @@ export function scaffold(target, root = defaultRoot, example = "sample-backend",
 	const sample = path.join(root, "examples", example);
 	fs.cpSync(sample, target, {
 		recursive: true,
-		// data/ holds local SQLite files; the eval starts from an empty, unmigrated database.
-		filter: (src) => !/[\\/]\.stack-agent[\\/](evidence|bin)([\\/]|$)/.test(src) && !/[\\/]__pycache__([\\/]|$)/.test(src) && !/^data([\\/]|$)/.test(path.relative(sample, src)),
+		// sample-backend keeps local SQLite files in data/, and the eval starts from an empty, unmigrated database; other
+		// examples keep committed input there (sample-generic's expenses CSV), so only database files are left out
+		filter: (src) => !/[\\/]\.stack-agent[\\/](evidence|bin)([\\/]|$)/.test(src) && !/[\\/]__pycache__([\\/]|$)/.test(src) && !/^data[\\/].*\.(db|sqlite3?)(-wal|-shm|-journal)?$/i.test(path.relative(sample, src)),
 	});
 	execFileSync(process.execPath, [path.join(root, "scripts", "init.mjs"), target], { stdio: "ignore" });
 	const verifyFile = path.join(target, ".stack-agent", "verify.json");
