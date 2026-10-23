@@ -354,7 +354,7 @@ export function harnessGrade(dir) {
 export function addedChecks(dir) {
 	let base = [];
 	try {
-		base = JSON.parse(gitIn(dir, "show", "HEAD:.stack-agent/verify.json")).checks ?? [];
+		base = JSON.parse(gitIn(dir, "show", "HEAD:.stack-agent/verify.json", "--")).checks ?? [];
 	} catch {}
 	const cur = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {}).checks ?? [];
 	return cur.filter((c) => !base.some((b) => b.name === c.name));

@@ -463,7 +463,7 @@ function sortCounts(counts) {
 
 // "./" makes git read rel from root, not from the top of the repository, so a project in a subfolder compares its own files
 function gitShow(root, ref, rel) {
-	const r = spawnSync("git", ["show", `${ref}:./${rel}`], { cwd: root, encoding: "utf8" });
+	const r = spawnSync("git", ["show", `${ref}:./${rel}`, "--"], { cwd: root, encoding: "utf8" });
 	return r.status === 0 ? r.stdout : null;
 }
 

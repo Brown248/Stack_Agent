@@ -134,7 +134,7 @@ export function sourceReader(root, ref) {
 	const prefix = toPosix(path.relative(fs.realpathSync.native(top.stdout.trim()), fs.realpathSync.native(root)));
 	return (rel) => {
 		if (!cache.has(rel)) {
-			const r = git(root, ["show", `${ref}:${prefix ? prefix + "/" : ""}${toPosix(rel)}`]);
+			const r = git(root, ["show", `${ref}:${prefix ? prefix + "/" : ""}${toPosix(rel)}`, "--"]);
 			cache.set(rel, r.status === 0 ? r.stdout : null);
 		}
 		return cache.get(rel);
@@ -223,7 +223,7 @@ export function deletedReader(root) {
 		if (git(root, ["rev-parse", "--verify", "--quiet", `${commit}^{commit}`]).status !== 0) return null;
 		const name = `${prefix ? prefix + "/" : ""}${path.posix.normalize(toPosix(rel))}`;
 		if (git(root, ["cat-file", "-e", `${commit}:${name}`]).status === 0) return null;
-		const r = git(root, ["show", `${commit}^1:${name}`]);
+		const r = git(root, ["show", `${commit}^1:${name}`, "--"]);
 		return r.status === 0 ? r.stdout : null;
 	};
 }

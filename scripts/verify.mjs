@@ -529,8 +529,14 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	if (!ref) return { ...step, skipped: "no commit to compare with yet" };
 	step.ref = ref;
 	const prefix = toPosix(path.relative(realpath(top), realpath(root)));
-	const oldText = gitRun(top, ["show", `${ref}:${prefix ? prefix + "/" : ""}${configRel}`]);
-	if (oldText.status !== 0) return { ...step, skipped: `${configRel} does not exist at ${ref}` };
+	// "--" says the argument is a revision, so git does not also try it as a file name; without it a full hash plus a
+	// long project path passes Windows' 260-character limit and git fails with "Filename too long"
+	const oldText = gitRun(top, ["show", `${ref}:${prefix ? prefix + "/" : ""}${configRel}`, "--"]);
+	if (oldText.status !== 0) {
+		const err = oldText.stderr.trim();
+		if (/does not exist|exists on disk, but not in|bad revision|invalid object name/i.test(err) || !err) return { ...step, skipped: `${configRel} does not exist at ${ref}` };
+		return conclude(step, config, `could not read ${configRel} at ${ref}: ${err.split("\n")[0]}`);
+	}
 	let oldConfig;
 	try {
 		oldConfig = JSON.parse(oldText.stdout);
