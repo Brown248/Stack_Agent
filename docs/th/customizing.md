@@ -30,7 +30,7 @@ agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (ผูก scripts/hooks/*.mjs เข้ากับ Claude Code)
 skills/<name>/    SKILL.md หนึ่งไฟล์ต่อ skill และ script ที่ skill เรียกใช้
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
-                  review-findings.mjs, review-worktree.mjs, lib/, hooks/
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test)
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),
@@ -168,3 +168,25 @@ node scripts/ab/inspect.mjs <out>/runs
 จะแสดง skill ที่เรียก, feedback จาก Stop hook ว่ามาก่อนหรือหลังการแก้ `verify.json` ครั้งแรก, การรัน `verify.mjs` และไฟล์ที่แก้
 
 **เพิ่ม task** สร้าง `scripts/ab/tasks/<name>.mjs` ที่ export `name`, `prompt`, `probe(dir)` และ `grade(dir)` โดย `probe` คืน `{ ok, detail }` ให้เปิดเซิร์ฟเวอร์ด้วย `withServer` และเรียกด้วย `call` จาก `scripts/ab/lib.mjs` เพื่อให้ harness เป็นเจ้าของพอร์ตและฐานข้อมูล `grade` คืน `{ checks, details }` โดยค่าทุกตัวใน `checks` เป็น boolean ที่ตารางสรุปนับเป็น `3/3` เริ่มจาก `commonGrade(dir)` (เทสผ่าน, guard ผ่าน, หลักฐานสดและครบ) ตรวจ task ด้วย `--dry-run` และเพิ่มเคสใน `tests/ab.test.mjs` ว่าสำเนาที่ไม่แก้ต้องไม่ผ่านและคำตอบที่เขียนเองต้องผ่าน งานแบบรายงานบั๊กให้ export `setup(dir)` ที่ฝังบั๊กด้วย `plantBug(dir, edits, message)` จาก `scripts/ab/lib.mjs` ก่อนเริ่ม session commit นั้นจะติด tag `ab-start` และนับเป็นจุดเริ่ม งานที่ใช้ได้เฉพาะเมื่อมี plugin ให้ export `arms` (เช่น `["full"]`) และงานที่ต้องใช้ tool มากกว่าค่าเริ่มต้นให้ export `allowedTools` และ `addDirs()` task สามารถ export `rubric` ซึ่งเป็น array ของคำถามแบบใช่หรือไม่เกี่ยวกับโค้ดที่ต้องใช้ดุลยพินิจตอบ สำหรับ `--judge` ส่วนอะไรที่ script ตรวจได้ให้อยู่ใน `grade`
+
+## Micro-test (วัดถ้อยคำของข้อความเดียว)
+
+A/B หนึ่งรอบวัดทั้ง session ราว $0.25 ถึง $0.45 ต่อรอบ ถ้าแค่จะเทียบถ้อยคำของข้อความเดียว เช่นคำขอของ Stop hook หรือย่อหน้าหนึ่งใน skill แบบนั้นเกินจำเป็น `scripts/micro/run.mjs` ส่งสถานการณ์กับถ้อยคำหนึ่งแบบให้ `claude` เป็นการเรียกครั้งเดียวที่ไม่มีเครื่องมือ ให้คะแนนคำตอบด้วย script แล้วรันถ้อยคำแต่ละแบบซ้ำหลายรอบ คู่กับ **control** ที่ไม่ได้คำแนะนำอะไรเลย ถ้อยคำต้องชนะ control ไม่ใช่แค่ดูดี obra/superpowers ซึ่งเป็นต้นแบบของวิธีนี้ (MIT) เคยวัดเจอคำห้ามที่ได้ผลแย่กว่าไม่พูดอะไรเลย
+
+```bash
+npm run micro -- --case import-request --model sonnet --budget 0.05 --runs 5 --dry-run
+```
+
+| ตัวเลือก | ความหมาย |
+| --- | --- |
+| `--case NAME` | โมดูล case ใน `scripts/micro/cases/` ต้องใส่ |
+| `--model`, `--budget USD` | ต้องใส่ทั้งคู่ budget คือเพดานต่อการเรียกหนึ่งครั้งที่ส่งเป็น `--max-budget-usd` ไม่มีค่าเริ่มต้น |
+| `--runs N` | จำนวนครั้งต่อ variant ตั้งแต่ 1 ถึง 50 ค่าเริ่มต้น 5 |
+| `--variant NAME` | รันเฉพาะ variant เหล่านี้ (ใส่ซ้ำได้) control รันเสมอ |
+| `--out DIR` | ที่เก็บ `results.json` (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |
+| `--dry-run` | แสดง prompt ของทุก variant และค่าใช้จ่ายสูงสุดของรอบนั้น ไม่เรียก `claude` |
+| `--json` | แสดงผลเป็น JSON |
+
+**ค่าใช้จ่าย** สูงสุดคือ runs × variants × budget ซึ่งแสดงก่อนการเรียกครั้งแรก การเรียกแต่ละครั้งรันในโฟลเดอร์ว่างที่สร้างใหม่ ด้วย `--tools ""`, `--no-session-persistence`, `--setting-sources project,local` และ `--strict-mcp-config` จึงมีแค่ prompt ที่ไปถึง model การเรียกไล่เป็นรอบ (ทุก variant หนึ่งครั้งแล้ววนใหม่) อะไรที่เปลี่ยนไประหว่างรันจึงกระทบทุก variant เท่ากัน สรุปผลแสดงค่าเฉลี่ย คะแนนต่ำสุดและสูงสุด จำนวน error และค่าใช้จ่ายเฉลี่ยของแต่ละ variant การเรียกที่ล้มเหลวนับเป็น error ไม่นับเป็นคะแนน 0
+
+**เพิ่ม case** สร้าง `scripts/micro/cases/<name>.mjs` ที่ default export: `variants` (`control: null` และหนึ่งรายการต่อถ้อยคำหนึ่งแบบ), `prompt(guidance)` (สถานการณ์ พร้อมถ้อยคำเมื่อไม่ใช่ `null`), `score(text)` (ตัวเลข หรือ boolean ที่นับเป็น 1 หรือ 0), `better` (`"higher"` หรือ `"lower"`) และ `description` ให้ import ข้อความที่จะทดสอบจากโค้ดที่ส่งมันจริง แบบที่ `import-request` ทำกับ `importMessage` ของ Stop hook เพื่อให้ case วัดสิ่งที่ปล่อยออกไปจริง micro-test ตอบได้แค่ว่าถ้อยคำเปลี่ยนสิ่งที่ model บอกว่าจะทำหรือไม่ ส่วน agent จะทำจริงใน session หรือเปล่ายังต้องดูจาก A/B

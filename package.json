@@ -11,6 +11,7 @@
     "test": "node --test \"tests/**/*.test.mjs\"",
     "validate": "claude plugin validate . --strict",
     "ab": "node scripts/ab/run.mjs",
+    "micro": "node scripts/micro/run.mjs",
     "sample:guard": "node scripts/guard.mjs --root examples/sample-backend",
     "sample:verify": "node scripts/verify.mjs --root examples/sample-backend",
     "sample:api-map": "node scripts/api-map.mjs --root examples/sample-backend",

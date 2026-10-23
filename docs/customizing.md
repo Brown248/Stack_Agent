@@ -30,7 +30,7 @@ agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (wires scripts/hooks/*.mjs into Claude Code)
 skills/<name>/    one SKILL.md per skill, plus any scripts it calls
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
-                  review-findings.mjs, review-worktree.mjs, lib/, hooks/
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests)
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),
@@ -168,3 +168,25 @@ node scripts/ab/inspect.mjs <out>/runs
 It lists the skills invoked, the Stop-hook feedback and whether it came before or after the first edit to `verify.json`, the `verify.mjs` runs, and the files edited.
 
 **Add a task.** Drop `scripts/ab/tasks/<name>.mjs` that exports `name`, `prompt`, `probe(dir)` and `grade(dir)`. `probe` returns `{ ok, detail }`; start the server with `withServer` and call it with `call` from `scripts/ab/lib.mjs`, so the harness owns the port and database. `grade` returns `{ checks, details }`, where every value in `checks` is a boolean that the summary counts as `3/3`; start from `commonGrade(dir)` (tests pass, guard ok, fresh and full evidence). A bug-report task exports `setup(dir)`, which plants the bug with `plantBug(dir, edits, message)` from `scripts/ab/lib.mjs` before the session; that commit is tagged `ab-start` and counts as the starting point. A task that only makes sense with the plugin exports `arms` (for example `["full"]`), and one that needs more than the default tools exports `allowedTools` and `addDirs()`. A task can export `rubric`, an array of yes/no questions about the code that only judgment can answer, for `--judge`; keep anything a script can check in `grade`. Check the task with `--dry-run`, and add a case to `tests/ab.test.mjs` that an untouched copy fails and a hand-written solution passes.
+
+## Micro-tests (wording of one message)
+
+An A/B run measures a whole session for about $0.25 to $0.45 a run. To compare wordings of one message, such as a Stop hook request or a paragraph of a skill, that is more than you need. `scripts/micro/run.mjs` sends a scenario and one wording to `claude` as a single call with no tools, scores the reply with a script, and repeats each wording several times next to a **control** that gets no guidance at all. A wording has to beat the control, not just look reasonable: obra/superpowers, whose method this follows (MIT), measured a prohibition that did worse than saying nothing.
+
+```bash
+npm run micro -- --case import-request --model sonnet --budget 0.05 --runs 5 --dry-run
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--case NAME` | Case module in `scripts/micro/cases/`. Required. |
+| `--model`, `--budget USD` | Both required. The budget is a per-call cap passed as `--max-budget-usd`; there is no default. |
+| `--runs N` | Calls per variant, 1 to 50. Default 5. |
+| `--variant NAME` | Run only these variants (repeat it). The control always runs. |
+| `--out DIR` | Where to write `results.json` (default: a new folder under the system temp dir). |
+| `--dry-run` | Print every variant's prompt and the most the run can cost. Never calls `claude`. |
+| `--json` | Print the results as JSON. |
+
+**Cost.** At most runs × variants × budget, printed before the first call. Each call runs in a new empty folder with `--tools ""`, `--no-session-persistence`, `--setting-sources project,local`, and `--strict-mcp-config`, so only the prompt reaches the model. Calls go in rounds (every variant once, then again), so a drift during the run hits every variant alike. The summary shows the mean, the lowest and highest score, the errors, and the mean cost per variant; a failed call counts as an error, never as a score of 0.
+
+**Add a case.** Drop `scripts/micro/cases/<name>.mjs` with a default export: `variants` (`control: null` plus one entry per wording), `prompt(guidance)` (the scenario, with the wording when it is not `null`), `score(text)` (a number, or a boolean counted as 1 or 0), `better` (`"higher"` or `"lower"`), and a `description`. Import the text under test from the code that sends it, as `import-request` does with the Stop hook's `importMessage`, so the case measures what ships. A micro-test answers whether a wording changes what the model says it will do; whether the agent then does it in a real session is still a question for an A/B run.

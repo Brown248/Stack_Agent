@@ -2,7 +2,7 @@
 
 Ideas Stack Agent decided not to adopt, and why. `design-notes.md` says why each piece exists; this page says why some pieces do not, so the same request does not have to be argued again. If you fork Stack Agent and your team wants one of these, nothing stops you: the reasons below are about a template for any project, not about your project.
 
-Each entry gives the idea, where it came from, the reason, and what Stack Agent does instead. To reopen one, show what changed: a measured failure the current design misses, or a reason below that no longer holds.
+Ideas from the original talks that were left out (auto-merge, browser control, cloud agents, rules from one codebase) are under "Left out on purpose" in [design-notes.md](design-notes.md); this page holds the ones from other projects. Each entry gives the idea, where it came from, the reason, and what Stack Agent does instead. To reopen one, show what changed: a measured failure the current design misses, or a reason below that no longer holds.
 
 [ภาษาไทย](th/out-of-scope.md)
 
