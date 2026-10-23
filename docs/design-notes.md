@@ -266,7 +266,31 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 | 100,000 | 1.1 s | 1.1 s | 1.4 s | 30.2 s | 10.6 s | 2.8 MB |
 
 - The Stop hook stays far inside its 30-second timeout at 100,000 files.
-- The against step is the cost that grows. It checks out the whole repository at the reference commit, and it runs only on a full verify run with new checks or changed tests, but there it added about 7 s at 20,000 files and about 41 s at 100,000. A sparse checkout of the project's folder would cut it for a monorepo; it is not built yet. The files here are tiny, so a real repository of the same file count would copy more data.
+- The against step is the cost that grows. It checks out the whole repository at the reference commit, and it runs only on a full verify run with new checks or changed tests, but there it added about 7 s at 20,000 files and about 41 s at 100,000. `against.paths` (below) cuts it for a monorepo. The files here are tiny, so a real repository of the same file count would copy more data.
+
+**Sparse checkout (`against.paths`, same day).** `bench-hooks.mjs --files 100000 --sparse`: the project in `app/` (100 files) beside 100,000 others. Full checkout 79.4 s and removal 21.4 s; with `against.paths` (the project's folder only) 0.55 s and 0.09 s. The full checkout was slower than the 30.2 s above because the test suite ran on the same machine at the same time; the sparse numbers came from the same run.
+
+## Judge criterion and evals (2026-10-23)
+
+- **Reworded criterion.** `job-skip-blank`'s first criterion asked that "job.mjs only reads files, calls the transform, and prints", and the judge split: 3/3 PASS in the first round, 0/3 in the rerun, where every agent counted the left-out rows in `job.mjs` with the transform's predicate. Reworded to ask where the rule is written (once, in `src/transform.js`; `job.mjs` may call it to filter or count), the same judge (haiku) re-scored all six finished runs: 6/6 PASS. $0.03.
+- **First eval run of a new case.** `reflect-lessons` in WSL2 (Claude Code 2.1.304, 1 run per arm, $0.29 with judging): with the plugin 1.0 (all three graders), without 0.67. The bare run proposed edits but without quoting the notes as evidence (`table-with-evidence` failed, 3 of 3 judge votes); both arms routed the repeated SQL correction to a check and waited for approval. One run per arm, so read it as a smoke test. `debug-blank-name` and `correct-error-body` grant Bash, and this machine's `~/.docker` holds Docker Desktop's links, which stop a Bash-granting eval (see the table above); they were not run.
+
+## Behavioral A/B: the new Stop-hook requests, with a bare arm (2026-10-23)
+
+**Method.** `scripts/ab/run.mjs`, plugin at `b2d7f41` (the import request with its new wording, the coverage request, and the guard in the Stop hook), Claude Code 2.1.309, Sonnet, at most $1 per run, plugin arm (`full`) and no plugin (`none`), 3 runs per task and arm, short run folder, all 12 valid. Agents $1.27, judge $0.03.
+
+| Task | Arm | Correct | Verified, evidence matches | `checkDetects` | Hit the import case / then a detecting check | Stop-hook requests | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `job-new-export` | plugin | 3/3 | 3/3 | 3/3 | 3/3 / 3/3 | "no evidence", then the import request, in all 3 | $0.163 |
+| | none | 3/3 | 0/3 | 0/3 | - | - | $0.098 |
+| `refactor-items` | plugin | 3/3 | 3/3 | 0/3 (nothing new to test) | - | the coverage request in all 3 (after "no evidence" in 2) | $0.099 |
+| | none | 3/3 | 1/2 | 0/2 | - | - | $0.065 |
+
+- **The import request now works across runs:** every plugin run of `job-new-export` hit the case and then added a check that calls `monthlyTotals` directly, which the against step listed as detecting (3/3; 3/3 in the 5 runs before as well, 0/4 with the first wording). The judge passed both criteria in all 6 runs of both arms.
+- **The coverage request on a refactor did what it should:** it fired in all 3 plugin runs of `refactor-items`, and each agent answered that the change was a refactor, nothing a user can observe changed, and named the existing checks that cover it, with no further tool calls. Its cost: one more turn, $0.099 per run here.
+- **Without the plugin**, no `job-new-export` run verified, and the bare arm's verification on `refactor-items` came from one agent that ran `.stack-agent/bin/verify.mjs` because it found the files in the repository (one bare run changed nothing, so 2 runs count).
+- The Stop-hook guard never fired: no run broke a rule.
+- 3 runs per cell, one model, two tasks written by the plugin's author.
 
 ## Self-review log
 
