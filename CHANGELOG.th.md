@@ -20,6 +20,7 @@
 - eval case `debug-blank-name`, `correct-error-body` และ `reflect-lessons` พร้อม `evals/plant.mjs` สำหรับ case ที่เริ่มจากประวัติใน git ส่วน `sample-review` ไม่มี case เพราะสร้าง checkout ใน sandbox ของ eval ไม่ได้ task A/B `review-spec` ใช้วัดแทน ยังไม่ได้รัน
 - `scripts/feature-map.mjs` และ skill `feature-map` สำหรับทุก preset ยกเว้น `backend-http`: `.stack-agent/feature-map.md` บอกว่าสิ่งที่ผู้ใช้ทำอยู่ตรงไหนในโค้ด (`path`, `path:line` หรือ `path#text`) และ verify check ไหนทดสอบมัน ตัวตรวจจะ fail เมื่อโค้ดไม่ตรงกับแผนที่แล้ว `init` เพิ่มไฟล์นี้ให้โปรเจกต์ใหม่ CI รันเมื่อมีไฟล์นี้ และตัวอย่างที่ไม่ใช่ backend ทั้งสี่มีแล้ว
 - skill `mine-corrections` พร้อม `scripts/mine-transcripts.mjs`: อ่าน transcript เก่าของ Claude Code ของโปรเจกต์นี้ในเครื่อง (อ่านอย่างเดียว) แสดงสิ่งที่ผู้ใช้พิมพ์หลังคำตอบของ agent และเสนอ check การแก้ skill หรือกฎ ให้การแก้ที่เกิดซ้ำข้ามหลาย session
+- กฎกลางของ guard: `"extends"` ใน `guard.config.json` ระบุไฟล์ JSON ของกฎที่หลายโปรเจกต์ใน repository เดียวกันใช้ร่วมกัน โปรเจกต์นิยามกฎกลางซ้ำไม่ได้ `--compare-ref` อ่านไฟล์กลางที่ commit ฐาน และ hook ป้องกันไฟล์เหล่านี้
 - icon ของ plugin
 
 ### เปลี่ยนแปลง

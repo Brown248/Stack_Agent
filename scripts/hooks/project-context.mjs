@@ -4,7 +4,17 @@
 // Never throws: a hook must not fail or deny because this bookkeeping could not run.
 import path from "node:path";
 import { VERIFY_CONFIG } from "../lib/fingerprint.mjs";
-import { evidenceGuard } from "./protected-paths.mjs";
+import { loadConfig } from "../guard.mjs";
+import { evidenceGuard, sharedRulesGuard } from "./protected-paths.mjs";
+
+// the files the project's guard config extends; none when the config is missing or does not load
+function sharedRuleFiles(root) {
+	try {
+		return loadConfig(path.join(root, ".stack-agent/guard.config.json")).extendedFiles ?? [];
+	} catch {
+		return [];
+	}
+}
 import { findUp } from "./read-input.mjs";
 import { ensureSessionRecord, readConfig, readStart } from "./session-record.mjs";
 
@@ -16,7 +26,9 @@ export function projectContext(input, startDir) {
 		const root = findUp(startDir ?? cwd, VERIFY_CONFIG) ?? (startDir ? findUp(cwd, VERIFY_CONFIG) : null);
 		if (!root) return { guard: none, record: () => null };
 		const start = readStart(root, input.session_id);
-		const guard = evidenceGuard(root, cwd, [start?.evidenceDir, readConfig(root).evidenceDir]);
+		const evidence = evidenceGuard(root, cwd, [start?.evidenceDir, readConfig(root).evidenceDir]);
+		const shared = sharedRulesGuard(cwd, sharedRuleFiles(root));
+		const guard = Object.assign((p) => evidence(p) ?? shared(p), { mentions: (t) => evidence.mentions(t) ?? shared.mentions(t) });
 		const record = () => {
 			try {
 				return ensureSessionRecord(root, input.session_id);

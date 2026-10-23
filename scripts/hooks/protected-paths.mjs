@@ -35,6 +35,27 @@ export function evidenceGuard(root, cwd, dirs) {
 	return guard;
 }
 
+// The shared guard files a project's guard config extends: editing one loosens the guard like editing the config.
+// Paths are matched exactly; inside an inline script, a file's name on its own counts (conservative: it may ask
+// for a script that only reads it).
+export function sharedRulesGuard(cwd, files) {
+	const win = process.platform === "win32";
+	const norm = (p) => (win ? p.toLowerCase() : p);
+	const fromMsys = (p) => (win && /^\/[a-z]\//i.test(p) ? `${p[1]}:${p.slice(2)}` : p);
+	const wanted = new Set(files.map((f) => norm(path.resolve(f))));
+	if (!wanted.size) return Object.assign(() => null, { mentions: () => null });
+	const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const names = [...new Set(files.map((f) => path.basename(f)))].map((n) => new RegExp(`(?<![\\w.-])${escape(norm(n))}(?![\\w.-])`));
+	const what = "the shared guard rules (a file guard.config.json extends)";
+	const guard = (filePath) => {
+		if (!filePath) return null;
+		const abs = norm(path.resolve(cwd, fromMsys(String(filePath).replace(/^["']|["']$/g, ""))));
+		return wanted.has(abs) ? what : null;
+	};
+	guard.mentions = (text) => (names.some((r) => r.test(norm(String(text ?? "")))) ? what : null);
+	return guard;
+}
+
 export function protectedWhat(filePath) {
 	return PROTECTED.find((p) => p.re.test(String(filePath ?? "")))?.what ?? null;
 }

@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadConfig } from "./guard.mjs";
 import { ConfigError, parseArgs, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--check] [--list-presets]
@@ -186,8 +187,17 @@ export function missingRules(target) {
 		return [];
 	}
 	// a config the guard would reject gets no advice here; the guard names what is wrong with it
-	if (!Array.isArray(config?.rules)) return [];
-	const have = new Set(config.rules.map((r) => r?.id));
+	if (!Array.isArray(config?.rules) && config?.extends === undefined) return [];
+	// rules from shared files (extends) count as the project's own
+	let rules = config.rules ?? [];
+	if (config.extends !== undefined) {
+		try {
+			rules = loadConfig(file).rules;
+		} catch {
+			return [];
+		}
+	}
+	const have = new Set(rules.map((r) => r?.id));
 	const declined = new Set(Array.isArray(config.declinedRules) ? config.declinedRules : []);
 	return universalRules().filter((id) => !have.has(id) && !declined.has(id));
 }

@@ -20,6 +20,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 - Eval cases `debug-blank-name`, `correct-error-body`, and `reflect-lessons`, with `evals/plant.mjs` for cases that start from a history. `sample-review` gets none, because its checkout cannot be made in the eval sandbox; the A/B task `review-spec` measures it. Not run yet.
 - `scripts/feature-map.mjs` and the `feature-map` skill for every preset except `backend-http`: `.stack-agent/feature-map.md` maps what a user does to where it lives (`path`, `path:line`, or `path#text`) and to the verify checks that exercise it, and the check fails when the code no longer matches. `init` adds it to new projects, CI runs it when the file exists, and the four non-backend examples have one.
 - Skill `mine-corrections` with `scripts/mine-transcripts.mjs`: reads this project's past Claude Code transcripts on the machine (read-only), lists what the user wrote after an agent reply, and proposes a check, skill edit, or rule for each correction repeated across sessions.
+- Shared guard rules: `"extends"` in `guard.config.json` lists JSON files of rules that several projects in one repository share. A project cannot redefine a shared rule, `--compare-ref` reads shared files at the base commit, and the hooks protect them.
 - A plugin icon.
 
 ### Changed

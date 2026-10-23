@@ -126,6 +126,18 @@ Import rules (`forbidden-import`, `module-boundary`) count each imported name, n
 
 Baselines written before this rule have `"version": 1` and counted statements. The guard still reads them that way and prints a note asking you to upgrade. Run `--update-baseline` on a clean tree, in a commit of its own: it writes `"version": 2` without needing `--allow-increase`, as long as no statement was added. `--compare-ref` across the upgrade compares statement counts with the old file and lists each file whose count grew under the new unit, so a reviewer can check it. A baseline version that goes down fails `--compare-ref`.
 
+**Shared rules.** Projects in one repository (a monorepo) can share rules: put them in a JSON file with its own `rules` array and list it in each project's config:
+
+```json
+{ "extends": ["../../stack-agent-rules.json"], "rules": [] }
+```
+
+- Paths are relative to the file that names them, and a shared file may extend others. Every file must be inside the repository, so CI's checkout and `--compare-ref` can read it.
+- Shared rules come first. A project adds its own rules but cannot redefine a shared one (the guard stops with a config error), so loosening a shared rule means changing the shared file.
+- `--compare-ref` reads the shared files as they were at the base commit, so a pull request that removes or narrows a shared rule fails, even when no project's config changed.
+- The hooks ask a human before an edit or a shell write to a shared file. Put it under CODEOWNERS too.
+- Each project still has its own baseline.
+
 Inline exceptions need a reason, an expiry date, and an approver:
 
 ```js

@@ -21,8 +21,70 @@ const PY_NAME_RE = /([A-Za-z_][\w.]*)(?:\s+as\s+\w+)?|\*/g;
 const ALLOW_RE = /stack-agent-allow\s+([\w-]+)((?:\s+\w+=(?:"[^"]*"|\S+))*)/;
 const DEFAULT_MAX_ALLOW_DAYS = 90;
 
+const MAX_EXTENDS_DEPTH = 5;
+
+function gitTopOf(dir) {
+	const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: dir, encoding: "utf8" });
+	return r.status === 0 ? path.resolve(r.stdout.trim()) : null;
+}
+
+// Rules shared by several projects: "extends" lists JSON files, relative to the file that names them, each with
+// its own "rules" (and optionally its own "extends"). Their rules come first; a project adds rules but cannot
+// redefine or drop a shared one, so loosening a shared rule means changing the shared file, where review sees it.
+// read(abs) returns the file's text or null; the boundary keeps every file inside the repository (or the project,
+// outside git), so CI's checkout and --compare-ref can read it too. Returns { rules, files } with files absolute.
+export function expandExtends(config, configAbs, { read, boundary, depth = 0, chain = [configAbs], strict = true }) {
+	if (config.extends === undefined) return { rules: config.rules ?? [], files: [] };
+	requireStringArray(config.extends, `extends in ${path.basename(configAbs)}`);
+	if (depth >= MAX_EXTENDS_DEPTH) throw new ConfigError(`extends is nested more than ${MAX_EXTENDS_DEPTH} levels deep (${chain.map((c) => path.basename(c)).join(" -> ")})`);
+	const rules = [];
+	const files = [];
+	for (const rel of config.extends) {
+		const abs = path.resolve(path.dirname(configAbs), rel);
+		const inside = path.relative(boundary, abs);
+		if (inside.startsWith("..") || path.isAbsolute(inside)) throw new ConfigError(`extends ${rel}: the file must be inside the repository (${boundary}), so CI and --compare-ref can read it`);
+		if (chain.includes(abs)) throw new ConfigError(`extends ${rel}: a file extends itself through ${chain.map((c) => path.basename(c)).join(" -> ")}`);
+		const text = read(abs);
+		if (text === null) {
+			if (strict) throw new ConfigError(`extends ${rel}: file not found (${abs})`);
+			continue;
+		}
+		let shared;
+		try {
+			shared = JSON.parse(text);
+		} catch (err) {
+			if (strict) throw new ConfigError(`extends ${rel} is not valid JSON: ${err.message}`);
+			continue;
+		}
+		if (!Array.isArray(shared?.rules)) {
+			if (strict) throw new ConfigError(`extends ${rel}: the file needs a rules array`);
+			continue;
+		}
+		const nested = expandExtends(shared, abs, { read, boundary, depth: depth + 1, chain: [...chain, abs], strict });
+		files.push(abs, ...nested.files);
+		const from = toPosix(path.relative(path.dirname(chain[0]), abs));
+		for (const rule of nested.rules) rules.push({ ...rule, sharedFrom: rule.sharedFrom ?? from });
+	}
+	return { rules: [...rules, ...(config.rules ?? [])], files };
+}
+
+const readOrNull = (abs) => {
+	try {
+		return fs.readFileSync(abs, "utf8");
+	} catch {
+		return null;
+	}
+};
+
 export function loadConfig(configPath) {
 	const config = readJson(configPath, "guard config");
+	const configAbs = path.resolve(configPath);
+	if (config.extends !== undefined) {
+		const project = path.dirname(path.dirname(configAbs));
+		const { rules, files } = expandExtends(config, configAbs, { read: readOrNull, boundary: gitTopOf(project) ?? project });
+		config.rules = rules;
+		config.extendedFiles = files;
+	}
 	if (!Array.isArray(config.rules) || config.rules.length === 0) throw new ConfigError("guard config needs a non-empty rules array");
 	requireStringArray(config.ignore, "ignore", { optional: true });
 	requireStringArray(config.pythonRoots, "pythonRoots", { optional: true });
@@ -36,7 +98,7 @@ export function loadConfig(configPath) {
 	for (const rule of config.rules) {
 		const where = `rule ${JSON.stringify(rule.id ?? "?")}`;
 		if (!rule.id || !/^[a-z0-9-]+$/.test(rule.id)) throw new ConfigError(`${where}: id must be kebab-case`);
-		if (seen.has(rule.id)) throw new ConfigError(`${where}: duplicate id`);
+		if (seen.has(rule.id)) throw new ConfigError(rule.sharedFrom || config.rules.some((r) => r.id === rule.id && r.sharedFrom) ? `${where}: already defined in a shared file (extends); a project cannot redefine a shared rule, change the shared file instead` : `${where}: duplicate id`);
 		seen.add(rule.id);
 		if (!RULE_TYPES.includes(rule.type)) throw new ConfigError(`${where}: type must be one of ${RULE_TYPES.join(", ")}`);
 		if (!rule.message || !rule.fix) throw new ConfigError(`${where}: message and fix are required, the fix must name what to use instead`);
@@ -438,7 +500,9 @@ export function compareWithRef(root, ref, configRel, baselineRel, config, counts
 	if (oldConfig !== null) {
 		let oldRules = [];
 		try {
-			oldRules = JSON.parse(oldConfig).rules ?? [];
+			// the rules the config had at ref, shared files included as they were at ref, so loosening a shared file fails too
+			const show = (abs) => gitShow(root, ref, toPosix(path.relative(root, abs)));
+			oldRules = expandExtends(JSON.parse(oldConfig), path.resolve(root, configRel), { read: show, boundary: gitTopOf(root) ?? root, strict: false }).rules;
 		} catch {}
 		const now = new Map(config.rules.map((r) => [r.id, r]));
 		for (const r of oldRules) {
