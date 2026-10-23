@@ -139,11 +139,13 @@ baseline ที่เขียนก่อนกฎนี้มี `"version": 1
 
 CI: `.github/workflows/stack-agent.yml` รัน guard, รัน `guard.mjs --compare-ref origin/<base>` ใน pull request (fail ถ้า baseline โตขึ้น หรือกฎถูกลบหรือแคบลง) และรันแผนที่ API เมื่อมี `api-map.json` นอกจากนี้มี job `verify` แยกต่างหากที่รัน `node .stack-agent/bin/verify.mjs` ทุก push และ pull request โดยใน pull request จะใส่ `--against origin/<base>` และอัปโหลด `.stack-agent/evidence/` เป็น artifact job นี้ทำให้ `latest.json` ที่ปลอมขึ้นมาไม่มีค่า เปิดไว้เป็นค่าเริ่มต้น และจะแดงจนกว่าจะกรอก `verify.json` ครบและแทนที่ขั้น `EDIT ME: install your dependencies` (`npm ci`, `pip install ...` หรือบล็อก `services:` สำหรับฐานข้อมูล) ซึ่ง `init.mjs --check` จะรายงานขั้นนี้ job จะไม่ถูกข้ามแม้ยังมี placeholder เหลืออยู่ เพราะถ้าข้ามโดยดูจากข้อความ marker pull request ก็ปิดด่านนี้ได้เอง ควรตั้ง `guard` และ `verify` เป็น required status check และใส่ `.github/workflows/` กับ `.stack-agent/` ไว้ใน CODEOWNERS เพราะ pull request ยังแก้ workflow หรือทำให้ `verify.json` หย่อนลงได้ ถ้าใช้ CI ระบบอื่นให้รันคำสั่งเดียวกัน
 
+**Monorepo** GitHub อ่าน workflow จาก `.github/workflows/` ที่ root ของ repository เท่านั้น ถ้าโปรเจกต์อยู่ใน subfolder (`init.mjs services/api`) `init` จะเขียน `.github/workflows/stack-agent-services-api.yml` ไว้ที่ root แทน workflow นี้รันคำสั่งใน `services/api` (`defaults.run.working-directory`) รันเฉพาะเมื่อไฟล์ใน folder นั้นหรือตัว workflow เองเปลี่ยน (`paths`) และอัปโหลด evidence ของ folder นั้น แต่ละโปรเจกต์ใน repository จะได้ workflow ของตัวเอง `init.mjs --check` จะแจ้งถ้ามี `stack-agent.yml` ค้างอยู่ใน subfolder ซึ่ง GitHub ไม่เคยรัน ส่วน `--compare-ref` และขั้น against จะเทียบไฟล์ของโปรเจกต์นั้นเองที่ commit ฐาน
+
 ### ป้องกันไม่ให้ guard ถูกปิดเอง
 
 ทางเลี่ยงกฎที่ง่ายที่สุดคือแก้ตัว guard เอง ระบบกันไว้สามชั้น:
 
-1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/` หรือ `stack-agent.yml` (หรือลบโฟลเดอร์ `.github` หรือ `.github/workflows` ส่วนการเพิ่มหรือคัดลอก workflow เข้าไปไม่ต้องถาม) รวมถึง inline script (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`) แม้จะประกอบ path ด้วย `path.join` หรือ `os.path.join`
+1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/`, `stack-agent.yml` หรือ `stack-agent-<folder>.yml` ของ monorepo (หรือลบโฟลเดอร์ `.github` หรือ `.github/workflows` ส่วนการเพิ่มหรือคัดลอก workflow เข้าไปไม่ต้องถาม) รวมถึง inline script (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`) แม้จะประกอบ path ด้วย `path.join` หรือ `os.path.join`
 2. **ใน CI:** `--compare-ref` fail เมื่อ baseline โตขึ้น หรือกฎถูกลบหรือแคบลง
 3. **ในการรีวิว:** เพิ่ม `.github/CODEOWNERS` ให้คนที่ระบุต้องอนุมัติทุกการแก้ใน `.stack-agent/` เช่น `/.stack-agent/ @your-org/leads` (init ไม่ได้สร้างให้ เพราะไม่รู้ชื่อทีม)
 

@@ -10,6 +10,8 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 - The guard and the API map read only the files git would commit, so a gitignored `.env` or key file no longer fails the guard locally while CI passes, and `--update-baseline` no longer writes its name into the committed baseline. A baseline that already lists such a file shows it as `improved`; run `--update-baseline` to drop it. Outside git, every file is scanned as before.
 - Files over 1 MB that a rule covers are named in a warning instead of being skipped silently.
+- Monorepos: for a project in a subfolder, `init` wrote the workflow inside that subfolder, where GitHub never runs it. It now writes `.github/workflows/stack-agent-<folder>.yml` at the top of the repository, running in the project's folder and only when its files change. `init --check` names a workflow left in the subfolder. If you set up a subfolder project before, rerun `init` and delete the old file.
+- Monorepos: `guard.mjs --compare-ref` read the old config and baseline from the top of the repository, so in a subfolder project it found nothing and passed even when a rule was removed or the baseline grew. It now reads them from the project's folder.
 
 ## 0.2.0 (2026-10-23)
 

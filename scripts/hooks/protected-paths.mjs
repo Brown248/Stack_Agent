@@ -4,7 +4,8 @@ export const PROTECTED = [
 	{ re: /(^|[\\/])\.stack-agent[\\/]guard\.config\.json$/, what: "the guard rules" },
 	{ re: /(^|[\\/])\.stack-agent[\\/]guard-baseline\.json$/, what: "the guard baseline" },
 	{ re: /(^|[\\/])\.stack-agent[\\/]bin[\\/]/, what: "the vendored Stack Agent tools" },
-	{ re: /(^|[\\/])\.github[\\/]workflows[\\/]stack-agent\.ya?ml$/, what: "the Stack Agent CI workflow" },
+	// stack-agent-<folder>.yml is the workflow init writes for a project in a subfolder of a monorepo
+	{ re: /(^|[\\/])\.github[\\/]workflows[\\/]stack-agent(-[\w.-]+)?\.ya?ml$/, what: "the Stack Agent CI workflow" },
 	{ re: /(^|[\\/])\.stack-agent[\\/]evidence[\\/]latest\.json$/, what: "the verify evidence", evidence: true },
 	{ re: /(^|[\\/])\.stack-agent[\\/]verify-skip\.json$/, what: "the verify skip record", evidence: true },
 	{ re: /(^|[\\/])\.stack-agent[\\/]evidence[\\/]sessions([\\/][^\\/]*)?[\\/]?$/, what: "the Stop hook's session record", evidence: true },

@@ -10,6 +10,8 @@
 
 - guard และแผนที่ API อ่านเฉพาะไฟล์ที่ git จะ commit ไฟล์ `.env` หรือไฟล์ key ที่ gitignore ไว้จึงไม่ทำให้ guard ในเครื่อง fail ขณะที่ CI ผ่านอีก และ `--update-baseline` ไม่เขียนชื่อไฟล์นั้นลง baseline ที่ commit อีก baseline ที่มีไฟล์แบบนั้นอยู่แล้วจะแสดงเป็น `improved` ให้รัน `--update-baseline` เพื่อเอาออก ถ้าไม่ได้อยู่ใน git จะสแกนทุกไฟล์เหมือนเดิม
 - ไฟล์ที่ใหญ่เกิน 1 MB ที่มีกฎครอบคลุม จะถูกแจ้งชื่อเป็น warning แทนการข้ามเงียบ ๆ
+- Monorepo: โปรเจกต์ที่อยู่ใน subfolder เดิม `init` เขียน workflow ไว้ใน subfolder นั้น ซึ่ง GitHub ไม่เคยรัน ตอนนี้จะเขียน `.github/workflows/stack-agent-<folder>.yml` ไว้ที่ root ของ repository โดยรันใน folder ของโปรเจกต์ และรันเฉพาะเมื่อไฟล์ของโปรเจกต์เปลี่ยน `init --check` จะแจ้งถ้ามี workflow ค้างใน subfolder ถ้าเคยติดตั้งโปรเจกต์ใน subfolder ไว้ ให้รัน `init` ซ้ำแล้วลบไฟล์เก่า
+- Monorepo: `guard.mjs --compare-ref` เดิมอ่าน config และ baseline เก่าจาก root ของ repository ในโปรเจกต์ที่อยู่ใน subfolder จึงหาไม่เจอ และผ่านแม้กฎถูกลบหรือ baseline โตขึ้น ตอนนี้อ่านจาก folder ของโปรเจกต์แล้ว
 
 ## 0.2.0 (2026-10-23)
 

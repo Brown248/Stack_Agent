@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,8 +23,9 @@ const PRESETS_DIR = path.join(pluginRoot, "templates", "presets");
 const COMMON = [
 	["templates/common/rules.md", ".stack-agent/rules.md"],
 	["templates/common/rules-table.md", ".stack-agent/rules-table.md"],
-	["templates/ci/stack-agent.yml", ".github/workflows/stack-agent.yml"],
 ];
+const WORKFLOW_TEMPLATE = "templates/ci/stack-agent.yml";
+const ROOT_WORKFLOW = ".github/workflows/stack-agent.yml";
 const ALWAYS_REQUIRED = [".stack-agent/guard.config.json", ".stack-agent/verify.json", ...COMMON.map(([, dest]) => dest)];
 const GITIGNORE_LINE = ".stack-agent/evidence/";
 const PRESET_FILES = ["guard.config.json", "verify.json", "api-map.json"];
@@ -67,14 +69,57 @@ export function templatesFor(preset) {
 	return [...presetFiles, ...COMMON];
 }
 
+const realpath = (p) => {
+	try {
+		return fs.realpathSync.native(p);
+	} catch {
+		return path.resolve(p);
+	}
+};
+
+// GitHub reads workflows only from .github/workflows at the top of the repository. A project in a subfolder of a
+// git repo (a monorepo) gets its own workflow there, running in its folder and only when its files change.
+// Returns { abs, shown, sub } where sub is the project's posix path inside the repo ("" at the top or outside git).
+export function workflowLocation(target) {
+	const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: target, encoding: "utf8" });
+	const top = r.status === 0 ? realpath(r.stdout.trim()) : null;
+	const sub = top ? toPosix(path.relative(top, realpath(target))) : "";
+	if (!top || !sub || sub.startsWith("..")) return { abs: path.join(target, ROOT_WORKFLOW), shown: ROOT_WORKFLOW, sub: "" };
+	const file = `stack-agent-${sub.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase()}.yml`;
+	return { abs: path.join(top, ".github", "workflows", file), shown: toPosix(path.relative(target, path.join(top, ".github", "workflows", file))), sub, file };
+}
+
+// the template, rewritten for a project in subfolder `sub` of the repository
+export function subfolderWorkflow(text, sub, file) {
+	const q = JSON.stringify;
+	text = text.replace(/\r\n/g, "\n");
+	const paths = `    paths: [${q(sub + "/**")}, ${q(".github/workflows/" + file)}]\n`;
+	const edits = [
+		["name: stack-agent\n", `name: ${q("stack-agent (" + sub + ")")}\n`],
+		["  pull_request:\n", "  pull_request:\n" + paths],
+		["    branches: [main]\n", "    branches: [main]\n" + paths],
+		["\njobs:\n", `\ndefaults:\n  run:\n    working-directory: ${q(sub)}\n\njobs:\n`],
+		["hashFiles('.stack-agent/api-map.json')", `hashFiles('${sub}/.stack-agent/api-map.json')`],
+		["path: .stack-agent/evidence/", `path: ${sub}/.stack-agent/evidence/`],
+	];
+	for (const [from, to] of edits) {
+		if (!text.includes(from)) throw new Error(`init: the CI template no longer contains ${q(from)}; update subfolderWorkflow`);
+		text = text.replace(from, to);
+	}
+	return text;
+}
+
 export function pendingSetup(target) {
 	const pending = [];
 	const usesApiMap = fs.existsSync(path.join(target, ".stack-agent/api-map.json"));
-	for (const dest of [...ALWAYS_REQUIRED, ...(usesApiMap ? [".stack-agent/api-map.json"] : [])]) {
-		const abs = path.join(target, dest);
+	const workflow = workflowLocation(target);
+	const required = [...ALWAYS_REQUIRED.map((dest) => [path.join(target, dest), dest]), [workflow.abs, workflow.shown], ...(usesApiMap ? [[path.join(target, ".stack-agent/api-map.json"), ".stack-agent/api-map.json"]] : [])];
+	for (const [abs, dest] of required) {
 		if (!fs.existsSync(abs)) pending.push(`${dest}: missing`);
 		else if (fs.readFileSync(abs, "utf8").includes("EDIT ME")) pending.push(`${dest}: still has EDIT ME placeholders`);
 	}
+	if (workflow.sub && fs.existsSync(path.join(target, ROOT_WORKFLOW)))
+		pending.push(`${ROOT_WORKFLOW}: GitHub never runs it, because this project is in the subfolder ${workflow.sub} of its repository; use ${workflow.shown} instead (rerun init to create it) and delete this one`);
 	if (usesApiMap && !fs.existsSync(path.join(target, ".stack-agent/api-map.md"))) pending.push(".stack-agent/api-map.md: missing, create it with `node .stack-agent/bin/api-map.mjs --draft`");
 	if (!fs.existsSync(path.join(target, ".stack-agent/guard-baseline.json"))) pending.push(".stack-agent/guard-baseline.json: missing, record existing violations with `node .stack-agent/bin/guard.mjs --update-baseline`");
 	const outdated = outdatedTools(target);
@@ -130,6 +175,14 @@ export function init(target, preset = "generic") {
 		fs.mkdirSync(path.dirname(abs), { recursive: true });
 		fs.copyFileSync(path.join(pluginRoot, src), abs);
 		report.push(`created  ${dest}`);
+	}
+	const workflow = workflowLocation(target);
+	if (fs.existsSync(workflow.abs)) report.push(`kept     ${workflow.shown} (already exists, not overwritten)`);
+	else {
+		const text = fs.readFileSync(path.join(pluginRoot, WORKFLOW_TEMPLATE), "utf8");
+		fs.mkdirSync(path.dirname(workflow.abs), { recursive: true });
+		fs.writeFileSync(workflow.abs, workflow.sub ? subfolderWorkflow(text, workflow.sub, workflow.file) : text);
+		report.push(`created  ${workflow.shown}${workflow.sub ? ` (at the top of the repository, running in ${workflow.sub})` : ""}`);
 	}
 	if (!recordedPreset(target)) {
 		fs.writeFileSync(path.join(target, PRESET_MARKER), preset + "\n");
