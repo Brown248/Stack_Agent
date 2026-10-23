@@ -204,6 +204,18 @@ Five runs are a smoke test, not a rate.
 - The first `review-spec` run was not a valid measurement: the harness allowed `git diff` but not `git -C <checkout> diff`, and not the temp folder holding the checkout, so the reviewer could not read the diff. The skill did what it says (it stopped and logged the commit as `not reviewed: diff could not be read`). A task can now add tools and folders for itself (`allowedTools`, `addDirs`), and the three runs above were made after that fix.
 - 3 runs per cell are enough to see an 9/9 against 0/9 split, not to measure small differences.
 
+## Hook and against cost on large repositories (2026-10-23)
+
+Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic git repositories of small JS files, one run per size.
+
+| Files | Fingerprint, clean tree | Fingerprint, 1,000 files changed | Stop hook, end to end | Against checkout | Against removal | Checkout size |
+| --- | --- | --- | --- | --- | --- | --- |
+| 20,000 | 245 ms | 594 ms | 1.3 s | 5.2 s | 1.9 s | 0.6 MB |
+| 100,000 | 1.1 s | 1.1 s | 1.4 s | 30.2 s | 10.6 s | 2.8 MB |
+
+- The Stop hook stays far inside its 30-second timeout at 100,000 files.
+- The against step is the cost that grows. It checks out the whole repository at the reference commit, and it runs only on a full verify run with new checks or changed tests, but there it added about 7 s at 20,000 files and about 41 s at 100,000. A sparse checkout of the project's folder would cut it for a monorepo; it is not built yet. The files here are tiny, so a real repository of the same file count would copy more data.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:

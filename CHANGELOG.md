@@ -6,14 +6,28 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 ## Unreleased
 
+### Upgrading
+
+- `guard.mjs`, `verify.mjs`, `api-map.mjs`, `lib/files.mjs`, and `lib/fingerprint.mjs` changed, so rerun `init` in each project to refresh `.stack-agent/bin/`. Until you do, the SessionStart hook names the stale files.
+- A subfolder project in a monorepo: rerun `init`, then delete the `.github/workflows/stack-agent.yml` inside the subfolder. `init --check` names it.
+- A baseline that lists a gitignored file: run `guard.mjs --update-baseline` once.
+
+### Added
+
+- `run.mjs --judge MODEL` scores a task's `rubric` (criteria a script cannot check) with `agents/judge.md` on a blind copy of each run. Rubrics for `endpoint`, `item-note`, and `dup-name`.
+- `scripts/bench-hooks.mjs` times the fingerprint, the Stop hook, and the against step's checkout on synthetic repositories. Results are in the design notes.
+- A plugin icon.
+
 ### Changed
 
+- The `debug` skill's description leads with bug reports and "find and fix it", after the A/B runs found it was never picked up from a plain bug report. Not measured yet.
 - The shell hook's git rules (`--no-verify`, force-push, `reset --hard`, branch deletes, and the rest) apply only inside a project with `.stack-agent/verify.json` or `.stack-agent/guard.config.json`, so a plugin installed for your user account no longer changes other repositories. The rules about Stack Agent's own files still apply everywhere.
 
 ### Fixed
 
 - The CI template ran on pushes only to `main`, so a repository whose default branch is `master`, `develop`, or anything else got CI on pull requests only. `init` now writes the default branch from `origin/HEAD`; without it, `init --check` notes that the branch is not known yet. `--check` also notes an existing workflow whose `branches` leaves out the default branch.
 - The guard and the API map read only the files git would commit, so a gitignored `.env` or key file no longer fails the guard locally while CI passes, and `--update-baseline` no longer writes its name into the committed baseline. A baseline that already lists such a file shows it as `improved`; run `--update-baseline` to drop it. Outside git, every file is scanned as before.
+- The after-edit guard runs on NotebookEdit too.
 - Files over 1 MB that a rule covers are named in a warning instead of being skipped silently.
 - Monorepos: for a project in a subfolder, `init` wrote the workflow inside that subfolder, where GitHub never runs it. It now writes `.github/workflows/stack-agent-<folder>.yml` at the top of the repository, running in the project's folder and only when its files change. `init --check` names a workflow left in the subfolder. If you set up a subfolder project before, rerun `init` and delete the old file.
 - Vendored tools that differ from the plugin's copy are named at the start of every session, with the command that refreshes them. The hooks run the plugin's scripts and CI runs `.stack-agent/bin`, so a stale copy could make them disagree without anyone noticing.
