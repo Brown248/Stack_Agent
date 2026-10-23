@@ -246,7 +246,9 @@ test("a test that imports a module the old code lacks is inconclusive, not detec
 	write(dir, "test/limits.test.js", 'import test from "node:test";\nimport assert from "node:assert/strict";\nimport { MAX } from "../src/modules/items/limits.js";\ntest("max", () => assert.equal(MAX, 50));\n');
 	const r = run(dir);
 	assert.equal(r.code, 0, r.stdout + r.stderr);
-	assert.match(r.against.skipped, /every new check and test run was inconclusive/);
+	// still not detection; the message now says why and what to add (see tests/against-import.test.mjs)
+	assert.match(r.against.skipped, /the changed tests import something the code at \w+ does not have/);
+	assert.equal(r.against.importMissing, true);
 });
 
 test("tests still count when the old code's server does not start", async () => {

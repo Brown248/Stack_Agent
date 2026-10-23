@@ -26,6 +26,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 ### Changed
 
 - The `debug` skill's description leads with bug reports and "find and fix it", after the A/B runs found it was never picked up from a plain bug report. In the A/B run of 2026-10-23 it was picked up in 9 of 9 bug-report runs, against 0 of 9 before.
+- When the changed tests import something the code before the change lacks (a new export or module) and no new check was added, the against step says so and what to add, records `importMissing`, and the Stop hook asks once for a verify check that runs the program as a user does. In the A/B run of 2026-10-23 this case left all three `job-skip-blank` runs without proof that their tests catch the change.
 - The shell hook's git rules (`--no-verify`, force-push, `reset --hard`, branch deletes, and the rest) apply only inside a project with `.stack-agent/verify.json` or `.stack-agent/guard.config.json`, so a plugin installed for your user account no longer changes other repositories. The rules about Stack Agent's own files still apply everywhere.
 
 ### Fixed

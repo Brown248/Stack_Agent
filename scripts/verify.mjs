@@ -579,8 +579,10 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 		if (changedTests.length) {
 			const t = await runTests(wtRoot, config.test);
 			const label = `tests (${shown(config.test)})`;
-			const inconclusive = !t.ok && (t.timedOut || t.exitCode === 127 || t.exitCode === null || MISSING_RE.test(t.output ?? "") || TEST_IMPORT_RE.test(t.output ?? ""));
-			results.push({ name: label, ok: t.ok, inconclusive, kind: "tests" });
+			// tests that import something the old code lacks (a new export or module) die before they test anything there
+			const missingImport = !t.ok && !t.timedOut && (MISSING_RE.test(t.output ?? "") || TEST_IMPORT_RE.test(t.output ?? ""));
+			const inconclusive = !t.ok && (t.timedOut || t.exitCode === 127 || t.exitCode === null || missingImport);
+			results.push({ name: label, ok: t.ok, inconclusive, missingImport, kind: "tests" });
 		}
 		if (added.length) {
 			const steps = await runVerify({ root: wtRoot, config, skipTests: true, only: step.checks });
@@ -611,6 +613,13 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 			};
 		if (results.some((r) => r.ok && r.kind === "tests"))
 			return { ...step, skipped: `the changed tests also pass on the code at ${ref} (expected for a refactor; for new behavior, add a test or check that fails without the change)` };
+		// The usual case: the change adds an export and its tests import it, and no new check runs the program. Nothing
+		// can then show the tests catch the change; a verify check that runs the program as a user does can. The flag
+		// lets the Stop hook ask for one.
+		if (!step.note && !added.length && results.some((r) => r.missingImport)) {
+			step.importMissing = true;
+			return conclude(step, config, `the changed tests import something the code at ${ref} does not have, so they cannot show that they catch the change. Add a check to verify.json that runs the program the way a user does (a command or HTTP check) and fails without the change`);
+		}
 		return conclude(step, config, step.note ?? `every new check and test run was inconclusive on the code at ${ref}`);
 	} finally {
 		// cleanup problems must not hide the result; a missing link target is reported loudly

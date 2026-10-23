@@ -80,6 +80,11 @@ export function decideBlock({ root, files, ignore, evidence, current, skip, stat
 	// a removed record is worth a human's attention whatever else is going on
 	// evidence that matches the current code still settles it
 	const why = lost && stale ? `${stale}, and the session record under .stack-agent/evidence/sessions was removed` : stale;
+	// Verified, but the against step could not show the change is tested: the changed tests import something the old
+	// code lacks and no new check runs the program. Asked once per code state; stopping again after that is allowed,
+	// since some changes have nothing a check can run.
+	if (!why && evidence?.againstImportMissing && current && state.importAsked !== current.value)
+		return { action: "block", kind: "import", state: { ...next, importAsked: current.value }, files: relevant };
 	if (!why) return { action: "allow", state: next };
 	if (validSkip(skip, current)) {
 		if (state.skipAnnounced === current.value) return { action: "allow", state: next, viaSkip: true };
@@ -118,6 +123,16 @@ export function reminderMessage({ why, files, verifyConfigChanged, mode = "remin
 	);
 }
 
+export function importMessage() {
+	return (
+		`stack-agent: verification passed, but its against step could not show that your change is tested: the changed tests ` +
+		`import something the code before the change does not have, so on that code they fail before testing anything. ` +
+		`Add a check to ${VERIFY} that runs the program the way a user does (a command or an HTTP request) and fails without ` +
+		`your change, for example the job run on an input that hits the new rule, then run \`node .stack-agent/bin/verify.mjs\` again. ` +
+		`If nothing a user can run reaches this change, say so and stop; this is asked once.\n`
+	);
+}
+
 const readJsonOr = (file, fallback) => {
 	try {
 		return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -146,7 +161,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 		let evidence = null;
 		if (fs.existsSync(latest)) {
 			const record = readJsonOr(latest, null);
-			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, mtimeMs: fs.statSync(latest).mtimeMs };
+			const againstStep = Array.isArray(record?.steps) ? record.steps.find((s) => s?.step === "against") : null;
+			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, againstImportMissing: againstStep?.importMissing === true && Boolean(againstStep.skipped), mtimeMs: fs.statSync(latest).mtimeMs };
 		}
 		const current = codeFingerprint(root, { ignore, evidenceDir: evidenceRel });
 		const verifyConfigChanged = files.includes(VERIFY);
@@ -183,7 +199,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 				} catch {}
 			}
 			writeState(root, input.session_id, verdict.state);
-			if (verdict.action === "block") {
+			if (verdict.action === "block" && verdict.kind === "import") {
+				process.stderr.write(importMessage());
+				process.exitCode = 2;
+			} else if (verdict.action === "block") {
 				const note = shortMarker ? `Your ${SKIP_MARKER} line needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run. ` : "";
 				process.stderr.write(note + reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged, mode, attempt: verdict.attempt }));
 				process.exitCode = 2;
