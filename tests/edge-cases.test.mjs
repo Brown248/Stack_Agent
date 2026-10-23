@@ -144,6 +144,8 @@ test("a marker is ignored when the evidence already matches the code", async () 
 	const dir = await repo();
 	sessionStart(dir);
 	touch(dir, SERVICE);
+	// a test changes with the code, so the Stop hook has no reason to ask for one (see tests/no-coverage.test.mjs)
+	touch(dir, "test/items.test.js");
 	assert.equal(runNode(verify, ["--root", dir, "--no-against"]).code, 0);
 	editConfig(dir, () => {});
 	const fresh = runNode(verify, ["--root", dir]);
@@ -245,6 +247,8 @@ test("after the record was removed, a full passing verify still lets the agent s
 	const dir = await repo();
 	sessionStart(dir);
 	touch(dir, SERVICE);
+	// a test changes with the code, so the Stop hook has no reason to ask for one (see tests/no-coverage.test.mjs)
+	touch(dir, "test/items.test.js");
 	fs.unlinkSync(path.join(dir, ".stack-agent/evidence/sessions", `${SID}.start.json`));
 	assert.equal(stop(dir).code, 2);
 	assert.equal(runNode(verify, ["--root", dir]).code, 0);

@@ -564,7 +564,16 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	const keep = config.against?.keep ?? AGAINST_KEEP;
 	// new or changed tests count like new checks: a test written for the change should fail on the code before it
 	const changedTests = runs(config.test) ? testsChangedSince(root, ref, keep) : [];
-	if (!added.length && !changedTests.length) return { ...step, skipped: "no new or changed checks or tests" };
+	if (!added.length && !changedTests.length) {
+		// Code changed and nothing new tests it: the step has nothing to run, so it cannot fail, and the evidence would
+		// stand for a change no check or test touched. The flag lets the Stop hook ask once.
+		if (!codeChangedSince(root, ref, config, keep).length) return { ...step, skipped: "no new or changed checks or tests" };
+		return {
+			...step,
+			noNewCoverage: true,
+			skipped: `no new or changed checks or tests, but the code changed since ${ref}, so nothing shows the change is tested. If it changes behavior, add a test or a check to verify.json that fails without it; if it does not (a refactor), say so`,
+		};
+	}
 	if (!codeChangedSince(root, ref, config, keep).length) return { ...step, skipped: "only checks or tests changed, no code" };
 	step.checks = added.map((c) => c.name);
 	if (changedTests.length) step.tests = changedTests;

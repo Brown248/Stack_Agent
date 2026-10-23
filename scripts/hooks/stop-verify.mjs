@@ -85,6 +85,10 @@ export function decideBlock({ root, files, ignore, evidence, current, skip, stat
 	// since some changes have nothing a check can run.
 	if (!why && evidence?.againstImportMissing && current && state.importAsked !== current.value)
 		return { action: "block", kind: "import", state: { ...next, importAsked: current.value }, files: relevant };
+	// Verified, but the code changed and no check or test is new, so nothing shows the change is tested. Asked once
+	// per code state, like the import case: a refactor has nothing new to test, and the agent can say so.
+	if (!why && evidence?.againstNoCoverage && current && state.coverageAsked !== current.value)
+		return { action: "block", kind: "coverage", state: { ...next, coverageAsked: current.value }, files: relevant };
 	if (!why) return { action: "allow", state: next };
 	if (validSkip(skip, current)) {
 		if (state.skipAnnounced === current.value) return { action: "allow", state: next, viaSkip: true };
@@ -120,6 +124,17 @@ export function reminderMessage({ why, files, verifyConfigChanged, mode = "remin
 		`stack-agent: code changed but ${why} (${list}). Before you finish, ${addCheck ? addCheck + "Then run" : "run"} ` +
 		`the full verification (\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify skill) and report ` +
 		`its evidence file, or say plainly why it cannot run here. ${ending}`
+	);
+}
+
+export function coverageMessage(files = []) {
+	const list = files.slice(0, 5).join(", ") + (files.length > 5 ? ", ..." : "");
+	return (
+		`stack-agent: verification passed, but no check or test is new or changed while the code is${list ? ` (${list})` : ""}, ` +
+		`so nothing shows that your change is tested: the against step had nothing to run on the code before it. If the ` +
+		`change adds or changes behavior, add a test, or a check to ${VERIFY}, that fails without it (the success case and ` +
+		"one rejection case), then run `node .stack-agent/bin/verify.mjs` again. If nothing a user can observe changed (a " +
+		`refactor, a rename), say so in your final message and stop; this is asked once.\n`
 	);
 }
 
@@ -168,7 +183,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 		if (fs.existsSync(latest)) {
 			const record = readJsonOr(latest, null);
 			const againstStep = Array.isArray(record?.steps) ? record.steps.find((s) => s?.step === "against") : null;
-			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, againstImportMissing: againstStep?.importMissing === true && Boolean(againstStep.skipped), missingImports: Array.isArray(againstStep?.missingImports) ? againstStep.missingImports.filter((n) => typeof n === "string") : [], mtimeMs: fs.statSync(latest).mtimeMs };
+			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, againstImportMissing: againstStep?.importMissing === true && Boolean(againstStep.skipped), againstNoCoverage: againstStep?.noNewCoverage === true && Boolean(againstStep.skipped), missingImports: Array.isArray(againstStep?.missingImports) ? againstStep.missingImports.filter((n) => typeof n === "string") : [], mtimeMs: fs.statSync(latest).mtimeMs };
 		}
 		const current = codeFingerprint(root, { ignore, evidenceDir: evidenceRel });
 		const verifyConfigChanged = files.includes(VERIFY);
@@ -207,6 +222,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 			writeState(root, input.session_id, verdict.state);
 			if (verdict.action === "block" && verdict.kind === "import") {
 				process.stderr.write(importMessage(evidence?.missingImports));
+				process.exitCode = 2;
+			} else if (verdict.action === "block" && verdict.kind === "coverage") {
+				process.stderr.write(coverageMessage(verdict.files));
 				process.exitCode = 2;
 			} else if (verdict.action === "block") {
 				const note = shortMarker ? `Your ${SKIP_MARKER} line needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run. ` : "";

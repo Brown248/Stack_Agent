@@ -60,6 +60,8 @@ test("a full passing verify run unblocks, and stays valid after a commit but not
 	const dir = await repo();
 	sessionStart(dir);
 	touch(dir, "src/modules/items/service.js");
+	// a test changes with the code, so the Stop hook has no reason to ask for one (see tests/no-coverage.test.mjs)
+	touch(dir, "test/items.test.js");
 	assert.equal(stop(dir).code, 2);
 	const run = runNode(verify, ["--root", dir]);
 	assert.equal(run.code, 0, run.stdout + run.stderr);

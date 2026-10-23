@@ -79,7 +79,9 @@ test("renaming a check or changing its timeout is not a new check, and removed c
 	});
 	const r = run(dir);
 	assert.equal(r.code, 0, r.stdout);
-	assert.equal(r.against.skipped, "no new or changed checks or tests");
+	// the rule changed and no check or test is new, so the step says so and flags it for the Stop hook
+	assert.match(r.against.skipped, /^no new or changed checks or tests, but the code changed since \w+, so nothing shows the change is tested/);
+	assert.equal(r.against.noNewCoverage, true);
 	assert.deepEqual(r.against.removed, ["create-item-rejects-empty"]);
 });
 
@@ -237,7 +239,8 @@ test("deleting a test file does not turn the step on", async () => {
 	addRule(dir);
 	const r = run(dir);
 	assert.equal(r.code, 0, r.stdout + r.stderr);
-	assert.equal(r.against.skipped, "no new or changed checks or tests");
+	assert.match(r.against.skipped, /^no new or changed checks or tests, but the code changed/);
+	assert.equal(r.against.noNewCoverage, true);
 });
 
 test("a test that imports a module the old code lacks is inconclusive, not detection", async () => {
