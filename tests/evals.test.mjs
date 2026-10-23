@@ -73,3 +73,15 @@ test("sample-review has no eval case on purpose: its checkout cannot be made in 
 	assert.ok(!cases.some((c) => /sample-review|review-spec/.test(c)));
 	assert.match(fs.readFileSync(path.join(repoRoot, "skills/run-evals/SKILL.md"), "utf8"), /sample-review/);
 });
+
+// Where the plugin's Stop hook keeps the agent on verification, as in the eval sandbox where .stack-agent/ is
+// read-only, the final message becomes a verification report and the skill's work sits earlier in the trace. A
+// grader about that work must read the trace (found in the WSL2 run of 2026-10-23: correct-error-body 0.5 with the
+// plugin, 0.75 without, both losses on final-message graders).
+test("llm graders about a skill's own output read the trace, not only the final message", () => {
+	const focus = (name, grader) => /^focus: (\S+)$/m.exec(frontmatter(fs.readFileSync(path.join(evalsDir, name, "graders", grader), "utf8")) ?? "")?.[1] ?? null;
+	for (const grader of ["cites-history.md", "rule-names-the-fix.md"]) assert.equal(focus("correct-error-body", grader), "trace", grader);
+	for (const [name, grader] of [["debug-blank-name", "repro-before-fix.md"], ["debug-blank-name", "repro-kept.md"], ["correct-error-body", "proof-or-honest.md"], ["correct-error-body", "no-loosening.md"]])
+		assert.equal(focus(name, grader), "trace", `${name}/${grader}`);
+	assert.match(fs.readFileSync(path.join(evalsDir, "correct-error-body/graders/cites-history.md"), "utf8"), /FAIL if they cite only one of the two/);
+});

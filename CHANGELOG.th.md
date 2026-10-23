@@ -4,6 +4,12 @@
 
 [English](CHANGELOG.md)
 
+## ยังไม่ออกรุ่น
+
+### แก้ไข
+
+- grader `cites-history` และ `rule-names-the-fix` ของ eval `correct-error-body` อ่าน trace แทนการอ่านแค่ข้อความสุดท้าย ใน sandbox ของ eval Stop hook ทำให้ agent วนอยู่กับเรื่อง verify ข้อความสุดท้ายจึงเป็นรายงานเรื่อง verify และกลุ่มที่มี plugin เสียคะแนนทั้งสองข้อ ทั้งที่ทำงานนั้นไปแล้วในข้อความก่อนหน้า (มี plugin 0.5 ไม่มี 0.75) และ `cites-history` จะ fail ถ้าอ้าง commit แค่ตัวเดียวจากสองตัว
+
 ## 0.3.0 (2026-10-23)
 
 ### อัปเกรด

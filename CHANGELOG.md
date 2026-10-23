@@ -4,6 +4,12 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
+## Unreleased
+
+### Fixed
+
+- The `correct-error-body` eval graders `cites-history` and `rule-names-the-fix` read the trace instead of only the final message. In the eval sandbox the Stop hook keeps the agent on verification, so its last message was a verification report and the plugin arm lost both graders for work it had done earlier (0.5 with the plugin, 0.75 without). `cites-history` also fails when only one of the two commits is cited.
+
 ## 0.3.0 (2026-10-23)
 
 ### Upgrading
