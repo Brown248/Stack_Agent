@@ -225,6 +225,13 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 
 **ข้อจำกัด** cell ละ 3 รอบ โมเดลเดียว รันเฉพาะกลุ่ม plugin (ไม่มีกลุ่มไม่มี plugin ให้เทียบ) task เขียนโดยผู้เขียน plugin เอง และคอลัมน์ที่คำนวณใหม่มาจากการรัน verify หลัง session ไม่ใช่โดย agent เอง
 
+**รอบต่อ: `job-skip-blank` หลังแก้เรื่อง import (วันเดียวกัน)** `df114d7` ทำให้ verify อธิบายเมื่อขั้น against ล้มที่ import ใหม่ และให้ Stop hook ขอ verify check หนึ่งครั้ง รันซ้ำ 3 รอบ กลุ่ม plugin, Sonnet, โฟลเดอร์ที่ path สั้น (`C:Users<user>AppDataLocalTempab-1023b`) agent ใช้ $0.46 และ judge $0.02 behavior, verify ที่ตรงกับโค้ด และความโปร่งใสได้ 3/3 ส่วน `checkDetects` ตามที่บันทึกได้ 3/3 (เดิม 0/3) **แต่เส้นทางใหม่ไม่ได้ทำงานเลย** ผลนี้จึงไม่ได้วัดมัน
+
+- agent สองรอบพยายามหยุดก่อนรัน verify ข้อความเดิมของ Stop hook จึงทำงาน ("no verify evidence yet" ซึ่งมีประโยคขอ check เมื่อ `verify.json` ยังไม่มี) ทั้งสองจึงเพิ่ม check ที่รัน job กับไฟล์ที่มี category ว่าง (`blank-category-left-out`) และ check นั้นจับการแก้ได้
+- รอบที่สาม verify ก่อนหยุดเหมือนทั้งสามรอบในครั้งแรก แต่เทสใหม่เรียก `totalsByCategory` ที่มีอยู่เดิม ไม่ได้ import export ใหม่ เทสจึงจับการแก้ได้เอง
+- ไม่มีรอบไหนได้ `importMissing` ข้อความใหม่จึงไม่เคยแสดง ที่ขึ้นจาก 0/3 เป็น 3/3 มาจากจังหวะที่ agent รัน verify และวิธีเขียนเทส ซึ่งเปลี่ยนไปในแต่ละรอบ ถ้าจะวัดเส้นทางใหม่ ต้องมีรอบที่ agent verify ก่อนและเทส export ใหม่ ตอนนี้ครอบคลุมด้วย `tests/against-import.test.mjs` เท่านั้น
+- judge ให้ FAIL ข้อ "job.mjs แค่อ่านไฟล์ เรียก transform และพิมพ์" 3/3 เทียบกับ 0/3 ในครั้งแรก agent ทั้งสามนับแถวที่ข้ามใน `job.mjs` ด้วย predicate ของ transform และ judge ตัวนี้มองว่าเป็นการเลือกแถวนอก transform โดยรอบหนึ่งบอกว่าก้ำกึ่ง เกณฑ์นี้กำกวมเรื่องการนับ ควรอ่าน FAIL แบบนี้เองก่อนลงมือแก้
+
 ## ต้นทุนของ hook และขั้น against ใน repository ขนาดใหญ่ (23 ต.ค. 2026)
 
 วัดด้วย `scripts/bench-hooks.mjs` บน Windows 11 กับ Node 26.8.1 ใช้ git repository จำลองที่มีไฟล์ JS เล็ก ๆ รันขนาดละหนึ่งรอบ

@@ -225,6 +225,13 @@ Five runs are a smoke test, not a rate.
 
 **Limits.** 3 runs per cell, one model, the plugin arm only (no bare arm to compare with), tasks written by the plugin's author, and the recomputed column comes from a verify run made after the session rather than by the agent.
 
+**Follow-up: `job-skip-blank` after the import change (same day).** `df114d7` makes verify explain an against step that dies on a new import and the Stop hook ask once for a verify check. Rerun: 3 runs, plugin arm, Sonnet, short run folder (`C:Users<user>AppDataLocalTempab-1023b`), $0.46 for the agents and $0.02 for the judge. Behavior, fresh verification, and honesty 3/3, and `checkDetects` 3/3 as recorded (0/3 before). **But the new path never ran**, so this does not measure it:
+
+- Two agents tried to stop before running verify. The existing Stop-hook message fired ("no verify evidence yet", with its sentence asking for a check when `verify.json` has none), and both then added a check that runs the job on a file with a blank category (`blank-category-left-out`), which detected the change.
+- The third verified before stopping, like all three in the first run, but its new test called the existing `totalsByCategory` instead of importing a new export, so the test detected the change on its own.
+- No run produced `importMissing`, so the new message was never shown. The jump from 0/3 to 3/3 came from when the agents ran verify and how they wrote the test, which vary from run to run. Measuring the new path needs runs where the agent verifies first and tests a new export; it is covered only by `tests/against-import.test.mjs` for now.
+- The judge failed "job.mjs only reads files, calls the transform, and prints" in 3/3, against 0/3 in the first run: all three agents counted the skipped rows in `job.mjs` with the transform's predicate, and this judge read that as row selection outside the transform, one run calling it borderline. The criterion is ambiguous about counting; read FAILs like these yourself before acting on them.
+
 ## Hook and against cost on large repositories (2026-10-23)
 
 Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic git repositories of small JS files, one run per size.
