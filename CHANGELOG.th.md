@@ -10,7 +10,7 @@
 
 ### เพิ่ม
 
-- `scripts/micro/run.mjs` (`npm run micro`): micro-test ที่ส่งสถานการณ์หนึ่งแบบกับถ้อยคำหนึ่งแบบให้ `claude` เป็นการเรียกครั้งเดียวที่ไม่มีเครื่องมือ ให้คะแนนคำตอบด้วย script และรันถ้อยคำแต่ละแบบซ้ำคู่กับ control ที่ไม่ได้คำแนะนำ `--dry-run` แสดง prompt และเพดานค่าใช้จ่าย case แรกคือ `import-request` ซึ่งวัดคำขอเรื่อง import ของ Stop hook ยังไม่ได้รันกับ model จริง
+- `scripts/micro/run.mjs` (`npm run micro`): micro-test ที่ส่งสถานการณ์หนึ่งแบบกับถ้อยคำหนึ่งแบบให้ `claude` เป็นการเรียกครั้งเดียวที่ไม่มีเครื่องมือ ให้คะแนนคำตอบด้วย script และรันถ้อยคำแต่ละแบบซ้ำคู่กับ control ที่ไม่ได้คำแนะนำ `--dry-run` แสดง prompt และเพดานค่าใช้จ่าย `--rescore FILE` ให้คะแนนคำตอบที่เก็บไว้ใหม่โดยไม่เสียเงิน case แรกคือ `import-request` ซึ่งวัดคำขอเรื่อง import ของ Stop hook: ไม่มีข้อความได้ 0/5 ข้อความก่อน `4af59f0` ได้ 0/5 ข้อความปัจจุบันได้ 5/5 (Sonnet, $0.32; design notes, 24 ต.ค. 2026)
 - reviewer ตรวจไฟล์มาตรฐานของ repo เองด้วย (`CONTRIBUTING.md`, `CODING_STANDARDS.md`, `STYLEGUIDE.md`, `STYLE.md`, `AGENTS.md`, `CLAUDE.md`) และอ้างข้อที่ถูกละเมิดเป็น `standards:<file>:<line>` ซึ่ง `review-findings.mjs` ตรวจแบบเดียวกับบรรทัดใน `rules.md` ถ้าขัดกันให้ยึด `rules.md`
 - `docs/out-of-scope.md` (EN/TH): ไอเดียที่ Stack Agent ตัดสินใจไม่รับ เหตุผล และสิ่งที่ทำแทน
 - หัวข้อ "เขียนเนื้อหา skill" ใน `docs/customizing.md` (EN/TH)
@@ -19,7 +19,7 @@
 ### เปลี่ยน
 
 - `debug`: สีแดงต้องเป็นอาการที่ผู้ใช้แจ้ง บั๊กที่ fail แค่บางรอบต้องวัดอัตราการแดง การบังคับให้แดงด้วยการใส่บั๊กกลับต้องแสดง `git diff` ก่อนและหลัง และถ้าไม่มีที่ให้วางเทสต้องรายงานเป็น finding
-- description ของ skill เก้าตัวไม่สรุปขั้นตอนแล้ว (superpowers พบว่า agent ทำตามบทสรุปนั้นแทนตัว skill) ถ้อยคำที่ใช้เปิด `debug` และ `verify` ยังเหมือนเดิม ยังไม่ได้วัดด้วย A/B หรือ eval
+- description ของ skill เก้าตัวไม่สรุปขั้นตอนแล้ว (superpowers พบว่า agent ทำตามบทสรุปนั้นแทนตัว skill) ถ้อยคำที่ใช้เปิด `debug` และ `verify` ยังเหมือนเดิม `debug` ยังถูกเรียกจาก bug report ธรรมดา 9 ใน 9 รอบของ A/B (design notes, 24 ต.ค. 2026) ส่วน eval `debug-blank-name` ยังไม่ได้รันใหม่
 
 ### แก้ไข
 

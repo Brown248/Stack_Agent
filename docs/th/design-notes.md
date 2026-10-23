@@ -32,7 +32,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | รีวิวเทียบกับ spec นอกจากกฎของทีม (จาก mattpocock/skills `code-review`, MIT) | `source: spec` พร้อม `spec: { from, quote }` ที่ตรวจกับ commit message หรือไฟล์ spec | `tests/review-findings.test.mjs` |
 | ผลรีวิวเป็นข้อมูล และตรวจซ้ำโดย agent ที่ไม่ได้เป็นคนเจอ (จาก cloudflare/security-audit-skill) | candidate จาก `reviewer` คำตัดสิน `confirmed` / `hardening` / `needs_validation` / `rejected` จาก `finding-verifier` ตรวจด้วย `scripts/review-findings.mjs` (ฟิลด์ที่ต้องมีตามคำตัดสิน, คนเจอไม่ใช่คนตรวจ, โค้ดที่ยกมาต้องตรงกับบรรทัดที่อ้าง, finding ของ commit ต้องอ้างไฟล์ที่ commit นั้นแก้) | `tests/review-findings.test.mjs` รวมเทสว่า prompt ของ agent พูดถึงทุกฟิลด์ และทุก flag ของ script ที่เอกสารใช้มีอยู่จริง |
 | Eval คือ unit test ของ skill ตรวจแบบ blind โดยโมเดลอื่น | `evals/` ตามรูปแบบ `claude plugin eval` (เทียบมี/ไม่มี plugin, judge เป็น haiku โดยค่าเริ่มต้น), agent `judge`, skill `run-evals` | รันจริง 1 case (ด้านล่าง) |
-| วัดถ้อยคำหนึ่งแบบเทียบกับการไม่พูดอะไรเลย (จาก micro-test ของ obra/superpowers, MIT) | `scripts/micro/run.mjs`: เรียกครั้งเดียวต่อตัวอย่างโดยไม่มีเครื่องมือ มี control ที่ไม่ได้คำแนะนำ ค่าเริ่มต้น 5 รอบต่อ variant ให้คะแนนด้วย script case `import-request` วัดคำขอเรื่อง import ของ Stop hook โดย import ข้อความมาจาก hook ตรง ๆ | `tests/micro.test.mjs` (ใช้ claude ปลอม) ยังไม่ได้รันกับ model จริง |
+| วัดถ้อยคำหนึ่งแบบเทียบกับการไม่พูดอะไรเลย (จาก micro-test ของ obra/superpowers, MIT) | `scripts/micro/run.mjs`: เรียกครั้งเดียวต่อตัวอย่างโดยไม่มีเครื่องมือ มี control ที่ไม่ได้คำแนะนำ ค่าเริ่มต้น 5 รอบต่อ variant ให้คะแนนด้วย script case `import-request` วัดคำขอเรื่อง import ของ Stop hook โดย import ข้อความมาจาก hook ตรง ๆ | `tests/micro.test.mjs` (ใช้ claude ปลอม) รันจริงแล้วหนึ่งครั้ง (ด้านล่าง 24 ต.ค. 2026) |
 | งานที่ผลตายตัวเป็น script งานที่ต้องคิดให้ agent | script ไม่มี dependency สำหรับทุกขั้นที่ทำซ้ำ | 302 เทส |
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | 10 skills และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | description บอกว่าใช้เมื่อไร และ skill อยู่รอดหลัง compaction (จาก obra/superpowers, MIT) | description ระบุแค่จังหวะที่ใช้ ไม่มีคำว่า "then" หรือ "step" และ SKILL.md แต่ละไฟล์ยาวไม่ถึง 20,000 ตัวอักษร | `tests/skills.test.mjs` |
@@ -296,6 +296,32 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 - **ไม่มี plugin** ไม่มีรอบไหนของ `job-new-export` ที่ verify และการ verify ของกลุ่มไม่มี plugin ใน `refactor-items` มาจาก agent ตัวเดียวที่รัน `.stack-agent/bin/verify.mjs` เพราะเจอไฟล์ใน repository (มีหนึ่งรอบที่ไม่ได้แก้อะไร จึงนับ 2 รอบ)
 - guard ใน Stop hook ไม่ได้ทำงานเลย เพราะไม่มีรอบไหนผิดกฎ
 - cell ละ 3 รอบ โมเดลเดียว สอง task ที่ผู้เขียน plugin เขียนเอง
+
+## description ของ skill ที่สั้นลง และ micro-test ครั้งแรก (24 ต.ค. 2026)
+
+**A/B รายงานบั๊ก** ใช้ `scripts/ab/run.mjs` กับ plugin ที่ `58fa016` (description เก้าตัวที่ตัดขั้นตอนออก และขั้นใหม่ของ `debug`) Claude Code 2.1.309 โมเดล Sonnet จำกัดไม่เกิน $1 ต่อรอบ เฉพาะกลุ่มมี plugin (`full`) งานละ 3 รอบ ในโฟลเดอร์ path สั้น ใช้ได้ทั้ง 9 รอบ รวม $1.04
+
+| Task | เรียก `debug` | ถูกต้อง | ตรวจแล้ว หลักฐานตรงกับโค้ด | `checkDetects` | รายงานตรงความจริง | ค่าใช้จ่ายเฉลี่ย |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-blank-name` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.123 |
+| `bug-dup-count` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.109 |
+| `bug-space-list` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.115 |
+
+- **ตัดขั้นตอนออกจาก description แล้วยังถูกหยิบใช้เหมือนเดิม:** `debug` ถูกเรียกจาก bug report ธรรมดา 9 ใน 9 รอบ เท่ากับ 9 ใน 9 ที่ `c6011fd` ประโยคที่ใช้เปิด skill ไม่ได้เปลี่ยน ผลนี้จึงบอกได้แค่ว่า description ที่สั้นลงไม่ทำให้แย่ลง ไม่ได้บอกว่าประโยคที่บรรยายขั้นตอนเคยทำให้เสียหาย
+- Stop hook ไม่ต้องขออะไรเลย agent ทุกตัวรัน verify ก่อนหยุด และขั้น against บอกว่า repro จับบั๊กได้ครบทั้ง 9 รอบ
+- ขั้นใหม่ของ `debug` (อาการที่ผู้ใช้แจ้ง อัตราการแดง และ `git diff` รอบการบังคับให้แดง) ไม่มีโอกาสได้ใช้ เพราะบั๊กทั้งสามเกิดทุกครั้งและมีอยู่ก่อนเริ่ม session
+
+**micro-test `import-request`** ใช้ `scripts/micro/run.mjs` ที่ `58fa016` โมเดล Sonnet variant ละ 5 ครั้ง จำกัดไม่เกิน $0.05 ต่อครั้ง รวม $0.32
+
+| Variant | เพิ่ม check ที่เรียก `monthlyTotals` ด้วย input จริง | ค่าใช้จ่ายเฉลี่ย |
+| --- | --- | --- |
+| control (ไม่มีข้อความจาก hook) | 0/5 | $0.022 |
+| ข้อความก่อน `4af59f0` | 0/5 | $0.020 |
+| ข้อความปัจจุบัน | 5/5 | $0.022 |
+
+- **ได้ผลตรงกับ A/B ในราคาที่ถูกกว่ามาก:** ใน session ได้ 0/4 แล้ว 3/3 ราวรอบละ $0.16 ส่วนที่นี่ได้ 0/5 กับ 5/5 ราวครั้งละ $0.02 คำตอบทั้งห้าต่อข้อความเดิมเลือกทางออกที่ข้อความเปิดไว้ ("If nothing a user can run reaches this change, say so and stop") ส่วนคำตอบทั้งห้าต่อข้อความปัจจุบันเขียน check ที่เรียกฟังก์ชันตรง ๆ ตามตัวอย่างในข้อความ ถ้าไม่มีข้อความเลย agent ทดสอบด้วยการแก้สำเนาของโปรเจคหรือการอ่าน config และไม่มีตัวไหนเพิ่ม check
+- **คะแนนรอบแรกผิด และรู้ได้จากการอ่านคำตอบเท่านั้น** ตอนแรก case นับคำตอบที่มีคำว่า `verify.json` กับ `monthlyTotals(` ว่าผ่าน ข้อความเดิมจึงได้ 5/5 ทั้งที่คำตอบปฏิเสธพร้อมเอ่ยทั้งสองคำ ตอนนี้ต้องมี check (`"args"` หรือ `"command"`) ที่เรียกฟังก์ชันด้วย argument จริง และ `--rescore` ให้คะแนนคำตอบที่เก็บไว้ใหม่โดยไม่เสียเงิน ควรอ่านคำตอบก่อนเชื่อคะแนนจาก script
+- ใช้โมเดลเดียว สถานการณ์เดียว เขียนโดยผู้เขียน plugin เอง micro-test บอกได้ว่า agent บอกว่าจะทำอะไรต่อ ไม่ได้บอกว่าตลอด session มันทำจริงหรือไม่
 
 ## บันทึกการตรวจงานตัวเอง
 

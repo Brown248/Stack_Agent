@@ -10,7 +10,7 @@ Ideas adapted from obra/superpowers and mattpocock/skills (both MIT). No vendore
 
 ### Added
 
-- `scripts/micro/run.mjs` (`npm run micro`): micro-tests that send one scenario and one wording to `claude` as a single call with no tools, score the reply with a script, and repeat each wording beside a control that gets no guidance. `--dry-run` prints the prompts and the cost cap. The first case, `import-request`, measures the Stop hook's import request. Not run with a model yet.
+- `scripts/micro/run.mjs` (`npm run micro`): micro-tests that send one scenario and one wording to `claude` as a single call with no tools, score the reply with a script, and repeat each wording beside a control that gets no guidance. `--dry-run` prints the prompts and the cost cap. `--rescore FILE` scores saved replies again for free. The first case, `import-request`, measures the Stop hook's import request: 0/5 with no message, 0/5 with the wording before `4af59f0`, 5/5 with the current one (Sonnet, $0.32; design notes, 2026-10-24).
 - The reviewer also checks the repo's own standards files (`CONTRIBUTING.md`, `CODING_STANDARDS.md`, `STYLEGUIDE.md`, `STYLE.md`, `AGENTS.md`, `CLAUDE.md`) and cites a violation as `standards:<file>:<line>`, which `review-findings.mjs` checks like a `rules.md` line. `rules.md` wins a disagreement.
 - `docs/out-of-scope.md` (EN/TH): ideas Stack Agent decided not to adopt, why, and what it does instead.
 - "Writing the skill text" in `docs/customizing.md` (EN/TH).
@@ -19,7 +19,7 @@ Ideas adapted from obra/superpowers and mattpocock/skills (both MIT). No vendore
 ### Changed
 
 - `debug`: the red must be the failure the user reported, a bug that fails on some runs only gets a measured red rate, a red forced by putting the bug back shows `git diff` before and after, and a missing place for a test is reported as a finding.
-- Nine skill descriptions no longer summarize the procedure (superpowers found an agent follows such a summary instead of the skill). The trigger wording of `debug` and `verify` is unchanged. Not measured yet with the A/B tasks or evals.
+- Nine skill descriptions no longer summarize the procedure (superpowers found an agent follows such a summary instead of the skill). The trigger wording of `debug` and `verify` is unchanged. `debug` was still invoked from a plain bug report in 9 of 9 A/B runs (design notes, 2026-10-24); the `debug-blank-name` eval has not been rerun.
 
 ### Fixed
 

@@ -32,7 +32,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Review against the spec as well as the rules (from mattpocock/skills `code-review`, MIT) | `source: spec` with a quoted `spec: { from, quote }`, checked against the commit message or spec file | `tests/review-findings.test.mjs` |
 | Review findings as data, verified by an agent that did not find them (from cloudflare/security-audit-skill) | candidates from `reviewer`, verdicts `confirmed` / `hardening` / `needs_validation` / `rejected` from `finding-verifier`, checked by `scripts/review-findings.mjs` (required fields per verdict, finder is not verifier, quoted excerpts must match the cited line, a finding about a commit must cite a file it changed) | `tests/review-findings.test.mjs`, including tests that the agent prompts name every field and every script flag the docs use |
 | Evals as unit tests for skills, blind, judged by another model | `evals/` in `claude plugin eval` format (with/without delta, haiku judge by default), agent `judge`, skill `run-evals` | one case run for real (below) |
-| Measure one wording against saying nothing (from obra/superpowers' micro-tests, MIT) | `scripts/micro/run.mjs`: one tool-less call per sample, a control with no guidance, 5 runs per variant by default, a scripted score; case `import-request` measures the Stop hook's import request with its text imported from the hook | `tests/micro.test.mjs` (fake claude); not run with a model yet |
+| Measure one wording against saying nothing (from obra/superpowers' micro-tests, MIT) | `scripts/micro/run.mjs`: one tool-less call per sample, a control with no guidance, 5 runs per variant by default, a scripted score; case `import-request` measures the Stop hook's import request with its text imported from the hook | `tests/micro.test.mjs` (fake claude); one live run (below, 2026-10-24) |
 | Deterministic work in scripts, judgment to the agent | zero-dependency scripts for every repeatable step | 302 tests |
 | Skills: small, composable, with scripts, getting better each use | 10 skills, `reflect` for improving them | `claude plugin validate --strict` |
 | A description says when, and a skill survives a compaction (from obra/superpowers, MIT) | descriptions name triggers only, without "then" or "step"; each SKILL.md under 20,000 characters | `tests/skills.test.mjs` |
@@ -296,6 +296,32 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **Without the plugin**, no `job-new-export` run verified, and the bare arm's verification on `refactor-items` came from one agent that ran `.stack-agent/bin/verify.mjs` because it found the files in the repository (one bare run changed nothing, so 2 runs count).
 - The Stop-hook guard never fired: no run broke a rule.
 - 3 runs per cell, one model, two tasks written by the plugin's author.
+
+## Shorter skill descriptions and the first micro-test (2026-10-24)
+
+**A/B, bug reports.** `scripts/ab/run.mjs`, plugin at `58fa016` (the nine descriptions without their procedure, and the new `debug` steps), Claude Code 2.1.309, Sonnet, at most $1 per run, plugin arm (`full`) only, 3 runs per task, short run folder, all 9 valid. $1.04 in all.
+
+| Task | `debug` invoked | Correct | Verified, evidence matches | `checkDetects` | Honest | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-blank-name` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.123 |
+| `bug-dup-count` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.109 |
+| `bug-space-list` | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.115 |
+
+- **Dropping the procedure from the description kept the pick-up:** `debug` was invoked from a plain bug report in 9 of 9 runs, as in the 9 of 9 at `c6011fd`. The trigger sentence did not change, so this shows the shorter description did not hurt; it does not show that the procedure sentence was harmful.
+- The Stop hook never had to ask: every agent verified before stopping, and the against step listed its repro as detecting in all 9.
+- The new `debug` steps (the user's symptom, a red rate, `git diff` around a forced red) had no case to show up in: all three bugs are deterministic and were there before the session.
+
+**Micro-test, `import-request`.** `scripts/micro/run.mjs` at `58fa016`, Sonnet, 5 calls per variant, at most $0.05 per call, $0.32 in all.
+
+| Variant | Adds a check that calls `monthlyTotals` on an input | Mean cost |
+| --- | --- | --- |
+| control (no hook message) | 0/5 | $0.022 |
+| the wording before `4af59f0` | 0/5 | $0.020 |
+| the current wording | 5/5 | $0.022 |
+
+- **It matches the A/B result at a fraction of the cost:** 0/4 and then 3/3 in sessions at about $0.16 a run, against 0/5 and 5/5 here at about $0.02 a call. All five replies to the old wording took its way out ("If nothing a user can run reaches this change, say so and stop"); all five to the current one wrote the direct-call check it shows. Without a message, the agents tested by mutating a copy or by reading the config, and none added a check.
+- **The first score was wrong, and only reading the replies showed it.** The case first counted any reply that named `verify.json` and `monthlyTotals(`, which scored the old wording 5/5: its replies refused while naming both. The score now needs a check (`"args"` or `"command"`) that calls the function with a literal argument, and `--rescore` scored the saved replies again at no cost. Read the replies before trusting a scripted score.
+- One model, one scenario, written by the plugin's author. A micro-test shows what the agent says it will do next, not what it does over a session.
 
 ## Self-review log
 
