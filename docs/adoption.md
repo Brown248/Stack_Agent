@@ -102,6 +102,8 @@ Details that cause silent misses:
 - Patterns live in JSON, so every backslash is doubled: a regex `\bSELECT\b` is written `"\\bSELECT\\b"`. A single `\b` in JSON becomes a backspace character, and the guard rejects it as a config error.
 - `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`, and `declinedRules` are arrays of strings. A plain string is a config error.
 - These folders are always skipped: `node_modules`, `.git`, `dist`, `build`, `coverage`, `__pycache__`, `.venv`, `venv`, `.tox`, `.pytest_cache`, `.mypy_cache`, `target`, `.stack-agent/evidence`, `.stack-agent/bin`. Add more with `ignore`.
+- In a git repo the guard and the API map read only the files git would commit: tracked files, plus untracked ones that are not gitignored. A gitignored `.env` or key file is not scanned, the same as in CI, where it does not exist. This also holds for files named with `--files` and for the after-edit hook. A tracked file is scanned even if a gitignore pattern matches it. Outside git, every file under the root is scanned.
+- Files over 1 MB are not checked. The guard names each one in a warning; add it to `ignore` if that is intended.
 - `to` matches the file an import resolves to. Importing `../db/index.js` needs `"to": ["src/db/**"]`. `"src/db"` matches nothing.
 - Globs support `*`, `**`, `?`, and `{js,ts}`.
 - Path-alias imports (`@/modules/x`) need `"aliases": {"@/": "src/"}`.

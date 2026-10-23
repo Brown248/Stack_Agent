@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -81,6 +82,36 @@ export function walk(root, ignore = []) {
 	};
 	visit(root);
 	return out.sort();
+}
+
+const gitIn = (root, args, input) => spawnSync("git", args, { cwd: root, encoding: "utf8", input, maxBuffer: 256 * 1024 * 1024 });
+
+// The files git would commit under root (tracked, plus untracked ones not gitignored), so a gitignored .env or key
+// file is judged the same way locally as in CI, where it does not exist. Outside a git repo, every file under root.
+export function projectFiles(root, ignore = []) {
+	const r = gitIn(root, ["ls-files", "-co", "--exclude-standard", "-z"]);
+	if (r.error || r.status !== 0) return walk(root, ignore);
+	const skip = [...DEFAULT_IGNORE, ...ignore];
+	const out = [];
+	for (const rel of new Set(r.stdout.split("\0").filter(Boolean))) {
+		if (skip.some((s) => isIgnored(rel, s))) continue;
+		// a deleted tracked file, a submodule, or a symbolic link is not a file to scan
+		try {
+			if (!fs.lstatSync(path.join(root, rel)).isFile()) continue;
+		} catch {
+			continue;
+		}
+		out.push(rel);
+	}
+	return out.sort();
+}
+
+// The subset of rels (posix, relative to root) that git ignores; empty outside a git repo.
+export function gitIgnored(root, rels) {
+	if (!rels.length) return new Set();
+	const r = gitIn(root, ["check-ignore", "--stdin", "-z"], rels.join("\0") + "\0");
+	if (r.error || (r.status !== 0 && r.status !== 1)) return new Set();
+	return new Set(r.stdout.split("\0").filter(Boolean));
 }
 
 export class ConfigError extends Error {}

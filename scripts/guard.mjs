@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, toPosix, walk } from "./lib/files.mjs";
+import { ConfigError, gitIgnored, matchesAny, parseArgs, projectFiles, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node guard.mjs [--root DIR] [--config FILE] [--files F...] [--json] [--strict]
                      [--update-baseline [--allow-increase]] [--compare-ref GIT_REF]
@@ -305,8 +305,12 @@ function parseAllows(lines, { today, latest, ruleIds, maxAllowDays }) {
 	return { allows, problems };
 }
 
+export const MAX_FILE_BYTES = 1_000_000;
+
 export function runGuard({ root, config, files, today = new Date().toISOString().slice(0, 10), warnings }) {
-	const all = files ?? walk(root, config.ignore);
+	// gitignored files never reach CI, so they are not scanned here either, also when named one by one
+	const ignored = files ? gitIgnored(root, files) : new Set();
+	const all = files ? files.filter((f) => !ignored.has(f)) : projectFiles(root, config.ignore);
 	const violations = [];
 	const ruleIds = new Set(config.rules.map((r) => r.id));
 	const latest = addDays(today, config.maxAllowDays);
@@ -321,9 +325,12 @@ export function runGuard({ root, config, files, today = new Date().toISOString()
 		} catch {
 			continue;
 		}
-		if (size > 1_000_000) continue;
 		const rules = config.rules.filter((r) => matchesAny(rel, r.files) && !matchesAny(rel, r.exclude));
 		if (rules.length === 0) continue;
+		if (size > MAX_FILE_BYTES) {
+			warnings?.push(`${rel} is over 1 MB, so no rule checked it; add it to "ignore" if that is intended`);
+			continue;
+		}
 		const text = fs.readFileSync(abs, "utf8");
 		if (text.includes("\0")) continue;
 		const { allows, problems } = parseAllows(text.split("\n"), { today, latest, ruleIds, maxAllowDays: config.maxAllowDays });

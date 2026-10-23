@@ -102,6 +102,8 @@ check หรือเทสที่ผ่านทั้งก่อนแล�
 - pattern อยู่ใน JSON จึงต้องเขียน backslash ซ้ำสองตัวเสมอ เช่น regex `\bSELECT\b` ต้องเขียน `"\\bSELECT\\b"` ถ้าเขียน `\b` ตัวเดียวใน JSON จะกลายเป็นตัวอักษร backspace และ guard จะแจ้ง config error
 - `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`, `declinedRules` ต้องเป็น array ของ string ถ้าใส่เป็น string เดี่ยว guard จะแจ้ง config error
 - โฟลเดอร์เหล่านี้ถูกข้ามเสมอ: `node_modules`, `.git`, `dist`, `build`, `coverage`, `__pycache__`, `.venv`, `venv`, `.tox`, `.pytest_cache`, `.mypy_cache`, `target`, `.stack-agent/evidence`, `.stack-agent/bin` ถ้าต้องการข้ามเพิ่มให้ใส่ใน `ignore`
+- ใน repo ที่เป็น git นั้น guard และแผนที่ API อ่านเฉพาะไฟล์ที่ git จะ commit คือไฟล์ที่ track อยู่ และไฟล์ untracked ที่ไม่ได้ gitignore ไฟล์ `.env` หรือไฟล์ key ที่ gitignore ไว้จะไม่ถูกสแกน เหมือนใน CI ที่ไม่มีไฟล์นั้นอยู่ ข้อนี้ใช้กับไฟล์ที่ระบุด้วย `--files` และกับ hook หลังแก้ไฟล์ด้วย ไฟล์ที่ track อยู่จะถูกสแกนเสมอแม้ pattern ใน gitignore จะตรงกับมัน ถ้าไม่ได้อยู่ใน git จะสแกนทุกไฟล์ใต้ root
+- ไฟล์ที่ใหญ่เกิน 1 MB จะไม่ถูกตรวจ guard จะแจ้งชื่อแต่ละไฟล์เป็น warning ถ้าตั้งใจให้ข้ามจริงให้ใส่ไว้ใน `ignore`
 - `to` เทียบกับไฟล์ที่ import ไปถึงจริง เช่น import `../db/index.js` ต้องเขียน `"to": ["src/db/**"]` ถ้าเขียน `"src/db"` จะไม่จับอะไรเลย
 - glob รองรับ `*`, `**`, `?` และ `{js,ts}`
 - import แบบ path alias (เช่น `@/modules/x`) ต้องตั้ง `"aliases": {"@/": "src/"}`

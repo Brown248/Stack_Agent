@@ -4,6 +4,13 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
+## Unreleased
+
+### Fixed
+
+- The guard and the API map read only the files git would commit, so a gitignored `.env` or key file no longer fails the guard locally while CI passes, and `--update-baseline` no longer writes its name into the committed baseline. A baseline that already lists such a file shows it as `improved`; run `--update-baseline` to drop it. Outside git, every file is scanned as before.
+- Files over 1 MB that a rule covers are named in a warning instead of being skipped silently.
+
 ## 0.2.0 (2026-10-23)
 
 The version stayed at 0.1.0 from the first commit (`5d3ee7b`, 2026-10-18) through `0cfc5c1` (2026-10-21), so every vendored `.stack-agent/bin/VERSION` written in that time says `0.1.0`, whatever code it came with. This release covers all of those changes.

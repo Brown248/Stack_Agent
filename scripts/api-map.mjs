@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, walk } from "./lib/files.mjs";
+import { ConfigError, matchesAny, parseArgs, projectFiles, readJson, requireStringArray } from "./lib/files.mjs";
 import { checkType } from "./verify.mjs";
 
 const USAGE = `usage: node api-map.mjs [--root DIR] [--config FILE] [--draft] [--json]
@@ -38,7 +38,7 @@ export function loadMapConfig(file) {
 }
 
 export function routesFromCode(root, config, warnings = []) {
-	const files = walk(root, config.ignore);
+	const files = projectFiles(root, config.ignore);
 	const routes = [];
 	for (const source of config.sources) {
 		const matched = files.filter((f) => matchesAny(f, source.files));
