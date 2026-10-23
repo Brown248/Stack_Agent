@@ -205,6 +205,26 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 - `review-spec` รันแรกใช้วัดผลไม่ได้: harness อนุญาต `git diff` แต่ไม่อนุญาต `git -C <checkout> diff` และไม่อนุญาตโฟลเดอร์ temp ที่เก็บ checkout reviewer จึงอ่าน diff ไม่ได้ ตัว skill ทำตามที่เขียนไว้ (หยุดและบันทึก commit ว่า `not reviewed: diff could not be read`) ตอนนี้งานแต่ละงานเพิ่ม tool และโฟลเดอร์ของตัวเองได้ (`allowedTools`, `addDirs`) และ 3 รันข้างบนรันหลังแก้แล้ว
 - 3 รันต่อช่องพอเห็นความต่างแบบ 9/9 กับ 0/9 แต่ไม่พอวัดความต่างเล็กๆ
 
+## ทดสอบ A/B: task ของ preset ใหม่, description ของ debug และ judge (23 ต.ค. 2026)
+
+**วิธีการ** `scripts/ab/run.mjs` ที่ commit `d1a2e90`, Claude Code 2.1.309, Sonnet, จำกัดไม่เกิน $1 ต่อรอบ รันเฉพาะกลุ่มที่มี plugin (`full`) task ละ 3 รอบ แยกสภาพแวดล้อมเหมือนเดิม และ valid ทั้ง 18 รอบ task คือรายงานบั๊ก 3 ตัวกับ task ของ preset ใหม่ 3 ตัว (`lib-maxlength`, `web-roundup`, `job-skip-blank`) `--judge haiku` ให้คะแนน rubric ของ task preset ทั้งสาม ค่าใช้จ่ายของ agent รวม $2.22 และของ judge รวม $0.05
+
+| Task | แก้หรือสร้างได้ (probe) | verify แล้ว หลักฐานตรงกับโค้ด | `checkDetects` ตามที่บันทึก | `checkDetects` หลังแก้บั๊กด้านล่าง | skill ที่ถูกหยิบใช้ | ค่าใช้จ่ายเฉลี่ย |
+| --- | --- | --- | --- | --- | --- | --- |
+| bug-blank-name | 3/3 | 3/3 | 0/3 | 3/3 | `debug` 3/3 | $0.122 |
+| bug-dup-count | 3/3 | 3/3 | 0/3 | 3/3 | `debug` 3/3 | $0.114 |
+| bug-space-list | 3/3 | 3/3 | 0/3 | 3/3 | `debug` 3/3 | $0.118 |
+| lib-maxlength | 3/3 | 3/3 | 0/3 | 3/3 | ไม่มี | $0.113 |
+| web-roundup | 3/3 | 3/3 | 3/3 | 3/3 | `verify` 1/3 | $0.142 |
+| job-skip-blank | 3/3 | 3/3 | 0/3 | 0/3 | ไม่มี | $0.130 |
+
+- **skill debug ถูกหยิบใช้เองจากรายงานบั๊กธรรมดาแล้ว 9/9** เทียบกับ 0/9 ใน A/B รายงานบั๊กเมื่อ 21 ต.ค. หลังจากเปลี่ยน description ให้เปิดด้วยการรายงานบั๊กและ "find and fix it" ใช้ prompt และโมเดลเดิม แต่รอบนี้รันเฉพาะกลุ่ม full
+- **บั๊กใน harness ที่รอบนี้หาเจอ** ขั้น against ข้ามใน 15 รอบโดยบอกว่า "verify.json does not exist at <hash>" ทั้งที่ไฟล์มีอยู่ เพราะ `git show <hash เต็ม>:<path>` ลองตีความอาร์กิวเมนต์เป็นชื่อไฟล์ด้วย และ path ของโฟลเดอร์ที่รันยาวจนเกินขีดจำกัด 260 ตัวอักษรของ Windows แก้แล้วด้วยการใส่ `--` ท้ายทุกคำสั่ง `git show <rev>:<path>` (`tests/long-paths.test.mjs`) คอลัมน์ "หลังแก้บั๊ก" ได้จากการรัน `verify.mjs` ตัวที่แก้แล้วซ้ำในแต่ละโฟลเดอร์หลัง session จบ บนโค้ดและ check ที่ agent ทิ้งไว้ ไม่มีการเรียก agent ซ้ำ
+- **`job-skip-blank` ได้ 0/3 เป็นข้อจำกัดจริง ไม่ใช่บั๊กนั้น** agent ทั้งสามรอบทดสอบการแก้ด้วย unit test ที่ import export ใหม่ (`countBlankCategory` และแบบเดียวกัน) บนโค้ดเก่า import นั้นล้ม ขั้น against จึงนับเป็น inconclusive และไม่มีรอบไหนเพิ่ม verify check เลยไม่มีอะไรแสดงได้ว่าเทสจับการแก้ได้ ถ้ามี command check ที่รัน job กับไฟล์ที่มี category ว่าง ก็จะแสดงได้
+- **judge** `lib-maxlength` ผ่านครบ 6/6 เกณฑ์ `web-roundup`: กฎการปัดอยู่ในโค้ดกลาง 3/3 ส่วน "label ที่บอกผู้ใช้ว่าทำอะไร" 2/3 รอบหนึ่งเขียน label แค่ "Round up" judge อ้างบรรทัดนั้นและบอกว่า label ไม่ได้บอกว่าปัดอะไร `job-skip-blank`: logic อยู่ใน transform 3/3 ส่วน category ที่มีแต่ช่องว่างถูกทำแบบเดียวกับว่าง 2/3 รอบหนึ่งผ่านทาง CSV เพราะมีการ trim แต่ฟังก์ชัน transform เองไม่ได้ trim และ judge อ้างทั้งสองบรรทัด FAIL ทั้งสองข้อระบุชัดและตรวจสอบได้ ใช้เงินราว $0.003 ต่อรอบ
+
+**ข้อจำกัด** cell ละ 3 รอบ โมเดลเดียว รันเฉพาะกลุ่ม plugin (ไม่มีกลุ่มไม่มี plugin ให้เทียบ) task เขียนโดยผู้เขียน plugin เอง และคอลัมน์ที่คำนวณใหม่มาจากการรัน verify หลัง session ไม่ใช่โดย agent เอง
+
 ## ต้นทุนของ hook และขั้น against ใน repository ขนาดใหญ่ (23 ต.ค. 2026)
 
 วัดด้วย `scripts/bench-hooks.mjs` บน Windows 11 กับ Node 26.8.1 ใช้ git repository จำลองที่มีไฟล์ JS เล็ก ๆ รันขนาดละหนึ่งรอบ

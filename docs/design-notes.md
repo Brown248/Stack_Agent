@@ -205,6 +205,26 @@ Five runs are a smoke test, not a rate.
 - The first `review-spec` run was not a valid measurement: the harness allowed `git diff` but not `git -C <checkout> diff`, and not the temp folder holding the checkout, so the reviewer could not read the diff. The skill did what it says (it stopped and logged the commit as `not reviewed: diff could not be read`). A task can now add tools and folders for itself (`allowedTools`, `addDirs`), and the three runs above were made after that fix.
 - 3 runs per cell are enough to see an 9/9 against 0/9 split, not to measure small differences.
 
+## Behavioral A/B: new preset tasks, the debug description, and the judge (2026-10-23)
+
+**Method.** `scripts/ab/run.mjs` at commit `d1a2e90`, Claude Code 2.1.309, Sonnet, at most $1 per run, plugin arm only (`full`), 3 runs per task, isolated as before, all 18 valid. Tasks: the three bug reports and the three new preset tasks (`lib-maxlength`, `web-roundup`, `job-skip-blank`). `--judge haiku` scored the rubric of the three preset tasks. Agent sessions cost $2.22 in total, judge sessions $0.05.
+
+| Task | Fixed or built (probe) | Verified, evidence matches the code | `checkDetects` as recorded | `checkDetects` after the fix below | Skill picked up | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| bug-blank-name | 3/3 | 3/3 | 0/3 | 3/3 | `debug` 3/3 | $0.122 |
+| bug-dup-count | 3/3 | 3/3 | 0/3 | 3/3 | `debug` 3/3 | $0.114 |
+| bug-space-list | 3/3 | 3/3 | 0/3 | 3/3 | `debug` 3/3 | $0.118 |
+| lib-maxlength | 3/3 | 3/3 | 0/3 | 3/3 | none | $0.113 |
+| web-roundup | 3/3 | 3/3 | 3/3 | 3/3 | `verify` 1/3 | $0.142 |
+| job-skip-blank | 3/3 | 3/3 | 0/3 | 0/3 | none | $0.130 |
+
+- **The debug skill is now picked up from a plain bug report: 9/9**, against 0/9 in the bug-report A/B of 2026-10-21, after its description was changed to lead with bug reports and "find and fix it". Same prompts, same model; only the full arm ran this time.
+- **A harness bug, found by this run.** The against step skipped in 15 runs with "verify.json does not exist at <hash>" although the file was there: `git show <full hash>:<path>` also tried the argument as a file name, and the run folders' long path passed Windows' 260-character limit. Fixed by ending every `git show <rev>:<path>` with `--` (`tests/long-paths.test.mjs`). The column "after the fix" reran the fixed `verify.mjs` in each run folder after the sessions, on the code and checks the agent left; no agent ran again.
+- **`job-skip-blank` 0/3 is a real limit, not that bug.** All three agents covered the change with a unit test that imports a new export (`countBlankCategory` and the like). On the old code that import fails, which the against step counts as inconclusive, and none added a verify check, so nothing could show the test catching the change. A command check that runs the job on a file with a blank category would have.
+- **The judge.** `lib-maxlength` 6/6 criteria passed. `web-roundup`: rounding in the shared code 3/3; "a visible label that tells a user what it does" 2/3: one run labelled the checkbox only "Round up", and the judge cited the line and said the label does not say what is rounded. `job-skip-blank`: logic in the transform 3/3; spaces-only category treated as empty 2/3: in one run the CSV path trimmed it, but the transform function itself did not, and the judge cited both lines. Both FAILs are specific and checkable, at about $0.003 per run.
+
+**Limits.** 3 runs per cell, one model, the plugin arm only (no bare arm to compare with), tasks written by the plugin's author, and the recomputed column comes from a verify run made after the session rather than by the agent.
+
 ## Hook and against cost on large repositories (2026-10-23)
 
 Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic git repositories of small JS files, one run per size.
