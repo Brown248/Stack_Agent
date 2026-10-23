@@ -8,7 +8,7 @@ import { findUp, readHookInput } from "./read-input.mjs";
 const CONFIG = ".stack-agent/guard.config.json";
 
 const input = readHookInput();
-const filePath = input.tool_input?.file_path;
+const filePath = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
 if (filePath) {
 	const absFile = path.resolve(input.cwd ?? process.cwd(), filePath);
 	const root = findUp(path.dirname(absFile), CONFIG);

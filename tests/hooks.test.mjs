@@ -283,3 +283,13 @@ test("hooks.json points at scripts that exist", () => {
 		}
 	}
 });
+
+test("the after-edit guard also runs for NotebookEdit, which names its file notebook_path", () => {
+	const matchers = JSON.parse(fs.readFileSync(path.join(repoRoot, "hooks/hooks.json"), "utf8")).hooks.PostToolUse.map((h) => h.matcher);
+	assert.ok(matchers.some((m) => m.split("|").includes("NotebookEdit")), matchers.join(", "));
+	const dir = copySample();
+	write(dir, "notes/scratch.ipynb", JSON.stringify({ cells: [{ source: ["-----BEGIN PRIVATE KEY-----\n"] }] }));
+	const r = runNode(hook("post-edit-guard.mjs"), [], { input: hookInput({ tool_name: "NotebookEdit", tool_input: { notebook_path: path.join(dir, "notes/scratch.ipynb") } }) });
+	assert.equal(r.code, 2, r.stderr);
+	assert.match(r.stderr, /notes\/scratch\.ipynb:1 \[no-private-keys\]/);
+});
