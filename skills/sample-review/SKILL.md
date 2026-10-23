@@ -1,6 +1,6 @@
 ---
 name: sample-review
-description: Spot-check a random sample of recent commits instead of reviewing every PR first, and turn every repeatable bad pattern found into a guard rule with proof. Use for /sample-review or "สุ่มตรวจ commit", "spot-check what the agents merged today".
+description: Use to spot-check a random sample of recent commits instead of reviewing every PR, and to find the bad patterns worth a guard rule. Use for /sample-review or "สุ่มตรวจ commit", "spot-check what the agents merged today".
 disable-model-invocation: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: reflect
-description: After a task, review what went wrong or took too long in this conversation and turn durable lessons into edits to the repo's skills, rules, or guard. Use for /reflect or "สรุปบทเรียน", "update the skill so this doesn't happen again".
+description: Use after a task when something in this conversation went wrong or took too long, and the lesson belongs in the repo's skills, rules, or guard. Use for /reflect or "สรุปบทเรียน", "update the skill so this doesn't happen again".
 disable-model-invocation: true
 ---
 

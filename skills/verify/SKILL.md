@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Prove a change works by running the test suite and the project's real checks (HTTP requests against a running server, or commands that run the program the way a user would), then report the evidence file. Use before saying any code change is done, fixed, or working, and whenever asked to "verify", "prove it works", "เช็กว่าใช้ได้จริง", "ยิง API", or "test the command".
+description: Use before saying any code change is done, fixed, or working, to prove it with the test suite and the project's real checks (HTTP requests against a running server, or commands that run the program the way a user would). Also whenever asked to "verify", "prove it works", "เช็กว่าใช้ได้จริง", "ยิง API", or "test the command".
 ---
 
 # Verify the change against the real program

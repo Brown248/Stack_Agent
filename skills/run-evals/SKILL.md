@@ -1,6 +1,6 @@
 ---
 name: run-evals
-description: Run and interpret the plugin's eval suite (claude plugin eval) to test whether a skill change actually improves agent behavior, comparing runs with and without the plugin. Use for /run-evals, "ทดสอบ skill", "run the evals", or before trusting an edited skill.
+description: Use to test whether a skill change actually improves agent behavior, with the plugin's eval suite (claude plugin eval), with and without the plugin. Use for /run-evals, "ทดสอบ skill", "run the evals", or before trusting an edited skill.
 disable-model-invocation: true
 ---
 

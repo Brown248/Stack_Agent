@@ -1,6 +1,6 @@
 ---
 name: mine-corrections
-description: Read this project's past Claude Code sessions for the corrections people keep giving agents, group the ones that repeat across sessions, and propose a check, a skill edit, or a rule for each, with the quoted messages as evidence. Use for /mine-corrections, "what do I keep correcting", "ขุดบทเรียนจากแชตเก่า", or before writing skills for a repo you have worked in for a while.
+description: Use to find the corrections people keep giving agents in this project's past Claude Code sessions. Use for /mine-corrections, "what do I keep correcting", "ขุดบทเรียนจากแชตเก่า", or before writing skills for a repo you have worked in for a while.
 disable-model-invocation: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: add-migration
-description: For projects with a database. Add a schema migration safely: reversible, tested up and down against a local database, and never editing a migration that already shipped. Use for "add a migration", "ทำ migration", "add a column", "change the schema".
+description: For projects with a database. Use when the schema changes: a new migration, column, table, or index. Use for "add a migration", "ทำ migration", "add a column", "change the schema".
 ---
 
 # Add a migration

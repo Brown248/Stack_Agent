@@ -1,6 +1,6 @@
 ---
 name: add-endpoint
-description: For HTTP backends (backend-http preset). Add a new HTTP endpoint the way this repo does it, with a test, a verify check, a guard-clean layout, and an updated API map. Use for "add an endpoint", "เพิ่ม endpoint", "new route", "new API".
+description: For HTTP backends (backend-http preset). Use when adding an HTTP endpoint or route to this repo: "add an endpoint", "เพิ่ม endpoint", "new route", "new API".
 ---
 
 # Add an endpoint

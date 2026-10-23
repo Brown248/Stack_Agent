@@ -1,6 +1,6 @@
 ---
 name: correct
-description: Find the mistakes agents keep repeating in this repo and make each one impossible, preferring architecture, then types, then a guard rule whose error names the fix, then a test, with docs last. Use for /correct or "ทำให้ไม่พลาดซ้ำ", "turn this review comment into a rule".
+description: Use when agents keep making the same mistake in this repo and it should become impossible to repeat. Use for /correct or "ทำให้ไม่พลาดซ้ำ", "turn this review comment into a rule".
 disable-model-invocation: true
 ---
 
