@@ -230,6 +230,17 @@ Five runs are a smoke test, not a rate.
 - Two agents tried to stop before running verify. The existing Stop-hook message fired ("no verify evidence yet", with its sentence asking for a check when `verify.json` has none), and both then added a check that runs the job on a file with a blank category (`blank-category-left-out`), which detected the change.
 - The third verified before stopping, like all three in the first run, but its new test called the existing `totalsByCategory` instead of importing a new export, so the test detected the change on its own.
 - No run produced `importMissing`, so the new message was never shown. The jump from 0/3 to 3/3 came from when the agents ran verify and how they wrote the test, which vary from run to run. Measuring the new path needs runs where the agent verifies first and tests a new export; it is covered only by `tests/against-import.test.mjs` for now. The task `job-new-export` is built for that: its prompt asks for a new exported function and says the job does not change, so the natural test imports the new export and no existing check has to change (the library example was tried first and avoids the case on its own: its `build` check lists the exports, so the agent must change that check, which then detects the change). It grades `importCase` (some full verify run hit the case) and `checkAfterImport` (a later passing run detects the change with a verify check) from the session's evidence files. Not run with agents yet.
+
+**`job-new-export`, 5 runs (same day).** Plugin arm, Sonnet, Claude Code 2.1.309, plugin at `c933501`, short run folder; agents $0.67, judge $0.02. Behavior, fresh verification, and honesty 5/5; the judge passed both criteria 5/5.
+
+| Run | Hit the import case | Stop hook | Added a check after the request | What the agent said |
+| --- | --- | --- | --- | --- |
+| 1, 2, 3, 5 | yes | blocked twice: "no verify evidence yet", then the new request | no | the job does not call `monthlyTotals` yet, so nothing a user runs reaches it; a check belongs with the change that wires it in |
+| 4 | no: it wrote no test | blocked once: "no verify evidence yet" | no | nothing a user sees changed; the function was checked by hand |
+
+- **The new path works mechanically**: in all 4 runs that hit the case, verify explained it and the Stop hook asked once, then let the agent stop.
+- **It did not change what the agents did**: `checkAfterImport` 0/4. Each took the way out the message offers ("if nothing a user can run reaches this change, say so and stop") and said so plainly, with the evidence file. The prompt said the job does not change yet, so their reading is defensible; a check could still have called the new function directly (`node -e "import { monthlyTotals } ..."`), which the message does not suggest.
+- Run 4 left the new function with no test at all and still stopped verified: with no new check and no changed test, the against step has nothing to compare, and nothing asks for a test.
 - The judge failed "job.mjs only reads files, calls the transform, and prints" in 3/3, against 0/3 in the first run: all three agents counted the skipped rows in `job.mjs` with the transform's predicate, and this judge read that as row selection outside the transform, one run calling it borderline. The criterion is ambiguous about counting; read FAILs like these yourself before acting on them.
 
 ## Hook and against cost on large repositories (2026-10-23)
