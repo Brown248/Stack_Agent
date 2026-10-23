@@ -123,13 +123,19 @@ export function reminderMessage({ why, files, verifyConfigChanged, mode = "remin
 	);
 }
 
-export function importMessage() {
+// names: what the tests imported that the old code lacks, when verify could read them from the test output
+export function importMessage(names = []) {
+	const name = names[0] ?? "<the new function>";
+	const listed = names.length ? ` (${names.join(", ")})` : "";
 	return (
 		`stack-agent: verification passed, but its against step could not show that your change is tested: the changed tests ` +
-		`import something the code before the change does not have, so on that code they fail before testing anything. ` +
-		`Add a check to ${VERIFY} that runs the program the way a user does (a command or an HTTP request) and fails without ` +
-		`your change, for example the job run on an input that hits the new rule, then run \`node .stack-agent/bin/verify.mjs\` again. ` +
-		`If nothing a user can run reaches this change, say so and stop; this is asked once.\n`
+		`import something the code before the change does not have${listed}, so on that code they fail before testing anything. ` +
+		`Add a check to ${VERIFY} that fails without your change. If the program already runs the new code, run it the way a ` +
+		`user does (a command or an HTTP request on an input that reaches it). If nothing calls the new code yet, call it ` +
+		`directly with a command check, for example \`"args": ["node", "--input-type=module", "-e", "import { ${name} } from './src/<module>.js'; console.log(JSON.stringify(${name}(<input>)))"]\` ` +
+		`or \`"args": ["python", "-c", "from <module> import ${name}; print(${name}(<input>))"]\`, with \`expectOutputIncludes\` set to the ` +
+		`result you expect: on the code before your change it fails, and that is the proof. Then run \`node .stack-agent/bin/verify.mjs\` again. ` +
+		`Only if the new code cannot be called at all, say why and stop; this is asked once.\n`
 	);
 }
 
@@ -162,7 +168,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 		if (fs.existsSync(latest)) {
 			const record = readJsonOr(latest, null);
 			const againstStep = Array.isArray(record?.steps) ? record.steps.find((s) => s?.step === "against") : null;
-			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, againstImportMissing: againstStep?.importMissing === true && Boolean(againstStep.skipped), mtimeMs: fs.statSync(latest).mtimeMs };
+			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, againstImportMissing: againstStep?.importMissing === true && Boolean(againstStep.skipped), missingImports: Array.isArray(againstStep?.missingImports) ? againstStep.missingImports.filter((n) => typeof n === "string") : [], mtimeMs: fs.statSync(latest).mtimeMs };
 		}
 		const current = codeFingerprint(root, { ignore, evidenceDir: evidenceRel });
 		const verifyConfigChanged = files.includes(VERIFY);
@@ -200,7 +206,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 			}
 			writeState(root, input.session_id, verdict.state);
 			if (verdict.action === "block" && verdict.kind === "import") {
-				process.stderr.write(importMessage());
+				process.stderr.write(importMessage(evidence?.missingImports));
 				process.exitCode = 2;
 			} else if (verdict.action === "block") {
 				const note = shortMarker ? `Your ${SKIP_MARKER} line needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run. ` : "";

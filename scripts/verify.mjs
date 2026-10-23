@@ -420,8 +420,16 @@ function testsChangedSince(root, ref, keep) {
 	return changedSince(root, ref).filter((p) => matchesAny(p, keep) && fs.existsSync(path.join(root, p)));
 }
 
+// the names a failed import asked for: Node's "does not provide an export named 'x'", Python's "cannot import name 'x'"
+const MISSING_NAME_RES = [/does not provide an export named '([^']+)'/g, /cannot import name '([^']+)'/g];
+export function missingImportNames(output) {
+	const names = new Set();
+	for (const re of MISSING_NAME_RES) for (const m of String(output ?? "").matchAll(re)) names.add(m[1]);
+	return [...names].slice(0, 5);
+}
+
 // a test run that dies on an import the old code lacks proves nothing about the change
-const TEST_IMPORT_RE = /does not provide an export named|cannot import name|ImportError|Failed to import test module|SyntaxError: The requested module/;
+const TEST_IMPORT_RE =/does not provide an export named|cannot import name|ImportError|Failed to import test module|SyntaxError: The requested module/;
 
 function copyInto(fromRoot, toRoot, rel) {
 	const to = path.join(toRoot, rel);
@@ -582,7 +590,7 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 			// tests that import something the old code lacks (a new export or module) die before they test anything there
 			const missingImport = !t.ok && !t.timedOut && (MISSING_RE.test(t.output ?? "") || TEST_IMPORT_RE.test(t.output ?? ""));
 			const inconclusive = !t.ok && (t.timedOut || t.exitCode === 127 || t.exitCode === null || missingImport);
-			results.push({ name: label, ok: t.ok, inconclusive, missingImport, kind: "tests" });
+			results.push({ name: label, ok: t.ok, inconclusive, missingImport, missingNames: missingImport ? missingImportNames(t.output) : [], kind: "tests" });
 		}
 		if (added.length) {
 			const steps = await runVerify({ root: wtRoot, config, skipTests: true, only: step.checks });
@@ -618,7 +626,14 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 		// lets the Stop hook ask for one.
 		if (!step.note && !added.length && results.some((r) => r.missingImport)) {
 			step.importMissing = true;
-			return conclude(step, config, `the changed tests import something the code at ${ref} does not have, so they cannot show that they catch the change. Add a check to verify.json that runs the program the way a user does (a command or HTTP check) and fails without the change`);
+			const names = [...new Set(results.flatMap((r) => r.missingNames ?? []))];
+			if (names.length) step.missingImports = names;
+			const what = names.length ? ` (${names.join(", ")})` : "";
+			return conclude(
+				step,
+				config,
+				`the changed tests import something the code at ${ref} does not have${what}, so they cannot show that they catch the change. Add a check to verify.json that fails without the change: run the program the way a user does, or, if nothing calls the new code yet, a command check that imports ${names[0] ?? "it"} and prints its result`,
+			);
 		}
 		return conclude(step, config, step.note ?? `every new check and test run was inconclusive on the code at ${ref}`);
 	} finally {

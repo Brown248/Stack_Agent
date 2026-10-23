@@ -67,7 +67,9 @@ test("a fix tested only by a test that imports the new export hits the import ca
 	assert.equal(g.checks.checkAfterImport, false);
 	const asked = stop(dir);
 	assert.equal(asked.code, 2);
-	assert.match(asked.stderr, /changed tests import something the code before the change does not have/);
+	assert.match(asked.stderr, /changed tests import something the code before the change does not have \(monthlyTotals\)/);
+	// the check it suggests for code nothing calls yet is the kind the next test adds, which detects the change
+	assert.match(asked.stderr, /import \{ monthlyTotals \} from/);
 	assert.equal(stop(dir, { stop_hook_active: true }).code, 0, "asked once");
 });
 

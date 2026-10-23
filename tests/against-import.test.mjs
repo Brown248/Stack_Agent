@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { decideBlock, importMessage } from "../scripts/hooks/stop-verify.mjs";
+import { missingImportNames } from "../scripts/verify.mjs";
 import { copyExample, git, repoRoot, runNode, write } from "./helpers.mjs";
 
 const verify = (dir, ...args) => runNode(path.join(repoRoot, "scripts/verify.mjs"), ["--root", dir, ...args], { cwd: dir });
@@ -30,7 +31,8 @@ test("verify says why the against step proves nothing when the changed tests imp
 	const dir = changedJob();
 	const r = verify(dir);
 	assert.equal(r.code, 0, r.stdout + r.stderr);
-	assert.match(r.stdout, /SKIP against: the changed tests import something the code at \w+ does not have, so they cannot show that they catch the change\. Add a check to verify\.json that runs the program the way a user does/);
+	assert.match(r.stdout, /SKIP against: the changed tests import something the code at \w+ does not have \(countBlankCategory\), so they cannot show that they catch the change\. Add a check to verify\.json that fails without the change: run the program the way a user does, or, if nothing calls the new code yet, a command check that imports countBlankCategory and prints its result/);
+	assert.deepEqual(latestAgainst(dir).missingImports, ["countBlankCategory"]);
 	const step = latestAgainst(dir);
 	assert.equal(step.importMissing, true);
 	assert.deepEqual(step.checks, []);
@@ -50,7 +52,11 @@ test("the Stop hook asks once for a verify check, then lets the agent stop", () 
 	assert.equal(verify(dir).code, 0);
 	const first = stop(dir);
 	assert.equal(first.code, 2, first.stderr);
-	assert.equal(first.stderr, importMessage());
+	assert.equal(first.stderr, importMessage(["countBlankCategory"]));
+	// the request names the import and shows a check that calls it directly, for code nothing calls yet
+	assert.match(first.stderr, /does not have \(countBlankCategory\)/);
+	assert.match(first.stderr, /If nothing calls the new code yet, call it directly with a command check, for example `"args": \["node", "--input-type=module", "-e", "import \{ countBlankCategory \} from/);
+	assert.doesNotMatch(first.stderr, /If nothing a user can run reaches this change/);
 	const second = stop(dir, { stop_hook_active: true });
 	assert.equal(second.code, 0, second.stderr);
 });
@@ -85,4 +91,16 @@ test("decideBlock asks only when the evidence matches the code and only once per
 	assert.equal(decideBlock({ ...base, evidence: { ...fresh, againstImportMissing: false } }).action, "allow");
 	// stale evidence gets the usual reminder, not this one
 	assert.notEqual(decideBlock({ ...base, evidence: { ...fresh, fingerprint: "old" } }).kind, "import");
+});
+
+test("missingImportNames reads Node's and Python's missing-import errors", () => {
+	assert.deepEqual(missingImportNames("SyntaxError: The requested module '../src/x.mjs' does not provide an export named 'monthlyTotals'\nagain: does not provide an export named 'monthlyTotals'"), ["monthlyTotals"]);
+	assert.deepEqual(missingImportNames("ImportError: cannot import name 'top_words' from 'wordfreq.core' (/x/core.py)"), ["top_words"]);
+	assert.deepEqual(missingImportNames("Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/x/new.js'"), []);
+});
+
+test("without names the request still shows the direct-call check, with a placeholder", () => {
+	const text = importMessage();
+	assert.match(text, /import \{ <the new function> \} from/);
+	assert.doesNotMatch(text, /does not have \(/);
 });
