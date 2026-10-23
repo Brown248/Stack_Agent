@@ -22,7 +22,7 @@ Stack Agent moves rules out of prompts and into things that fail loudly: a verif
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | Runs your tests, starts your server if you have one, runs HTTP checks and command checks, and writes evidence to `.stack-agent/evidence/`. |
 | Hard constraints (CI) | `scripts/guard.mjs` | Regex rules for any language, plus import rules for JS/TS and Python. A baseline ratchets: existing violations pass, new ones fail. `--compare-ref` fails a PR that loosens the rules. |
-| Hard constraints (live) | `hooks/hooks.json` | Blocks hook bypasses (`--no-verify`, `HUSKY=0`, `core.hooksPath`), asks before force-push, deleting or force-moving a branch, `reset --hard`, or edits to the guard's own files. Runs the guard after every edit. Keeps the agent from stopping until verify evidence matches the code it changed, or it records why it cannot verify. |
+| Hard constraints (live) | `hooks/hooks.json` | In projects set up with Stack Agent, blocks hook bypasses (`--no-verify`, `HUSKY=0`, `core.hooksPath`), asks before force-push, deleting or force-moving a branch, `reset --hard`, or edits to the guard's own files. Runs the guard after every edit. Keeps the agent from stopping until verify evidence matches the code it changed, or it records why it cannot verify. |
 | Soft constraints | `.stack-agent/rules.md` | Team preferences loaded into every session. |
 | Feature map (backends) | `scripts/api-map.mjs`, skill `api-map` | Drafts an endpoint map from code and fails when the map drifts. |
 | Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals`, and for backends `add-endpoint`, `add-migration`, `api-map`. |

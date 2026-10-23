@@ -6,6 +6,10 @@
 
 ## ยังไม่ออกรุ่น
 
+### เปลี่ยนแปลง
+
+- กฎ git ของ hook shell (`--no-verify`, force-push, `reset --hard`, การลบ branch และอื่น ๆ) ทำงานเฉพาะในโปรเจกต์ที่มี `.stack-agent/verify.json` หรือ `.stack-agent/guard.config.json` การติดตั้ง plugin ระดับผู้ใช้จึงไม่เปลี่ยนการทำงานของ repository อื่นอีก ส่วนกฎเกี่ยวกับไฟล์ของ Stack Agent เองยังทำงานทุกที่
+
 ### แก้ไข
 
 - guard และแผนที่ API อ่านเฉพาะไฟล์ที่ git จะ commit ไฟล์ `.env` หรือไฟล์ key ที่ gitignore ไว้จึงไม่ทำให้ guard ในเครื่อง fail ขณะที่ CI ผ่านอีก และ `--update-baseline` ไม่เขียนชื่อไฟล์นั้นลง baseline ที่ commit อีก baseline ที่มีไฟล์แบบนั้นอยู่แล้วจะแสดงเป็น `improved` ให้รัน `--update-baseline` เพื่อเอาออก ถ้าไม่ได้อยู่ใน git จะสแกนทุกไฟล์เหมือนเดิม

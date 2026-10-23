@@ -89,6 +89,8 @@ To add a new rule *type* (for example, imports in another language), extend `fin
 - `deny` is for commands that bypass checks (`--no-verify`).
 - `ask` is for destructive or rule-loosening commands.
 
+The git rules (`--no-verify`, hook-disabling variables, force-push, `reset --hard`, branch deletes and force-moves, discarding all changes, deleting `.github/workflows`) apply only inside a Stack Agent project: one with `.stack-agent/verify.json` or `.stack-agent/guard.config.json` in the session's folder or a folder above it. So installing the plugin for your user account does not change how other repositories work. The rules about Stack Agent's own files (the guard config and baseline, `.stack-agent/bin`, the evidence, the session records, `--allow-increase`) apply everywhere. The project is found from the session's folder, so a command that points at another repository (`git -C ../other ...`) is judged by the session's project.
+
 Protected paths are in `scripts/hooks/protected-paths.mjs`. Every pattern has a row in `tests/hooks.test.mjs`. Add yours there first, then change the code until it passes. Keep ordinary commands in the "lets ordinary commands through" list, so a stricter policy does not block normal work.
 
 ## Add an eval case

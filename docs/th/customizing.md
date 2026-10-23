@@ -89,6 +89,8 @@ tests/            ชุดเทส node:test สำหรับทุก scrip
 - `deny` สำหรับคำสั่งที่ข้ามการตรวจ (`--no-verify`)
 - `ask` สำหรับคำสั่งที่ทำลายข้อมูลหรือผ่อนกฎ
 
+กฎเกี่ยวกับ git (`--no-verify`, ตัวแปรที่ปิด hook, force-push, `reset --hard`, การลบหรือบังคับย้าย branch, การทิ้งการแก้ทุกไฟล์ และการลบ `.github/workflows`) ทำงานเฉพาะในโปรเจกต์ที่ติดตั้ง Stack Agent คือมี `.stack-agent/verify.json` หรือ `.stack-agent/guard.config.json` อยู่ใน folder ของ session หรือ folder ที่อยู่เหนือขึ้นไป การติดตั้ง plugin ระดับผู้ใช้จึงไม่เปลี่ยนการทำงานของ repository อื่น ส่วนกฎเกี่ยวกับไฟล์ของ Stack Agent เอง (config และ baseline ของ guard, `.stack-agent/bin`, หลักฐาน, session record และ `--allow-increase`) ทำงานทุกที่ โปรเจกต์หาจาก folder ของ session ดังนั้นคำสั่งที่ชี้ไป repository อื่น (`git -C ../other ...`) จะถูกตัดสินตามโปรเจกต์ของ session
+
 path ที่ป้องกันอยู่ใน `scripts/hooks/protected-paths.mjs` ทุก pattern มีแถวใน `tests/hooks.test.mjs` ให้เพิ่มของคุณในเทสก่อน แล้วแก้โค้ดจนผ่าน และเก็บคำสั่งปกติไว้ในรายการ "lets ordinary commands through" เพื่อไม่ให้นโยบายที่เข้มขึ้นไปบล็อกงานปกติ
 
 ## เพิ่ม eval case

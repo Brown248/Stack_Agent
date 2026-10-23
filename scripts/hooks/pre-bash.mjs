@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { WORKFLOWS_FOLDER, askForProtected, protectedMentioned, protectedWhat, workflowsFolderMentioned } from "./protected-paths.mjs";
 import { projectContext } from "./project-context.mjs";
-import { readHookInput } from "./read-input.mjs";
+import { findUp, readHookInput } from "./read-input.mjs";
 
 const WRITERS = /^(sed|perl|ruby|tee|mv|cp|rm|del|erase|unlink|rmdir|rd|ri|find|shred|truncate|dd|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|Clear-Content|sc|ac)$/i;
 // the hooks' session records and their notes: a command that names them (globs included) and deletes, moves, or
@@ -136,7 +136,9 @@ const DELETERS = /^(rm|rmdir|rd|del|erase|Remove-Item|ri)(\.exe)?$/i;
 const DELETE_CALL = /\b(rmSync|rmdirSync|rmdir|rm|rmtree|removedirs|unlinkSync|unlink|remove|Remove-Item)\s*\(/;
 
 // extra: optional (token) => what | null for paths only known at run time (a custom evidenceDir, E4)
-export function classify(command, depth = 0, extra = () => null) {
+// inProject: false outside a Stack Agent project. The git rules and the workflows-folder rule are about a repo's
+// own gates, so they apply only where Stack Agent is set up; the rules about Stack Agent's own files always apply.
+export function classify(command, depth = 0, extra = () => null, { inProject = true } = {}) {
 	const protectedAt = (t) => protectedWhat(t) ?? extra(t);
 	const text = String(command ?? "");
 	if (SESSIONS_MENTION.test(text) && (CHANGES_FILES.test(text) || splitSegments(text).some((s) => hasInlineScript(tokenize(s)))))
@@ -159,7 +161,7 @@ export function classify(command, depth = 0, extra = () => null) {
 		const deletesWorkflows =
 			(tokens.some((t) => DELETERS.test(t)) && tokens.some((t) => WORKFLOWS_FOLDER.test(t))) ||
 			(inlineScript && DELETE_CALL.test(segment) && workflowsFolderMentioned(segment));
-		if (deletesWorkflows)
+		if (deletesWorkflows && inProject)
 			return { decision: "ask", reason: "this deletes the folder holding the Stack Agent CI workflow, the check that still holds when the hooks do not. A human must approve it." };
 		// the raw segment too: tokenizing drops a backslash inside double quotes ("\e"), but Python keeps it in the path
 		const scripted = inlineScript && ([...tokens, segment].map(protectedMentioned).find(Boolean) ?? tokens.map((t) => extra.mentions?.(t)).find(Boolean));
@@ -167,10 +169,10 @@ export function classify(command, depth = 0, extra = () => null) {
 		const shellAt = tokens.findIndex((t) => NESTED_SHELLS.test(t));
 		if (shellAt !== -1 && depth < 3) {
 			const inner = tokens.slice(shellAt + 1).filter((t) => !/^-(c|Command|EncodedCommand|NoProfile|NonInteractive|lc|ic)$/i.test(t) && !/^\/c$/i.test(t)).join(" ");
-			const nested = classify(inner, depth + 1, extra);
+			const nested = classify(inner, depth + 1, extra, { inProject });
 			if (nested) return nested;
 		}
-		const git = parseGit(tokens);
+		const git = inProject && parseGit(tokens);
 		if (git) {
 			const verdict = classifyGit(git);
 			if (verdict) return verdict;
@@ -182,7 +184,7 @@ export function classify(command, depth = 0, extra = () => null) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 	const input = readHookInput();
 	const ctx = projectContext(input);
-	const verdict = SHELL_TOOLS.includes(input.tool_name) ? classify(input.tool_input?.command, 0, ctx.guard) : null;
+	const verdict = SHELL_TOOLS.includes(input.tool_name) ? classify(input.tool_input?.command, 0, ctx.guard, { inProject: Boolean(ctx.root ?? findUp(input.cwd ?? process.cwd(), ".stack-agent/guard.config.json")) }) : null;
 	if (verdict) {
 		process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: verdict.decision, permissionDecisionReason: verdict.reason } }));
 	}

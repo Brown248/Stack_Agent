@@ -173,12 +173,12 @@ test("pre-edit-protect asks before Edit/Write touches the guard's own files", ()
 });
 
 test("pre-bash hook also handles the PowerShell tool", () => {
-	const r = runNode(hook("pre-bash.mjs"), [], { input: hookInput({ tool_name: "PowerShell", tool_input: { command: "git commit --no-verify -m x" } }) });
+	const r = runNode(hook("pre-bash.mjs"), [], { input: hookInput({ tool_name: "PowerShell", tool_input: { command: "git commit --no-verify -m x" }, cwd: copySample() }) });
 	assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, "deny");
 });
 
 test("pre-bash hook prints a PreToolUse permission decision", () => {
-	const r = runNode(hook("pre-bash.mjs"), [], { input: hookInput({ tool_name: "Bash", tool_input: { command: "git push --force" } }) });
+	const r = runNode(hook("pre-bash.mjs"), [], { input: hookInput({ tool_name: "Bash", tool_input: { command: "git push --force" }, cwd: copySample() }) });
 	assert.equal(r.code, 0);
 	const out = JSON.parse(r.stdout);
 	assert.equal(out.hookSpecificOutput.hookEventName, "PreToolUse");
