@@ -1,6 +1,6 @@
 {
   "name": "stack-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Turn team know-how into enforceable structure for any project: verification with evidence, ratcheting guard rules, hooks, small skills, a blind judge, and evals. Presets for backends, CLIs, libraries, and web apps.",
   "author": {
     "name": "Brown248"

@@ -42,7 +42,7 @@ tests/            node:test suite for every script and hook
 Rules that keep forks healthy:
 
 - Scripts are plain Node ESM with zero dependencies. Target repos vendor them into `.stack-agent/bin/`, and CI runs them without `npm install`.
-- `init.mjs --check` reports a vendored file as `outdated` whenever its bytes differ from `scripts/`, so every script change reaches adopters as a prompt to rerun init. A new vendored script goes in `TOOLS` in `scripts/init.mjs`. Bump `version` in `.claude-plugin/plugin.json` when you release, since init writes it to `.stack-agent/bin/VERSION`.
+- `init.mjs --check` reports a vendored file as `outdated` whenever its bytes differ from `scripts/`, so every script change reaches adopters as a prompt to rerun init. A new vendored script goes in `TOOLS` in `scripts/init.mjs`. When you release, bump `version` in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `package.json` together (init writes it to `.stack-agent/bin/VERSION`), and add a section to `CHANGELOG.md` and `CHANGELOG.th.md`.
 - Every script behavior has a test in `tests/`. Run `npm test` after every change.
 - `claude plugin validate . --strict` must pass after you touch `.claude-plugin/`, `skills/`, `agents/`, or `hooks/`.
 
@@ -128,7 +128,7 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 
 | Option | Meaning |
 | --- | --- |
-| `--task NAME` | Task module in `scripts/ab/tasks/` (`endpoint`, `validate`). Repeat it for several. Required. |
+| `--task NAME` | Task module in `scripts/ab/tasks/`, named after its file (`endpoint`, `validate`, `bug-blank-name`, ...). An unknown name prints the full list. Repeat it for several. Required. |
 | `--arms` | Comma list of `full` (the plugin as is), `none` (no plugin), `hooks-only` (a copy without `skills/`), `skills-only` (a copy without `hooks/hooks.json`). Default `full,none`. |
 | `--runs N` | Runs per task and arm. Default 1. |
 | `--model`, `--budget USD` | Both required. The budget is a per-run cap passed as `--max-budget-usd`; there is no default on purpose. |

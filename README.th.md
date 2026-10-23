@@ -22,7 +22,7 @@ Stack Agent ย้ายกฎออกจาก prompt ไปไว้ในส
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | รันเทส เปิด server (ถ้ามี) รัน HTTP check และ command check แล้วเขียนหลักฐานลง `.stack-agent/evidence/` |
 | Hard constraint (CI) | `scripts/guard.mjs` | กฎแบบ regex ใช้ได้ทุกภาษา และกฎ import สำหรับ JS/TS และ Python มี baseline แบบ ratchet คือของเดิมผ่าน แต่ของใหม่ต้อง fail ส่วน `--compare-ref` ทำให้ PR ที่แอบผ่อนกฎ fail |
-| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบหรือบังคับย้าย branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และเตือนครั้งเดียวก่อน agent จบงานถ้ายังไม่ได้ verify |
+| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบหรือบังคับย้าย branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และไม่ให้ agent จบงานจนกว่าหลักฐานของ verify จะตรงกับโค้ดที่แก้ หรือ agent บันทึกเหตุผลว่าทำไม verify ไม่ได้ |
 | Soft constraint | `.stack-agent/rules.md` | วิธีเขียนที่ทีมชอบ โหลดเข้าทุก session |
 | Feature map (backend) | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่ endpoint จากโค้ด และ fail เมื่อแผนที่ไม่ตรงกับโค้ด |
 | Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals` และสำหรับ backend มี `add-endpoint`, `add-migration`, `api-map` |
@@ -70,7 +70,7 @@ Fork หรือ clone repo แล้วแก้ได้ทุกส่วน
 ## การใช้งานประจำวัน
 
 1. Agent แก้โค้ด hook จะรัน guard ทุกครั้งที่แก้ไฟล์ และบอกวิธีแก้เมื่อเจอการละเมิดกฎ
-2. ก่อนจบงาน agent รัน `node .stack-agent/bin/verify.mjs` แล้วรายงานไฟล์หลักฐาน ถ้าพยายามจบโดยไม่มีหลักฐาน Stop hook จะเตือนหนึ่งครั้ง
+2. ก่อนจบงาน agent รัน `node .stack-agent/bin/verify.mjs` แล้วรายงานไฟล์หลักฐาน ถ้าพยายามจบโดยไม่มีหลักฐานที่ตรงกับโค้ด Stop hook จะบล็อกไว้ได้ถึง 3 ครั้งติดกัน จากนั้นจะปล่อยให้จบและบอกคุณว่าการแก้นี้ยังไม่ได้ verify
 3. CI รัน guard และ `--compare-ref` ทุก pull request และรันการตรวจแผนที่ API ในโปรเจคที่มีแผนที่
 4. เมื่อต้องแก้ agent เรื่องเดิมซ้ำสองครั้ง ให้ใช้ `/stack-agent:correct` เปลี่ยนเรื่องนั้นเป็นกฎ
 5. สุ่มตรวจ commit ล่าสุดด้วย `/stack-agent:sample-review` แทนการรีวิวทุก PR ก่อน merge
@@ -91,7 +91,7 @@ Fork หรือ clone repo แล้วแก้ได้ทุกส่วน
 - กฎ `forbidden-import` และ `module-boundary` อ่าน import ของ JS/TS และ Python ภาษาอื่นให้ใช้กฎแบบ `pattern`
 - hook ดักด้วยการจับ pattern ของคำสั่ง จึงจับทางลัดที่พบบ่อยได้ แต่ไม่ครอบคลุมทุกรูปแบบ CI คือด่านที่ต้องมีเสมอ
 - `claude plugin eval` ต้องใช้ Claude Code 2.1.269 ขึ้นไป eval case ที่ให้ agent ใช้ Bash ต้องรันบน Linux, macOS หรือ WSL2 เพราะ Windows ไม่มี sandbox สำหรับกรณีนี้
-- ทดสอบจริงแล้วบน Windows 11 กับ Node 25 ส่วน CI ตั้งไว้สำหรับ Linux และ Windows บน Node 22 และ 24
+- ทดสอบจริงแล้วบน Windows 11 กับ Node 26 ส่วน CI รันเทสและตัวอย่างทั้งห้าบน Linux และ Windows ด้วย Node 22 และ 24
 
 ## พัฒนา Stack Agent
 

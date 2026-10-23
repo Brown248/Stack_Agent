@@ -9,7 +9,7 @@
       "name": "stack-agent",
       "source": "./",
       "description": "Verification, ratcheting guard rules, hooks, skills, judge, and evals for any project, with presets per project type.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

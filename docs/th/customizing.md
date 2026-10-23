@@ -42,7 +42,7 @@ tests/            ชุดเทส node:test สำหรับทุก scrip
 กติกาที่ทำให้ fork ไม่พัง:
 
 - script เป็น Node ESM ธรรมดาและไม่มี dependency เพราะ repo ปลายทางคัดลอกไปไว้ใน `.stack-agent/bin/` และ CI รันได้โดยไม่ต้อง `npm install`
-- `init.mjs --check` รายงานไฟล์ที่คัดลอกไว้เป็น `outdated` เมื่อเนื้อหาไม่ตรงกับ `scripts/` ทุก byte ดังนั้นทุกการแก้ script จะไปถึงทีมที่ใช้งานในรูปของคำเตือนให้รัน init ซ้ำ script ใหม่ที่ต้องคัดลอกให้เพิ่มใน `TOOLS` ของ `scripts/init.mjs` และเมื่อออก release ให้เพิ่ม `version` ใน `.claude-plugin/plugin.json` เพราะ init จะเขียนค่านี้ลง `.stack-agent/bin/VERSION`
+- `init.mjs --check` รายงานไฟล์ที่คัดลอกไว้เป็น `outdated` เมื่อเนื้อหาไม่ตรงกับ `scripts/` ทุก byte ดังนั้นทุกการแก้ script จะไปถึงทีมที่ใช้งานในรูปของคำเตือนให้รัน init ซ้ำ script ใหม่ที่ต้องคัดลอกให้เพิ่มใน `TOOLS` ของ `scripts/init.mjs` และเมื่อออก release ให้เพิ่ม `version` ใน `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` และ `package.json` พร้อมกัน (init จะเขียนค่านี้ลง `.stack-agent/bin/VERSION`) แล้วเพิ่มหัวข้อใน `CHANGELOG.md` และ `CHANGELOG.th.md`
 - ทุกพฤติกรรมของ script มีเทสใน `tests/` ให้รัน `npm test` ทุกครั้งที่แก้
 - `claude plugin validate . --strict` ต้องผ่านหลังแก้ `.claude-plugin/`, `skills/`, `agents/` หรือ `hooks/`
 
@@ -128,7 +128,7 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 
 | ตัวเลือก | ความหมาย |
 | --- | --- |
-| `--task NAME` | task ใน `scripts/ab/tasks/` (`endpoint`, `validate`) ใส่ซ้ำได้หลายตัว จำเป็นต้องมี |
+| `--task NAME` | task ใน `scripts/ab/tasks/` ตั้งชื่อตามไฟล์ (`endpoint`, `validate`, `bug-blank-name`, ...) ถ้าใส่ชื่อที่ไม่มีจะพิมพ์รายชื่อทั้งหมดออกมา ใส่ซ้ำได้หลายตัว จำเป็นต้องมี |
 | `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`) ค่าเริ่มต้น `full,none` |
 | `--runs N` | จำนวนรอบต่อ task และ arm ค่าเริ่มต้น 1 |
 | `--model`, `--budget USD` | ต้องระบุทั้งคู่ งบเป็นเพดานต่อรอบ ส่งเป็น `--max-budget-usd` และไม่มีค่าเริ่มต้นโดยตั้งใจ |
