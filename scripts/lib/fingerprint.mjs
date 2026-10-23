@@ -8,6 +8,9 @@ import path from "node:path";
 import { matchesAny, toPosix } from "./files.mjs";
 
 export const VERIFY_CONFIG = ".stack-agent/verify.json";
+// Raise it whenever codeFingerprint would give a different value for the same code, so the Stop hook can tell
+// evidence from a verify.mjs that computes fingerprints differently from code that changed.
+export const FINGERPRINT_VERSION = 1;
 export const SKIP_FILE = ".stack-agent/verify-skip.json";
 export const STOP_IGNORE = ["**/*.md", ".stack-agent/**", "docs/**"];
 // the hooks' own records; a fixed path, whatever evidenceDir says

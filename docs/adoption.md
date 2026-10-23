@@ -193,6 +193,8 @@ Exit 0 means setup is complete. Otherwise it lists what is left.
 
 `--check` also compares every file in `.stack-agent/bin/` with the plugin's current copy. A file that differs or is missing appears as `outdated: .stack-agent/bin/<file>` and counts as unfinished setup (exit 1). This tells you that your vendored guard or verify is older than the plugin and may lack recent fixes. Refresh them by rerunning `node <path-to-Stack_Agent>/scripts/init.mjs .`, which rewrites only the tools and never touches your configs. `.stack-agent/bin/VERSION` records which plugin version the tools came from.
 
+The hooks run the plugin's own scripts, while CI runs the copies in `.stack-agent/bin/`, so a stale copy can make the two judge the same code differently. The SessionStart hook therefore runs the same comparison in every session and, when a vendored file differs, tells you which ones and the command that refreshes them (it tells you, not the agent, so nothing is rewritten without you). Evidence also records the version of the fingerprint it was computed with (`fingerprintVersion`); if a vendored `verify.mjs` computes it differently from the hooks, the Stop hook says so instead of reporting that the code changed.
+
 It also notes any rule that every preset ships (`no-merge-conflict-markers`, `no-private-keys`, `no-debug-tags`) and your guard config lacks, with the preset file to copy it from. The note does not change the exit code, since leaving a rule out can be a choice: list the rule id in `"declinedRules"` in `guard.config.json` to say so, and the note stops.
 
 ## 5. Skills

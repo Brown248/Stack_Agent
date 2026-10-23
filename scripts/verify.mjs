@@ -6,7 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
-import { SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff, gitTop, ignoreList } from "./lib/fingerprint.mjs";
+import { FINGERPRINT_VERSION, SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff, gitTop, ignoreList } from "./lib/fingerprint.mjs";
 
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
                       [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
@@ -336,7 +336,7 @@ function writeEvidence(root, config, steps, run) {
 	const dir = path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence");
 	fs.mkdirSync(dir, { recursive: true });
 	const at = new Date().toISOString();
-	const record = { at, ok: steps.length > 0 && steps.every((s) => s.ok), full: run.full, flags: run.flags, git: gitHead(root), fingerprint: run.fingerprint?.value ?? null, ignore: run.ignore, against: run.against };
+	const record = { at, ok: steps.length > 0 && steps.every((s) => s.ok), full: run.full, flags: run.flags, git: gitHead(root), fingerprint: run.fingerprint?.value ?? null, ...(run.fingerprint && { fingerprintVersion: FINGERPRINT_VERSION }), ignore: run.ignore, against: run.against };
 	if (run.changedByRun?.length) record.changedByRun = run.changedByRun;
 	record.steps = steps;
 	const file = path.join(dir, `verify-${at.replace(/[:.]/g, "-")}.json`);

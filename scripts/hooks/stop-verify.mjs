@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { matchesAny } from "../lib/files.mjs";
-import { SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
+import { FINGERPRINT_VERSION, SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
 import { readConfig, readStart, readState, recordLost, writeState } from "./session-record.mjs";
 
@@ -25,6 +25,9 @@ export function staleReason(evidence, current, newestMtimeMs, sessionStart = nul
 		return "the latest verify run turned the against step off (--no-against or \"against\": false), which this session did not start with";
 	const matches = evidence.fingerprint && current ? evidence.fingerprint === current.value : evidence.mtimeMs >= newestMtimeMs;
 	if (matches) return null;
+	// evidence without the field predates it and was computed the way version 1 computes it
+	if (evidence.fingerprint && current && (evidence.fingerprintVersion ?? 1) !== FINGERPRINT_VERSION)
+		return `the latest verify run was made by a .stack-agent/bin/verify.mjs that computes fingerprints differently (version ${evidence.fingerprintVersion ?? 1}, this hook uses ${FINGERPRINT_VERSION}), so its evidence can never match; refresh .stack-agent/bin with the plugin's init script, then run verify again`;
 	if (evidence.changedByRun?.length) return `the verify run itself changed ${evidence.changedByRun.slice(0, 3).join(", ")}, so its evidence does not match the code (gitignore files that tests or the server write)`;
 	return "the code changed after the latest passing verify run";
 }
@@ -143,7 +146,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 		let evidence = null;
 		if (fs.existsSync(latest)) {
 			const record = readJsonOr(latest, null);
-			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, mtimeMs: fs.statSync(latest).mtimeMs };
+			if (record) evidence = { ok: record.ok === true, full: record.full === true, fingerprint: record.fingerprint ?? null, fingerprintVersion: record.fingerprintVersion, ignore: record.ignore, against: record.against, changedByRun: record.changedByRun, mtimeMs: fs.statSync(latest).mtimeMs };
 		}
 		const current = codeFingerprint(root, { ignore, evidenceDir: evidenceRel });
 		const verifyConfigChanged = files.includes(VERIFY);
