@@ -89,6 +89,38 @@ export function workflowLocation(target) {
 	return { abs: path.join(top, ".github", "workflows", file), shown: toPosix(path.relative(target, path.join(top, ".github", "workflows", file))), sub, file };
 }
 
+// The branch origin/HEAD points at (the remote's default branch), or null when the clone does not know it.
+export function defaultBranch(target) {
+	const r = spawnSync("git", ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"], { cwd: target, encoding: "utf8" });
+	const name = r.status === 0 ? r.stdout.trim().replace(/^origin\//, "") : "";
+	return name || null;
+}
+
+const PUSH_BRANCHES = /^ {4}branches: \[(.*)\]$/m;
+
+// the template runs on pushes to main; a repository whose default branch has another name gets that one
+export function withBranch(text, branch) {
+	if (!branch || branch === "main") return text;
+	if (!PUSH_BRANCHES.test(text)) throw new Error("init: the CI template no longer has a push branches line; update withBranch");
+	return text.replace(PUSH_BRANCHES, `    branches: [${JSON.stringify(branch)}]`);
+}
+
+// what --check says about the push branch: a note when the workflow names another branch than the default one,
+// or when the default branch is unknown and the workflow still says main
+export function branchNote(target) {
+	const workflow = workflowLocation(target);
+	if (!fs.existsSync(workflow.abs)) return null;
+	const m = PUSH_BRANCHES.exec(fs.readFileSync(workflow.abs, "utf8"));
+	if (!m) return null;
+	const listed = m[1].split(",").map((s) => s.trim().replace(/^["']|["']$/g, ""));
+	// outside a git repository there is no branch to compare with
+	if (spawnSync("git", ["rev-parse", "--git-dir"], { cwd: target, encoding: "utf8" }).status !== 0) return null;
+	const branch = defaultBranch(target);
+	if (branch && !listed.includes(branch)) return `${workflow.shown} runs on pushes to ${listed.join(", ")}, but the repository's default branch is ${branch}; add it to "branches" so pushes to it run CI`;
+	if (!branch && listed.length === 1 && listed[0] === "main") return `${workflow.shown} runs on pushes to main; the default branch is not known yet (no origin/HEAD), so change "branches" if yours has another name`;
+	return null;
+}
+
 // the template, rewritten for a project in subfolder `sub` of the repository
 export function subfolderWorkflow(text, sub, file) {
 	const q = JSON.stringify;
@@ -181,7 +213,7 @@ export function init(target, preset = "generic") {
 	else {
 		const text = fs.readFileSync(path.join(pluginRoot, WORKFLOW_TEMPLATE), "utf8");
 		fs.mkdirSync(path.dirname(workflow.abs), { recursive: true });
-		fs.writeFileSync(workflow.abs, workflow.sub ? subfolderWorkflow(text, workflow.sub, workflow.file) : text);
+		fs.writeFileSync(workflow.abs, withBranch(workflow.sub ? subfolderWorkflow(text, workflow.sub, workflow.file) : text, defaultBranch(target)));
 		report.push(`created  ${workflow.shown}${workflow.sub ? ` (at the top of the repository, running in ${workflow.sub})` : ""}`);
 	}
 	if (!recordedPreset(target)) {
@@ -215,11 +247,15 @@ function main(argv) {
 	const lines = args.check ? [] : [`preset: ${preset}`, ...init(target, preset)];
 	const pending = pendingSetup(target);
 	lines.push(pending.length ? `\nsetup unfinished in ${toPosix(target)}:\n${pending.map((p) => "  - " + p).join("\n")}` : `\nsetup complete in ${toPosix(target)}`);
+	const notes = [];
 	const missing = missingRules(target);
 	if (missing.length) {
 		const from = toPosix(path.join(PRESETS_DIR, recorded && listPresets().includes(recorded) ? recorded : preset, "guard.config.json"));
-		lines.push(`\nnotes (do not affect the exit code):`, ...missing.map((id) => `  - guard rule ${id} is in every preset but not in .stack-agent/guard.config.json; copy the rule from ${from} into it, or add "${id}" to "declinedRules" in your .stack-agent/guard.config.json to leave it out on purpose`));
+		notes.push(...missing.map((id) => `  - guard rule ${id} is in every preset but not in .stack-agent/guard.config.json; copy the rule from ${from} into it, or add "${id}" to "declinedRules" in your .stack-agent/guard.config.json to leave it out on purpose`));
 	}
+	const branch = branchNote(target);
+	if (branch) notes.push(`  - ${branch}`);
+	if (notes.length) lines.push(`\nnotes (do not affect the exit code):`, ...notes);
 	return { code: args.check && pending.length ? 1 : 0, text: lines.join("\n") };
 }
 

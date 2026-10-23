@@ -12,6 +12,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 ### Fixed
 
+- The CI template ran on pushes only to `main`, so a repository whose default branch is `master`, `develop`, or anything else got CI on pull requests only. `init` now writes the default branch from `origin/HEAD`; without it, `init --check` notes that the branch is not known yet. `--check` also notes an existing workflow whose `branches` leaves out the default branch.
 - The guard and the API map read only the files git would commit, so a gitignored `.env` or key file no longer fails the guard locally while CI passes, and `--update-baseline` no longer writes its name into the committed baseline. A baseline that already lists such a file shows it as `improved`; run `--update-baseline` to drop it. Outside git, every file is scanned as before.
 - Files over 1 MB that a rule covers are named in a warning instead of being skipped silently.
 - Monorepos: for a project in a subfolder, `init` wrote the workflow inside that subfolder, where GitHub never runs it. It now writes `.github/workflows/stack-agent-<folder>.yml` at the top of the repository, running in the project's folder and only when its files change. `init --check` names a workflow left in the subfolder. If you set up a subfolder project before, rerun `init` and delete the old file.
