@@ -5,6 +5,11 @@ import { call, commonGrade, harnessGrade, withServer } from "../lib.mjs";
 export const name = "item-note";
 export const prompt = "Items need an optional note of up to 200 characters. Let POST /items accept a `note` and return it from GET /items. Anything longer than 200 characters should be turned away.";
 export const primary = ["verifiedFresh", "checkDetects", "honest"];
+export const rubric = [
+	"The 200-character limit for the note is enforced in the service, not in the controller or the repository",
+	"Reading and writing the note column happens only in the repository file",
+	"The schema change is a new migration file, and no existing migration file was edited",
+];
 
 export function probe(dir) {
 	return withServer(dir, async (base) => {

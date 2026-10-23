@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { scaffold } from "../../evals/scaffold.mjs";
 import { ConfigError, parseArgs } from "../lib/files.mjs";
+import { runJudge } from "./judge.mjs";
 import { ARMS, checkIsolation, claudeArgs, claudeEnv, claudeVersion, freePort, harnessVersion, hookFeedbackSummary, makeArmPlugin, parseTranscript, pluginGitInfo, repoRoot, resolveClaude, skillCalls, spawnClaude, usageOf } from "./lib.mjs";
 
 const USAGE = `usage: node scripts/ab/run.mjs --task NAME [--task NAME ...] --model MODEL --budget USD [options]
@@ -20,6 +21,8 @@ const USAGE = `usage: node scripts/ab/run.mjs --task NAME [--task NAME ...] --mo
   --no-isolate    do not pass --setting-sources project,local --strict-mcp-config (default is isolated; --isolate is accepted)
   --dry-run       scaffold and grade an untouched copy of each project; never calls claude
   --disallowed-tools LIST  comma list passed to claude --disallowedTools, e.g. "Bash(node:*)" for an agent that cannot run Node
+  --judge MODEL   also score each task's rubric (criteria a script cannot check) with agents/judge.md, run as a
+                  second claude session with MODEL on a blind copy of the run; costs up to --budget more per run
   --json          print the results as JSON instead of the summary table
 exit codes: 0 done, 1 at least one run was invalid, 2 usage error`;
 
@@ -38,7 +41,7 @@ export async function loadTask(name) {
 }
 
 export function parseOptions(argv) {
-	const args = parseArgs(argv, { flags: ["dry-run", "json", "isolate", "no-isolate"], options: ["arms", "runs", "model", "budget", "plugin", "out", "disallowed-tools"], multi: ["task"] });
+	const args = parseArgs(argv, { flags: ["dry-run", "json", "isolate", "no-isolate"], options: ["arms", "runs", "model", "budget", "plugin", "out", "disallowed-tools", "judge"], multi: ["task"] });
 	if (args._.length) throw new ConfigError(`unexpected argument ${args._[0]}`);
 	if (!args.task?.length) throw new ConfigError("--task is required");
 	if (!args.model) throw new ConfigError("--model is required");
@@ -55,7 +58,7 @@ export function parseOptions(argv) {
 	const out = path.resolve(args.out ?? fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-ab-")));
 	if (out === plugin || out.startsWith(plugin + path.sep)) throw new ConfigError("--out must not be inside the plugin directory");
 	const disallowedTools = (args["disallowed-tools"] ?? "").split(",").map((t) => t.trim()).filter(Boolean);
-	return { tasks: [...new Set(args.task)], arms, runs, model: args.model, budget, plugin, out, isolate: !args["no-isolate"], dryRun: Boolean(args["dry-run"]), json: Boolean(args.json), disallowedTools };
+	return { tasks: [...new Set(args.task)], arms, runs, model: args.model, budget, plugin, out, isolate: !args["no-isolate"], dryRun: Boolean(args["dry-run"]), json: Boolean(args.json), disallowedTools, judge: args.judge ?? null };
 }
 
 async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
@@ -93,6 +96,14 @@ async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
 	const g = await task.grade(dir);
 	row.grade = g.checks;
 	row.details = g.details;
+	// the rubric is scored after the scripts, on the code as the agent left it; a rubric item the judge did not
+	// answer is null (not applicable), like any other grader
+	if (opts.judge && task.rubric?.length && row.status === "ok") {
+		const { env } = claudeEnv(opts.isolate);
+		const j = runJudge({ claude, spawn: spawnClaude, projectDir: dir, outDir: opts.out, rubric: task.rubric, model: opts.judge, budget: opts.budget, pluginDir: opts.plugin, isolate: opts.isolate, env });
+		Object.assign(row.grade, j.grade);
+		row.judge = { model: opts.judge, usage: j.usage, folder: j.folder, text: j.text };
+	}
 	return row;
 }
 

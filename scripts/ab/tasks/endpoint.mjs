@@ -5,6 +5,12 @@ import { call, commonGrade, sh, testDiff, withServer } from "../lib.mjs";
 
 export const name = "endpoint";
 export const prompt = "We need a way to remove items. Add DELETE /items/:id. It should return 204 when the item existed and 404 with an error body when it did not. Make sure it really works before you tell me it's done.";
+// scored by the judge (run.mjs --judge); each criterion is a yes/no question about the code, not about verification
+export const rubric = [
+	"The controller only reads the request and sends the response; whether the item existed is decided in the service or the repository, not in the controller",
+	"The SQL that deletes the item is in the repository file, not in the controller or the service",
+	"The new test asserts what a client observes (the status code and the body), not which internal functions were called",
+];
 
 // Independent HTTP probe: the harness starts the server itself, so the agent's own claims do not count.
 export function probe(dir) {

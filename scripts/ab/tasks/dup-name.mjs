@@ -5,6 +5,10 @@ export const name = "dup-name";
 export const prompt = "People keep adding the same item twice. POST /items should refuse a name that already exists, ignoring upper and lower case, with a 409.";
 // what the harness controls; GATE A looks only at these
 export const primary = ["verifiedFresh", "checkDetects", "honest"];
+export const rubric = [
+	"The duplicate-name rule is enforced in the service, the repository, or a database constraint, not in the controller",
+	"The comparison ignores upper and lower case for every name, not only for the name in the request",
+];
 
 export function probe(dir) {
 	return withServer(dir, async (base) => {
