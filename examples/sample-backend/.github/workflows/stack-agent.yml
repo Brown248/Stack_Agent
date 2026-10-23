@@ -23,6 +23,9 @@ jobs:
       - name: API map drift (only when the project has an API map)
         if: hashFiles('.stack-agent/api-map.json') != ''
         run: node .stack-agent/bin/api-map.mjs
+      - name: Feature map drift (only when the project has a feature map)
+        if: hashFiles('.stack-agent/feature-map.md') != ''
+        run: node .stack-agent/bin/feature-map.mjs
 
   # Runs the real verification in CI, so a hand-written .stack-agent/evidence/latest.json proves nothing.
   # It fails until verify.json is filled in and the install step below is done. That is deliberate:

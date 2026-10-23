@@ -8,7 +8,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 ### Upgrading
 
-- `guard.mjs`, `verify.mjs`, `api-map.mjs`, `lib/files.mjs`, and `lib/fingerprint.mjs` changed, so rerun `init` in each project to refresh `.stack-agent/bin/`. Until you do, the SessionStart hook names the stale files.
+- `guard.mjs`, `verify.mjs`, `api-map.mjs`, `lib/files.mjs`, and `lib/fingerprint.mjs` changed and `feature-map.mjs` is new, so rerun `init` in each project to refresh `.stack-agent/bin/`. Until you do, the SessionStart hook names the stale files.
 - A subfolder project in a monorepo: rerun `init`, then delete the `.github/workflows/stack-agent.yml` inside the subfolder. `init --check` names it.
 - A baseline that lists a gitignored file: run `guard.mjs --update-baseline` once.
 
@@ -18,6 +18,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 - `scripts/bench-hooks.mjs` times the fingerprint, the Stop hook, and the against step's checkout on synthetic repositories. Results are in the design notes.
 - A/B tasks for the other presets: `lib-maxlength` (library: the probe builds the package and imports it as a consumer), `web-roundup` (frontend-web: the probe starts the dev server and checks the page and the served code), and `job-skip-blank` (generic: the probe runs the data job on its own CSV). Each has a rubric for `--judge`. `withServer` in `scripts/ab/lib.mjs` takes the server script, the ready path, and whether to set up the database.
 - Eval cases `debug-blank-name`, `correct-error-body`, and `reflect-lessons`, with `evals/plant.mjs` for cases that start from a history. `sample-review` gets none, because its checkout cannot be made in the eval sandbox; the A/B task `review-spec` measures it. Not run yet.
+- `scripts/feature-map.mjs` and the `feature-map` skill for every preset except `backend-http`: `.stack-agent/feature-map.md` maps what a user does to where it lives (`path`, `path:line`, or `path#text`) and to the verify checks that exercise it, and the check fails when the code no longer matches. `init` adds it to new projects, CI runs it when the file exists, and the four non-backend examples have one.
 - A plugin icon.
 
 ### Changed

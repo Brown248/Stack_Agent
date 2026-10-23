@@ -27,10 +27,14 @@ jobs:
           node scripts/api-map.mjs --root examples/sample-backend
           node scripts/verify.mjs --root examples/sample-backend
           node scripts/guard.mjs --root examples/sample-cli
+          node scripts/feature-map.mjs --root examples/sample-cli
           node scripts/verify.mjs --root examples/sample-cli
           node scripts/guard.mjs --root examples/sample-library
+          node scripts/feature-map.mjs --root examples/sample-library
           node scripts/verify.mjs --root examples/sample-library
           node scripts/guard.mjs --root examples/sample-frontend
+          node scripts/feature-map.mjs --root examples/sample-frontend
           node scripts/verify.mjs --root examples/sample-frontend
           node scripts/guard.mjs --root examples/sample-generic
+          node scripts/feature-map.mjs --root examples/sample-generic
           node scripts/verify.mjs --root examples/sample-generic

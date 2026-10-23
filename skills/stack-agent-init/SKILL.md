@@ -62,15 +62,17 @@ The first command writes the baseline. Old violations are allowed, new ones fail
 
 Tell the user to add a `.github/CODEOWNERS` line such as `/.stack-agent/ @<team>` so a person must approve changes to the rules or the baseline. The CI workflow also runs `guard.mjs --compare-ref` on pull requests to catch a loosened baseline or a removed rule.
 
-## 5. API map (backend-http only)
+## 5. Feature map
 
-Skip this step if `.stack-agent/api-map.json` does not exist. Otherwise fill its `sources` with a regex that finds route declarations (group 1 = method, group 2 = path), then:
+For `backend-http` (`.stack-agent/api-map.json` exists), fill its `sources` with a regex that finds route declarations (group 1 = method, group 2 = path), then:
 
 ```bash
 node .stack-agent/bin/api-map.mjs --draft > .stack-agent/api-map.md
 ```
 
 Fill the Handler, Calls, and Owner columns from the code. Leave `TODO` where you are unsure so a human reviews it. Run `node .stack-agent/bin/api-map.mjs` until it prints `api-map: ok`.
+
+Every other preset has `.stack-agent/feature-map.md` instead. Start it with `node .stack-agent/bin/feature-map.mjs --draft` (one row per verify check), fill `Where` (`path`, `path:line`, or `path#text`) and `How a user reaches it` from the code, add rows for what users do that no check covers yet, and run `node .stack-agent/bin/feature-map.mjs` until it prints `feature-map: ok` (see the feature-map skill).
 
 ## 6. Team rules
 

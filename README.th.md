@@ -25,7 +25,8 @@ Stack Agent ย้ายกฎออกจาก prompt ไปไว้ในส
 | Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | ในโปรเจกต์ที่ติดตั้ง Stack Agent แล้ว บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบหรือบังคับย้าย branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และไม่ให้ agent จบงานจนกว่าหลักฐานของ verify จะตรงกับโค้ดที่แก้ หรือ agent บันทึกเหตุผลว่าทำไม verify ไม่ได้ |
 | Soft constraint | `.stack-agent/rules.md` | วิธีเขียนที่ทีมชอบ โหลดเข้าทุก session |
 | Feature map (backend) | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่ endpoint จากโค้ด และ fail เมื่อแผนที่ไม่ตรงกับโค้ด |
-| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals` และสำหรับ backend มี `add-endpoint`, `add-migration`, `api-map` |
+| Feature map (preset อื่น) | `scripts/feature-map.mjs`, skill `feature-map` | ตารางของสิ่งที่ผู้ใช้ทำและตำแหน่งในโค้ด (`path`, `path:line` หรือ `path#text`) fail เมื่อไฟล์ บรรทัด ข้อความ anchor หรือ verify check ที่อ้างถึงหายไป |
+| Skills | `skills/` | `verify`, `stack-agent-init`, `correct`, `reflect`, `sample-review`, `debug`, `run-evals`, `feature-map` และสำหรับ backend มี `add-endpoint`, `add-migration`, `api-map` |
 | Agents | `agents/` | `judge` ให้คะแนนตาม rubric ส่วน `reviewer` ตรวจ diff ก่อนส่งให้คนและรายงานเป็น candidate แล้ว `finding-verifier` พยายามหักล้างทีละข้อ ทุกตัวห้ามแก้ไฟล์ |
 | Evals | `evals/` | case สำหรับ `claude plugin eval` ที่เทียบผลแบบมีและไม่มี plugin |
 

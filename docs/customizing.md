@@ -29,7 +29,7 @@ claude plugin marketplace add <you>/<your-fork>
 agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (wires scripts/hooks/*.mjs into Claude Code)
 skills/<name>/    one SKILL.md per skill, plus any scripts it calls
-scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs,
+scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
                   review-findings.mjs, review-worktree.mjs, lib/, hooks/
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
@@ -48,7 +48,7 @@ Rules that keep forks healthy:
 
 ## Add a preset
 
-1. Create `templates/presets/<name>/` with `verify.json` and `guard.config.json`. Add `api-map.json` only if the preset uses the API map.
+1. Create `templates/presets/<name>/` with `verify.json` and `guard.config.json`. Add `api-map.json` only if the preset uses the API map; a preset without one gets the feature map template (`templates/common/feature-map.md`) from `init`.
 2. Keep the universal rules (`no-merge-conflict-markers`, `no-private-keys`) in the guard config.
 3. Mark every value the user must fill with `EDIT ME`. `init.mjs --check` reports files that still contain it.
 4. Add the name to the expected list in `tests/presets.test.mjs`. The suite already checks that every preset's configs load.

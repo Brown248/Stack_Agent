@@ -180,7 +180,23 @@ The second command:
 
 The map is a markdown table whose first column is the HTTP method and second is the path, as the regex captures it. Routes mounted under a prefix (`app.use("/items", router)`) appear without the prefix unless your regex includes it.
 
-For other project types, the same idea (a map from what users touch to where the code lives) can be a plain markdown file the agent reads first. A drift check for it is a natural next preset to add.
+### Feature map (every other preset)
+
+`init` gives the `generic`, `cli`, `library`, and `frontend-web` presets `.stack-agent/feature-map.md`: a table of what a user does and where it lives, which an agent reads before searching the repo (the `feature-map` skill).
+
+| Column | Holds |
+| --- | --- |
+| Feature | what the user does |
+| Where | places separated by commas: a repo path, `path:line`, or `path#text`, where text must appear in that file (a selector, a flag, a label, a function name) |
+| How a user reaches it | the screen and clicks, the command, or the call a consumer makes |
+| Check | names of checks in `verify.json` that exercise it, or `-` |
+
+```bash
+node .stack-agent/bin/feature-map.mjs --draft
+node .stack-agent/bin/feature-map.mjs
+```
+
+`--draft` prints one row per verify check to start from. The check fails (exit 1) when a file in `Where` is gone, a line is past the end of its file, an anchor text is no longer in its file, or a named check is not in `verify.json`. It warns on a feature with no check and on `TODO` cells. CI runs it when the file exists. Prefer `path#text` to `path:line`: the text changes only when what the user touches changes. Projects set up before the feature map existed do not get it on an `init` rerun; start one with `--draft`. The four non-backend examples each have one.
 
 ## 4. Team rules and a setup check
 

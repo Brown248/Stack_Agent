@@ -180,7 +180,23 @@ node .stack-agent/bin/api-map.mjs
 
 แผนที่เป็นตาราง markdown ที่คอลัมน์แรกเป็น HTTP method และคอลัมน์ที่สองเป็น path ตามที่ regex จับได้ route ที่ mount ใต้ prefix (เช่น `app.use("/items", router)`) จะไม่มี prefix เว้นแต่ regex จะรวมไว้
 
-โปรเจคประเภทอื่นใช้หลักเดียวกันได้ (แผนที่จากสิ่งที่ผู้ใช้แตะไปยังโค้ดที่เกี่ยวข้อง) โดยเขียนเป็นไฟล์ markdown ธรรมดาให้ agent อ่านก่อน การเพิ่มตัวตรวจ drift ให้แผนที่แบบนี้เป็น preset ถัดไปที่น่าทำ
+### Feature map (preset อื่นทั้งหมด)
+
+`init` ให้ preset `generic`, `cli`, `library` และ `frontend-web` มีไฟล์ `.stack-agent/feature-map.md` เป็นตารางของสิ่งที่ผู้ใช้ทำและตำแหน่งในโค้ด ให้ agent อ่านก่อนค้นทั้ง repo (skill `feature-map`)
+
+| คอลัมน์ | เก็บอะไร |
+| --- | --- |
+| Feature | สิ่งที่ผู้ใช้ทำ |
+| Where | ตำแหน่งคั่นด้วยจุลภาค: path ใน repo, `path:line` หรือ `path#text` ซึ่ง text ต้องอยู่ในไฟล์นั้น (selector, flag, label หรือชื่อฟังก์ชัน) |
+| How a user reaches it | หน้าจอและการคลิก คำสั่ง หรือการเรียกใช้ของผู้ใช้ library |
+| Check | ชื่อ check ใน `verify.json` ที่ทดสอบสิ่งนี้ หรือ `-` |
+
+```bash
+node .stack-agent/bin/feature-map.mjs --draft
+node .stack-agent/bin/feature-map.mjs
+```
+
+`--draft` พิมพ์แถวละหนึ่ง verify check ไว้เป็นจุดเริ่ม ตัวตรวจจะ fail (exit 1) เมื่อไฟล์ใน `Where` หายไป บรรทัดเกินความยาวไฟล์ ข้อความ anchor ไม่อยู่ในไฟล์แล้ว หรือ check ที่อ้างถึงไม่มีใน `verify.json` และจะเตือนเมื่อ feature ไม่มี check หรือยังมีช่อง `TODO` CI จะรันเมื่อมีไฟล์นี้ ควรใช้ `path#text` มากกว่า `path:line` เพราะข้อความเปลี่ยนก็ต่อเมื่อสิ่งที่ผู้ใช้แตะเปลี่ยน โปรเจกต์ที่ติดตั้งไว้ก่อนมี feature map จะไม่ได้ไฟล์นี้เมื่อรัน `init` ซ้ำ ให้เริ่มเองด้วย `--draft` ตัวอย่างที่ไม่ใช่ backend ทั้งสี่มีไฟล์นี้แล้ว
 
 ## 4. กฎของทีม และตรวจว่าตั้งค่าครบ
 

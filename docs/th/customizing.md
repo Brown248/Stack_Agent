@@ -29,7 +29,7 @@ claude plugin marketplace add <you>/<your-fork>
 agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (ผูก scripts/hooks/*.mjs เข้ากับ Claude Code)
 skills/<name>/    SKILL.md หนึ่งไฟล์ต่อ skill และ script ที่ skill เรียกใช้
-scripts/          guard.mjs, verify.mjs, api-map.mjs, init.mjs, sample-commits.mjs,
+scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
                   review-findings.mjs, review-worktree.mjs, lib/, hooks/
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
@@ -48,7 +48,7 @@ tests/            ชุดเทส node:test สำหรับทุก scrip
 
 ## เพิ่ม preset
 
-1. สร้าง `templates/presets/<name>/` ที่มี `verify.json` และ `guard.config.json` ใส่ `api-map.json` เฉพาะ preset ที่ใช้แผนที่ API
+1. สร้าง `templates/presets/<name>/` ที่มี `verify.json` และ `guard.config.json` ใส่ `api-map.json` เฉพาะ preset ที่ใช้แผนที่ API ส่วน preset ที่ไม่มีจะได้ template ของ feature map (`templates/common/feature-map.md`) จาก `init`
 2. เก็บกฎสากล (`no-merge-conflict-markers`, `no-private-keys`) ไว้ใน config ของ guard
 3. ใส่ `EDIT ME` ในทุกค่าที่ผู้ใช้ต้องกรอก `init.mjs --check` จะรายงานไฟล์ที่ยังมีคำนี้
 4. เพิ่มชื่อ preset ในรายการที่คาดไว้ใน `tests/presets.test.mjs` ชุดเทสจะตรวจเองว่า config ของทุก preset โหลดได้

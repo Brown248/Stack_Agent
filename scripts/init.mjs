@@ -18,13 +18,15 @@ exit codes: 0 done / setup complete, 1 setup still unfinished, 2 usage error`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
-const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "lib/files.mjs", "lib/fingerprint.mjs"];
+const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "feature-map.mjs", "lib/files.mjs", "lib/fingerprint.mjs"];
 const PRESETS_DIR = path.join(pluginRoot, "templates", "presets");
 const COMMON = [
 	["templates/common/rules.md", ".stack-agent/rules.md"],
 	["templates/common/rules-table.md", ".stack-agent/rules-table.md"],
 ];
 const WORKFLOW_TEMPLATE = "templates/ci/stack-agent.yml";
+const FEATURE_MAP_TEMPLATE = "templates/common/feature-map.md";
+const FEATURE_MAP = ".stack-agent/feature-map.md";
 const ROOT_WORKFLOW = ".github/workflows/stack-agent.yml";
 const ALWAYS_REQUIRED = [".stack-agent/guard.config.json", ".stack-agent/verify.json", ...COMMON.map(([, dest]) => dest)];
 const GITIGNORE_LINE = ".stack-agent/evidence/";
@@ -66,7 +68,9 @@ export function listPresets() {
 export function templatesFor(preset) {
 	if (!listPresets().includes(preset)) throw new ConfigError(`unknown preset ${JSON.stringify(preset)}; choose one of: ${listPresets().join(", ")}`);
 	const presetFiles = PRESET_FILES.filter((f) => fs.existsSync(path.join(PRESETS_DIR, preset, f))).map((f) => [`templates/presets/${preset}/${f}`, `.stack-agent/${f}`]);
-	return [...presetFiles, ...COMMON];
+	// a preset without an API map gets the feature map: where each thing a user does lives in the code
+	const featureMap = fs.existsSync(path.join(PRESETS_DIR, preset, "api-map.json")) ? [] : [[FEATURE_MAP_TEMPLATE, FEATURE_MAP]];
+	return [...presetFiles, ...featureMap, ...COMMON];
 }
 
 const realpath = (p) => {
@@ -132,6 +136,7 @@ export function subfolderWorkflow(text, sub, file) {
 		["    branches: [main]\n", "    branches: [main]\n" + paths],
 		["\njobs:\n", `\ndefaults:\n  run:\n    working-directory: ${q(sub)}\n\njobs:\n`],
 		["hashFiles('.stack-agent/api-map.json')", `hashFiles('${sub}/.stack-agent/api-map.json')`],
+		["hashFiles('.stack-agent/feature-map.md')", `hashFiles('${sub}/.stack-agent/feature-map.md')`],
 		["path: .stack-agent/evidence/", `path: ${sub}/.stack-agent/evidence/`],
 	];
 	for (const [from, to] of edits) {
@@ -145,7 +150,8 @@ export function pendingSetup(target) {
 	const pending = [];
 	const usesApiMap = fs.existsSync(path.join(target, ".stack-agent/api-map.json"));
 	const workflow = workflowLocation(target);
-	const required = [...ALWAYS_REQUIRED.map((dest) => [path.join(target, dest), dest]), [workflow.abs, workflow.shown], ...(usesApiMap ? [[path.join(target, ".stack-agent/api-map.json"), ".stack-agent/api-map.json"]] : [])];
+	const usesFeatureMap = fs.existsSync(path.join(target, FEATURE_MAP));
+	const required = [...ALWAYS_REQUIRED.map((dest) => [path.join(target, dest), dest]), [workflow.abs, workflow.shown], ...(usesApiMap ? [[path.join(target, ".stack-agent/api-map.json"), ".stack-agent/api-map.json"]] : []), ...(usesFeatureMap ? [[path.join(target, FEATURE_MAP), FEATURE_MAP]] : [])];
 	for (const [abs, dest] of required) {
 		if (!fs.existsSync(abs)) pending.push(`${dest}: missing`);
 		else if (fs.readFileSync(abs, "utf8").includes("EDIT ME")) pending.push(`${dest}: still has EDIT ME placeholders`);
@@ -198,12 +204,16 @@ export function init(target, preset = "generic") {
 		}
 		report.push(`${same ? "unchanged" : existed ? "updated  " : "created  "} .stack-agent/bin/${tool}`);
 	}
+	// a project set up before the feature map existed, or one that deleted it, does not get it back on a rerun
+	// that only refreshes the tools; `feature-map.mjs --draft` starts one by hand
+	const settingUp = !fs.existsSync(path.join(target, ".stack-agent/verify.json")) && !fs.existsSync(path.join(target, ".stack-agent/api-map.json"));
 	for (const [src, dest] of templatesFor(preset)) {
 		const abs = path.join(target, dest);
 		if (fs.existsSync(abs)) {
 			report.push(`kept     ${dest} (already exists, not overwritten)`);
 			continue;
 		}
+		if (dest === FEATURE_MAP && !settingUp) continue;
 		fs.mkdirSync(path.dirname(abs), { recursive: true });
 		fs.copyFileSync(path.join(pluginRoot, src), abs);
 		report.push(`created  ${dest}`);
