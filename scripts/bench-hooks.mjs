@@ -10,10 +10,12 @@ import { codeFingerprint } from "./lib/fingerprint.mjs";
 import { ConfigError, parseArgs } from "./lib/files.mjs";
 import { createWorktree, removeWorktree } from "./verify.mjs";
 
-const USAGE = `usage: node scripts/bench-hooks.mjs [--files N...] [--keep]
+const USAGE = `usage: node scripts/bench-hooks.mjs [--files N...] [--sparse] [--keep]
   builds a git repo of N small JS files (default 20000) for each N and prints, as JSON lines: the fingerprint of a
   clean tree and with 1,000 changed files (median of 3), the Stop hook end to end with a session record (median
   of 3), and the time and size of the against step's checkout and its removal
+  --sparse  put the project in app/ (100 files) beside the N files, and also time the against step's checkout with
+            against.paths (only the project's folder), as a monorepo would
   --keep  leave the repos on disk and print where`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +36,7 @@ function sizeOf(dir) {
 	return size;
 }
 
-function bench(dir, n) {
+function bench(dir, n, sparse) {
 	for (let i = 0; i < n; i++) {
 		const sub = path.join(dir, "src", `m${Math.floor(i / 100)}`);
 		if (i % 100 === 0) fs.mkdirSync(sub, { recursive: true });
@@ -42,6 +44,11 @@ function bench(dir, n) {
 	}
 	fs.mkdirSync(path.join(dir, ".stack-agent"), { recursive: true });
 	fs.writeFileSync(path.join(dir, ".stack-agent/verify.json"), JSON.stringify({ test: { command: "node -e 0" } }));
+	if (sparse) for (let i = 0; i < 100; i++) {
+		fs.mkdirSync(path.join(dir, "app/src"), { recursive: true });
+		fs.writeFileSync(path.join(dir, "app/src", `a${i}.js`), `export const a${i} = ${i};
+`);
+	}
 	git(dir, "init", "-q");
 	git(dir, "add", "-A");
 	git(dir, "commit", "-qm", "base");
@@ -54,18 +61,26 @@ function bench(dir, n) {
 	const [checkout, made] = timed(() => createWorktree(dir, "HEAD", { link: [] }));
 	const mb = +(sizeOf(path.join(made.tmp, "wt")) / 1048576).toFixed(1);
 	const [remove] = timed(() => removeWorktree(made.top, made.tmp, made.links));
-	return { files: n, fingerprintCleanMs: clean, fingerprint1000ChangedMs: changed, stopHookMs: hook, againstCheckoutMs: checkout, checkoutMB: mb, againstRemoveMs: remove };
+	const out = { files: n, fingerprintCleanMs: clean, fingerprint1000ChangedMs: changed, stopHookMs: hook, againstCheckoutMs: checkout, checkoutMB: mb, againstRemoveMs: remove };
+	if (sparse) {
+		const app = path.join(dir, "app");
+		const [sparseCheckout, s] = timed(() => createWorktree(app, "HEAD", { link: [], paths: [] }));
+		if (s.error) throw new Error(s.error);
+		const [sparseRemove] = timed(() => removeWorktree(s.top, s.tmp, s.links));
+		Object.assign(out, { sparseCheckoutMs: sparseCheckout, sparseRemoveMs: sparseRemove });
+	}
+	return out;
 }
 
 function main(argv) {
-	const args = parseArgs(argv, { flags: ["keep", "help"], multi: ["files"] });
+	const args = parseArgs(argv, { flags: ["keep", "sparse", "help"], multi: ["files"] });
 	if (args.help) return console.log(USAGE);
 	const sizes = (args.files ?? ["20000"]).map(Number);
 	if (!sizes.every((n) => Number.isInteger(n) && n > 0)) throw new ConfigError("--files takes positive integers");
 	for (const n of sizes) {
 		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-bench-hooks-"));
 		try {
-			console.log(JSON.stringify({ ...bench(dir, n), node: process.version, platform: process.platform }));
+			console.log(JSON.stringify({ ...bench(dir, n, args.sparse), node: process.version, platform: process.platform }));
 		} finally {
 			if (args.keep) console.log(`repo kept at ${dir}`);
 			else fs.rmSync(dir, { recursive: true, force: true });

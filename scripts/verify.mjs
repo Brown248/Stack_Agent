@@ -44,10 +44,10 @@ export function loadVerifyConfig(file) {
 	if (config.server !== undefined) checkRunSpec(config.server, "server", "server needs a command string or an args array");
 	if (config.checks !== undefined && !Array.isArray(config.checks)) throw new ConfigError("checks must be an array");
 	if (config.against !== undefined && typeof config.against !== "boolean" && (typeof config.against !== "object" || config.against === null || Array.isArray(config.against)))
-		throw new ConfigError("against must be true, false, or an object with keep, link, setup, tmpDir, required");
+		throw new ConfigError("against must be true, false, or an object with keep, link, paths, setup, tmpDir, required");
 	if (config.against && typeof config.against === "object") {
 		const a = config.against;
-		for (const key of ["keep", "link"]) requireStringArray(a[key], `against.${key}`, { optional: true });
+		for (const key of ["keep", "link", "paths"]) requireStringArray(a[key], `against.${key}`, { optional: true });
 		if (a.tmpDir !== undefined && (typeof a.tmpDir !== "string" || !a.tmpDir)) throw new ConfigError("against.tmpDir must be a folder path string");
 		if (a.required !== undefined && typeof a.required !== "boolean") throw new ConfigError("against.required must be true or false");
 		if (a.setup !== undefined) checkRunSpec(a.setup, "against.setup", "against.setup needs a command string or an args array");
@@ -494,7 +494,10 @@ function cleanStaleWorktrees(top, base, prefix = AGAINST_PREFIX) {
 // A detached checkout of ref in a temp folder (git hooks off during checkout), with dependency folders linked in
 // from the project. Returns { top, tmp, wtRoot, links } or { error, top, tmp }; always pair with
 // removeWorktree(top, tmp, links). Used by the against step and by sample-review for past commits.
-export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, link = ["node_modules"] } = {}) {
+// paths: folders relative to the project to check out, the project's own folder always included; leave it out to
+// check out the whole repository. On a large monorepo the full checkout is the slow part (about 30 s at 100,000
+// files, see design notes), and the project needs only its own folder and what it imports.
+export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, link = ["node_modules"], paths } = {}) {
 	const top = gitTop(root);
 	if (!top) return { error: "not a git repository" };
 	const rel = toPosix(path.relative(realpath(top), realpath(root)));
@@ -507,8 +510,21 @@ export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, lin
 		const noHooks = path.join(tmp, "no-hooks");
 		fs.mkdirSync(noHooks);
 		const wt = path.join(tmp, "wt");
-		const add = gitRun(top, ["-c", `core.hooksPath=${noHooks}`, "worktree", "add", "--detach", "--quiet", wt, ref]);
-		if (add.status !== 0) return { error: `could not check out ${ref}: ${add.stderr.trim()}`, top, tmp };
+		if (paths) {
+			// cone mode: the listed folders (relative to the top of the repository) plus the files at the top
+			const dirs = [...new Set([rel, ...paths.map((p) => toPosix(path.posix.normalize(path.posix.join(rel, toPosix(p)))))].filter((d) => d && d !== "."))];
+			const outside = dirs.find((d) => d === ".." || d.startsWith("../"));
+			if (outside) return { error: `against.paths: ${outside} is outside the repository`, top, tmp };
+			const add = gitRun(top, ["-c", `core.hooksPath=${noHooks}`, "worktree", "add", "--detach", "--no-checkout", "--quiet", wt, ref]);
+			if (add.status !== 0) return { error: `could not check out ${ref}: ${add.stderr.trim()}`, top, tmp };
+			const sparse = gitRun(wt, ["sparse-checkout", "set", "--cone", ...dirs]);
+			if (sparse.status !== 0) return { error: `could not limit the checkout of ${ref} to ${dirs.join(", ")}: ${sparse.stderr.trim()}`, top, tmp };
+			const co = gitRun(wt, ["-c", `core.hooksPath=${noHooks}`, "checkout", "--quiet"]);
+			if (co.status !== 0) return { error: `could not check out ${ref}: ${co.stderr.trim()}`, top, tmp };
+		} else {
+			const add = gitRun(top, ["-c", `core.hooksPath=${noHooks}`, "worktree", "add", "--detach", "--quiet", wt, ref]);
+			if (add.status !== 0) return { error: `could not check out ${ref}: ${add.stderr.trim()}`, top, tmp };
+		}
 		const wtRoot = path.join(wt, rel);
 		fs.mkdirSync(wtRoot, { recursive: true });
 		for (const name of link) {
@@ -579,7 +595,7 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	if (changedTests.length) step.tests = changedTests;
 
 	// with a setup step (often an install) nothing is linked unless asked: an install through a link would rewrite the real folder
-	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : ["node_modules"]) });
+	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : ["node_modules"]), paths: config.against?.paths });
 	const { tmp, links = [] } = made;
 	try {
 		if (made.error) return conclude(step, config, made.error);
