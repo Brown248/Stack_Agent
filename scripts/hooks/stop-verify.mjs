@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../guard.mjs";
 import { matchesAny } from "../lib/files.mjs";
 import { FINGERPRINT_VERSION, SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
@@ -69,13 +71,22 @@ export const validSkip = (skip, current) => Boolean(current && skip && skip.fing
 // work does not hide it and files the human left dirty before the session are not blamed on the agent.
 // Blocks are counted per session and reset on each new user turn (stop_hook_active false); after MAX_BLOCKS in
 // a row the stop is released with a message to the human, so a stuck agent cannot loop forever.
-export function decideBlock({ root, files, ignore, evidence, current, skip, state = {}, stopHookActive = false, sessionStart = null, againstOff = false, lost = false }) {
+export function decideBlock({ root, files, ignore, evidence, current, skip, state = {}, stopHookActive = false, sessionStart = null, againstOff = false, lost = false, guardFailures = [] }) {
 	const relevant = relevantFiles(root, files, ignore);
 	const next = { ...state, blocks: 0 };
 	const tracked = Boolean(sessionStart?.fingerprint && current);
 	// a baseline this session took and that has since been removed: nothing tells what the agent changed, so assume it did
 	const changed = lost || (tracked ? sessionStart.fingerprint !== current.value : relevant.length > 0);
 	if (!changed) return { action: "allow", state: next };
+	// Guard violations the session added, including through the shell, where the after-edit hook does not look. They
+	// come first: fixing them changes the code, so any evidence would be stale anyway. A skip record does not cover
+	// them (it says verification could not run, not that a rule may break); the block cap still applies.
+	if (guardFailures.length) {
+		const blocks = (stopHookActive ? (state.blocks ?? 0) : 0) + 1;
+		if (blocks > MAX_BLOCKS)
+			return { action: "release", state: { ...state, blocks }, message: `stack-agent: stopping with guard violations after ${MAX_BLOCKS} reminders: ${guardFailures.slice(0, 3).join("; ")}${guardFailures.length > 3 ? "; ..." : ""}. Fix them before trusting this change; CI will fail on them.` };
+		return { action: "block", kind: "guard", state: { ...state, blocks }, violations: guardFailures, attempt: blocks };
+	}
 	const stale = staleReason(evidence, current, newestMtime(root, relevant), sessionStart, againstOff);
 	// a removed record is worth a human's attention whatever else is going on
 	// evidence that matches the current code still settles it
@@ -125,6 +136,43 @@ export function reminderMessage({ why, files, verifyConfigChanged, mode = "remin
 		`the full verification (\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify skill) and report ` +
 		`its evidence file, or say plainly why it cannot run here. ${ending}`
 	);
+}
+
+export function guardMessage(violations, attempt = 1) {
+	return (
+		`stack-agent: the guard fails on files changed in this session (the after-edit hook only sees Edit and Write, so a ` +
+		`shell edit can get here). Fix the code, following each fix line; never raise the baseline to get past it:\n` +
+		violations.slice(0, 10).map((v) => `  ${v}`).join("\n") +
+		(violations.length > 10 ? `\n  ... and ${violations.length - 10} more (run node .stack-agent/bin/guard.mjs)` : "") +
+		`\nThen run the full verification again. (Stop ${attempt} of ${MAX_BLOCKS}.)\n`
+	);
+}
+
+// The guard on the files this session changed (in the working tree, or committed since it started), compared with
+// the baseline, as CI would. Files the human left dirty before the session and the agent did not touch are left out.
+// Returns "file:line [rule] message; fix: ..." lines; empty when there is no guard config or it does not load.
+export function sessionGuardFailures(root, { files, sessionStart = null, current = null }) {
+	const configPath = path.join(root, ".stack-agent/guard.config.json");
+	if (!fs.existsSync(configPath)) return [];
+	const touched = new Set(files);
+	if (sessionStart?.head) {
+		const r = spawnSync("git", ["diff", "--name-only", "--relative", sessionStart.head, "HEAD"], { cwd: root, encoding: "utf8" });
+		if (r.status === 0) for (const f of r.stdout.split("\n").filter(Boolean)) touched.add(f);
+	}
+	const dirty = sessionStart?.dirty;
+	const own = [...touched].filter((f) => fs.existsSync(path.join(root, f)) && !(dirty && current && f in dirty && dirty[f] === current.entries.get(f)));
+	if (!own.length) return [];
+	try {
+		const config = loadConfig(configPath);
+		const baselinePath = path.resolve(root, config.baseline ?? ".stack-agent/guard-baseline.json");
+		const baseline = fs.existsSync(baselinePath) ? JSON.parse(fs.readFileSync(baselinePath, "utf8")) : {};
+		const violations = runGuard({ root, config, files: own });
+		const { failing } = compareToBaseline(violations, baseline.counts ?? {}, own, fs.existsSync(baselinePath) ? baselineVersion(baseline) : undefined);
+		const keys = new Set(failing.map((f) => `${f.rule}|${f.file}`));
+		return violations.filter((v) => keys.has(`${v.rule}|${v.file}`)).map((v) => `${v.file}:${v.line} [${v.rule}] ${v.message}; fix: ${v.fix}`);
+	} catch {
+		return [];
+	}
 }
 
 export function coverageMessage(files = []) {
@@ -210,7 +258,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 					skip = { at: new Date().toISOString(), reason, fingerprint: current.value, via: "message", written: false };
 				} else shortMarker = true;
 			}
-			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: start, againstOff, lost: !start && recordLost(root, input.session_id) });
+			const guardFailures = sessionGuardFailures(root, { files, sessionStart: start, current });
+			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: start, againstOff, lost: !start && recordLost(root, input.session_id), guardFailures });
 			// the hook runs outside any sandbox, so it can keep the agent's declared skip where reviewers see it
 			if (skip?.via === "message" && verdict.viaSkip) {
 				try {
@@ -225,6 +274,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 				process.exitCode = 2;
 			} else if (verdict.action === "block" && verdict.kind === "coverage") {
 				process.stderr.write(coverageMessage(verdict.files));
+				process.exitCode = 2;
+			} else if (verdict.action === "block" && verdict.kind === "guard") {
+				process.stderr.write(guardMessage(verdict.violations, verdict.attempt));
 				process.exitCode = 2;
 			} else if (verdict.action === "block") {
 				const note = shortMarker ? `Your ${SKIP_MARKER} line needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run. ` : "";

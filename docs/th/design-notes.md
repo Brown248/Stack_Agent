@@ -48,7 +48,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 - กฎที่อ่าน import รองรับ JS/TS และ Python ภาษาอื่นใช้กฎแบบ `pattern` การหาโมดูล Python เป็นแบบ static ไม่ตามการแก้ `sys.path`, การเรียก `importlib` หรือ package ที่ติดตั้งไว้ โมดูลที่หาไม่เจอใน repo จึงถือเป็น third-party
 - hook ที่ดักคำสั่ง shell ใช้การจับ pattern ถ้าตั้งใจเลี่ยง (เช่นใช้ alias หรือ script ที่เขียนไฟล์โดยไม่ระบุชื่อไฟล์ในคำสั่ง) อาจหลุดได้ CI ที่มี `--compare-ref` และ CODEOWNERS คือด่านที่ไม่มีทางหลุด
-- guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย CI และ Stop hook
+- guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย Stop hook ซึ่งรัน guard กับไฟล์ที่ session แก้ (ตั้งแต่ 23 ต.ค. 2026) และโดย CI
 - หลักฐานและไฟล์ skip เป็นไฟล์ธรรมดา การแก้ด้วย Edit/Write จะถามคนก่อน แต่ถ้าตั้งใจเขียนผ่าน shell ก็ยังปลอมได้ job `verify` ใน template ของ CI รัน verify ซ้ำทุก push และ pull request (ใน pull request ใช้ `--against origin/<base>`) ไฟล์ที่ปลอมจึงผ่าน CI ไม่ได้ แต่ใช้ได้จริงก็ต่อเมื่อ job นี้เป็น required check, workflow กับ `verify.json` อยู่ใต้ CODEOWNERS และกรอกขั้นติดตั้ง dependency แล้ว workflow นี้ยังไม่เคยรันบน GitHub Actions จริง ตอนนี้ตรวจได้เฉพาะด้วยเทสที่อ่านข้อความ
 - ขั้น `against` พิสูจน์ได้ว่ามี check ใหม่อย่างน้อยหนึ่งตัวที่แยกโค้ดเก่ากับโค้ดใหม่ออกจากกัน แต่บอกไม่ได้ว่า check ครอบคลุมทุกอย่างที่การแก้ควรทำ และผลที่เชื่อไม่ได้ (server ของโค้ดเก่าเปิดไม่ขึ้น) จะข้ามขั้นนี้แทนที่จะให้ผ่าน
 - ratchet นับต่อไฟล์ต่อกฎ กฎแบบ import นับทีละชื่อที่ import (baseline version 2) version 1 นับทีละบรรทัด การเพิ่มชื่อเข้าไปใน import ต้องห้ามที่มีอยู่แล้วจึงผ่านได้ ช่องโหว่นี้เจอระหว่างวางแผนงาน A/B และปิดแล้วพร้อมเทสกันถอยหลัง (`tests/guard-widening.test.mjs`)
