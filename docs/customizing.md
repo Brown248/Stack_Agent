@@ -73,7 +73,7 @@ To add a new rule *type* (for example, imports in another language), extend `fin
    ```markdown
    ---
    name: <name>
-   description: What it does and when to use it, including the words people type. This decides when Claude picks it up.
+   description: When to use it, including the words people type. This decides when Claude picks it up.
    ---
    ```
 
@@ -81,6 +81,21 @@ To add a new rule *type* (for example, imports in another language), extend `fin
 3. Keep it small and composable. Call `verify` instead of repeating its steps.
 4. Put code the agent would otherwise rewrite each time into a script in the skill folder, and reference it with `${CLAUDE_SKILL_DIR}/script.mjs`.
 5. Add an eval case (below), so you can tell whether the skill helps.
+
+### Writing the skill text
+
+An agent runs a skill the same way every time only if the text leaves it few ways to read it. These rules come from `writing-for-agents` in mattpocock/skills and `writing-skills` in obra/superpowers (both MIT), and `tests/skills.test.mjs` checks the ones a script can.
+
+- **The description says when, never how.** Name the situations and the phrases that should start the skill, one per distinct case, with the most telling word first. Leave the procedure out: superpowers found that an agent given a description that summarized the steps followed the summary and skipped the skill, doing one review where the skill had two. The test fails a description with "then" or "step" in it. Whether the description works is measured, not argued: the `debug` skill went from 0 of 9 to 9 of 9 bug reports picked up after its description started with "Use this first for any bug report" (design notes, 2026-10-23).
+- **Every step ends on a check the agent can see.** Write "Done when" with something observable: a command's output, a file that exists, a verdict that repeats on a second run. "Once you understand the cause" lets the agent stop early; "the repro goes red on the user's symptom twice in a row" does not. The stronger the bar ("every changed route has a check"), the more digging it forces.
+- **Say what to do, not only what to avoid.** A ban puts the banned behavior in front of the agent, and it can backfire. In superpowers' micro-tests (5 runs per wording), "don't restate the brief" left 4.4 values re-typed per message, more than the 3.6 with no instruction at all, while a positive recipe of what the message should contain left 3.0 with no spread. Bans are not always wrong: in the same tests "do not ask the reviewer to re-run tests" held in 5 of 5 runs, against 3 of 5 violations without it. Lead with the positive target, keep a ban for a hard limit on a concrete action, and measure when it matters.
+- **Use one strong word for an idea and repeat it.** `debug` says *repro* and *red* instead of describing "a command that fails reliably on this bug" each time. A word the model already knows carries its meaning for free; a word you invent needs a definition.
+- **Do not copy the environment.** A command list, a flag table, or a folder layout copied into a skill goes stale. Point at the source (`--help`, `package.json`, the config) and write down only what the agent cannot find by looking: the reason for a choice, the gotcha, the unwritten convention.
+- **Cut sentences that change nothing.** An instruction the model follows anyway costs attention and says nothing. Delete the whole sentence. When people disagree about whether a line matters, run the eval case with and without it instead of arguing.
+- **Stay under the size limit.** Claude Code cuts a skill it re-attaches after a compaction at 20,000 characters, and the rest is lost for the session. Move reference that only some cases need into a file next to `SKILL.md` and point at it from the step that needs it.
+- **Prefer a check to a sentence.** If a rule can be checked, make it a guard rule, a verify check, or a test (the `correct` skill's order), and keep the skill for judgment.
+
+Before you write a skill to fix a behavior, show the behavior without it: run the eval case or an A/B task on the bare arm and look for the failure. If the agent already does the right thing without the skill, there is nothing to fix.
 
 ## Change the hook policy
 
