@@ -36,6 +36,20 @@ claude plugin eval . --scaffold --allow-tools Bash Write Edit --no-publish --jso
 
 The exit code is 0 only when every case reaches the threshold (default 1.0).
 
+## What the cases cover
+
+| Skill | Case |
+| --- | --- |
+| `verify` | `verify-before-done` |
+| `add-endpoint` | `add-endpoint-delete-item` |
+| `add-migration` | `add-migration-column` |
+| `api-map` | `api-map-lookup` |
+| `debug` | `debug-blank-name` (a plain bug report; `used-debug-skill` shows whether the skill was picked up on its own) |
+| `correct` | `correct-error-body` (started by name; the planted history shows the mistake twice) |
+| `reflect` | `reflect-lessons` (started by name; the corrections are quoted in the prompt) |
+
+`sample-review` has no case: it reviews each commit in a temporary checkout, and the eval sandbox cannot write any file, so the checkout cannot be made. Measure it with the A/B task `review-spec` (`scripts/ab/run.mjs`), which runs real sessions.
+
 ## Read the result
 
 - A case that passes with the plugin but also passes without it (Δ ≈ 0) means the skill is not what made it pass. The skill may be unnecessary, or the case is too easy.

@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: debug-blank-name
+description: A plain bug report should start the debug skill, which builds a repro that fails on the planted bug before the fix, keeps it as a test or check, and fixes the cause.
+tags: [skills, debug]
+context:
+  scaffold_script: scaffold.sh

@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: correct-error-body
+description: The correct skill should find a mistake that history shows twice, cite those commits, choose a check that makes it fail loudly (a guard rule whose fix names the right shape), and prove it fires, without loosening the guard.
+tags: [skills, correct]
+context:
+  scaffold_script: scaffold.sh

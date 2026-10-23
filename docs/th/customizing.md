@@ -96,7 +96,7 @@ path ที่ป้องกันอยู่ใน `scripts/hooks/protected-p
 ## เพิ่ม eval case
 
 1. สร้าง `evals/<case>/` ที่มี `case.yaml` (`schema_version: "1.1"`, `name`, `context.scaffold_script: scaffold.sh`), `prompt.md` (คำขอที่เขียนเหมือนผู้ใช้จริงและไม่พูดถึงการทดสอบ) และ `graders/*.md`
-2. `scaffold.sh` เรียก `node "$(dirname "$0")/../scaffold.mjs"` ซึ่งคัดลอก `examples/sample-backend` ไปที่โฟลเดอร์ที่ใช้รัน ถ้าจะใช้ตัวอย่างอื่นให้คัดลอกแล้วดัดแปลง
+2. `scaffold.sh` เรียก `node "$(dirname "$0")/../scaffold.mjs"` ซึ่งคัดลอก `examples/sample-backend` ไปที่โฟลเดอร์ที่ใช้รัน ถ้าจะใช้ตัวอย่างอื่นให้คัดลอกแล้วดัดแปลง case ที่ต้องเริ่มจากประวัติใน git (บั๊กที่ฝังไว้ หรือความผิดพลาดที่เกิดซ้ำสองครั้ง) ให้เพิ่ม `setup.mjs` ที่เรียก `plant()` จาก `evals/plant.mjs` และรันต่อจาก `scaffold.mjs` (ดู `debug-blank-name`) ส่วน `tests/evals.test.mjs` ตรวจว่าทุก case มีรูปแบบถูกต้อง และ setup ฝังสถานะที่ grader คาดไว้จริง
 3. ใช้ grader แบบ script (`regex`, `file_exists`, `tool_used`) เป็นหลัก และใช้ `llm` เฉพาะข้อที่ต้องใช้ดุลยพินิจ
 4. รัน:
 

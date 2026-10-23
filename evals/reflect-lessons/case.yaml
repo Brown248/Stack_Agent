@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: reflect-lessons
+description: The reflect skill should turn corrections quoted in the conversation into proposed skill or rule edits, each tied to a quoted observation, and wait for approval instead of editing.
+tags: [skills, reflect]
+context:
+  scaffold_script: scaffold.sh

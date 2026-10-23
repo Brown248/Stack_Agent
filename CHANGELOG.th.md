@@ -17,6 +17,7 @@
 - `run.mjs --judge MODEL` ให้คะแนน `rubric` ของ task (เกณฑ์ที่ script ตรวจไม่ได้) ด้วย `agents/judge.md` บนสำเนาแบบ blind ของแต่ละรอบ มี rubric ให้ `endpoint`, `item-note` และ `dup-name`
 - `scripts/bench-hooks.mjs` จับเวลา fingerprint, Stop hook และการ checkout ของขั้น against บน repository จำลอง ผลอยู่ใน design notes
 - task A/B สำหรับ preset อื่น ได้แก่ `lib-maxlength` (library: probe build package แล้ว import แบบผู้ใช้), `web-roundup` (frontend-web: probe เปิด dev server แล้วตรวจหน้าเว็บและโค้ดที่ serve) และ `job-skip-blank` (generic: probe รัน data job กับ CSV ของตัวเอง) ทุกตัวมี rubric สำหรับ `--judge` และ `withServer` ใน `scripts/ab/lib.mjs` รับ script ของ server, path ที่ใช้เช็กว่าพร้อม และตัวเลือกว่าจะเตรียมฐานข้อมูลหรือไม่
+- eval case `debug-blank-name`, `correct-error-body` และ `reflect-lessons` พร้อม `evals/plant.mjs` สำหรับ case ที่เริ่มจากประวัติใน git ส่วน `sample-review` ไม่มี case เพราะสร้าง checkout ใน sandbox ของ eval ไม่ได้ task A/B `review-spec` ใช้วัดแทน ยังไม่ได้รัน
 - icon ของ plugin
 
 ### เปลี่ยนแปลง

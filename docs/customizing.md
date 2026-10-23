@@ -96,7 +96,7 @@ Protected paths are in `scripts/hooks/protected-paths.mjs`. Every pattern has a 
 ## Add an eval case
 
 1. Create `evals/<case>/` with `case.yaml` (`schema_version: "1.1"`, `name`, `context.scaffold_script: scaffold.sh`), `prompt.md` (an organic request that does not mention testing), and `graders/*.md`.
-2. `scaffold.sh` calls `node "$(dirname "$0")/../scaffold.mjs"`, which copies `examples/sample-backend` into the run folder. Copy and adapt it for another example.
+2. `scaffold.sh` calls `node "$(dirname "$0")/../scaffold.mjs"`, which copies `examples/sample-backend` into the run folder. Copy and adapt it for another example. A case that starts from a history (a planted bug, a mistake made twice) adds a `setup.mjs` that calls `plant()` from `evals/plant.mjs` and runs it after `scaffold.mjs` (see `debug-blank-name`). `tests/evals.test.mjs` checks that every case is well formed and that each setup plants what its graders expect.
 3. Prefer script graders (`regex`, `file_exists`, `tool_used`). Use `llm` graders only for judgment calls.
 4. Run it:
 
