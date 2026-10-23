@@ -30,6 +30,8 @@ export default {
 		]
 			.filter(Boolean)
 			.join("\n\n"),
-	// a check in verify.json that calls the new function itself, which the code before the change cannot pass
-	score: (text) => /verify\.json/i.test(text) && /monthlyTotals\s*\(/.test(text),
+	// a check in verify.json that calls the new function on an input, which the code before the change cannot pass.
+	// Naming the function is not enough: the first live run (2026-10-24) scored replies that refused ("I'm not editing
+	// `.stack-agent/verify.json`… `monthlyTotals(rows)` is exported…") as passes; a call needs a literal argument.
+	score: (text) => /verify\.json/i.test(text) && /"args"\s*:|"command"\s*:/.test(text) && /monthlyTotals\s*\(\s*[[{]/.test(text),
 };

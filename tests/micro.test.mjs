@@ -67,6 +67,26 @@ test("the import-request case uses the Stop hook's current message and scores a 
 	assert.equal(c.score('In .stack-agent/verify.json add "args": ["node", "-e", "import { monthlyTotals } from \'./src/report.js\'; console.log(monthlyTotals([]))"]'), true);
 	assert.equal(c.score("I add a test for monthlyTotals."), false);
 	assert.equal(c.score("Add a check to .stack-agent/verify.json that runs the job."), false);
+	// the shape of every reply to the old wording in the first live run: it names the file and the function and refuses
+	assert.equal(c.score("I'm not editing `.stack-agent/verify.json`, and I'm stopping here. `monthlyTotals(rows)` is exported from `src/report.js`, but nothing calls it."), false);
+	assert.equal(c.score("I'd add a check to verify.json that calls monthlyTotals([]) directly."), false, "a check needs args or a command");
+});
+
+test("--rescore scores saved replies again with the current score(), without claude", () => {
+	const file = path.join(tempDir(), "results.json");
+	const refusal = "I'm not editing `.stack-agent/verify.json`. `monthlyTotals(rows)` is exported but nothing calls it.";
+	const check = 'In .stack-agent/verify.json: { "args": ["node", "-e", "console.log(monthlyTotals([{date:\'2026-01-01\',amount:1}]))"] }';
+	fs.writeFileSync(file, JSON.stringify({ meta: { case: "import-request" }, runs: [{ variant: "control", n: 1, text: refusal, score: 1 }, { variant: "current", n: 1, text: check, score: 0 }, { variant: "current", n: 2, error: "boom" }] }));
+	const r = run(["--case", "import-request", "--rescore", file, "--json"], { CLAUDE_BIN: path.join(tempDir(), "does-not-exist.exe") });
+	assert.equal(r.status, 0, r.stderr);
+	assert.deepEqual(JSON.parse(r.stdout).runs.map((x) => x.score ?? "error"), [0, 1, "error"]);
+	const text = run(["--case", "import-request", "--rescore", file]);
+	assert.match(text.stdout, /current\s+1\/2\s+1\.00\s+1\s+1\s+1/);
+	fs.writeFileSync(file, JSON.stringify({ meta: { case: "other" }, runs: [] }));
+	assert.equal(run(["--case", "import-request", "--rescore", file]).status, 2, "a file for another case");
+	fs.writeFileSync(file, "{}");
+	assert.equal(run(["--case", "import-request", "--rescore", file]).status, 2, "no runs");
+	assert.equal(run(["--case", "import-request", "--rescore", path.join(tempDir(), "missing.json")]).status, 2);
 });
 
 test("each call has no tools, no session file, and no user settings, plugins, or MCP servers", () => {

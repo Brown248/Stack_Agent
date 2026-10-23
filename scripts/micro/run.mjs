@@ -19,6 +19,8 @@ const USAGE = `usage: node scripts/micro/run.mjs --case NAME --model MODEL --bud
   --variant NAME  run only these variants (repeatable; default all, and the control always runs)
   --out DIR       results folder (default: a new folder in the system temp folder)
   --dry-run       print each variant's prompt and the most it can cost; never calls claude
+  --rescore FILE  score the replies saved in a results.json again with the case's current score(); never calls
+                  claude, needs no --model or --budget (use it after fixing a scorer)
   --json          print the results as JSON
 cost: at most runs x variants x budget, printed before the first call`;
 
@@ -44,8 +46,9 @@ export function checkCase(name, mod) {
 }
 
 export function parseOptions(argv) {
-	const args = parseArgs(argv, { flags: ["dry-run", "json"], options: ["case", "model", "budget", "runs", "out"], multi: ["variant"] });
+	const args = parseArgs(argv, { flags: ["dry-run", "json"], options: ["case", "model", "budget", "runs", "out", "rescore"], multi: ["variant"] });
 	if (!args.case) throw new ConfigError("--case is required");
+	if (args.rescore) return { caseName: args.case, rescore: path.resolve(args.rescore), json: Boolean(args.json) };
 	if (!args.model) throw new ConfigError("--model is required");
 	const budget = Number(args.budget);
 	if (!(budget > 0)) throw new ConfigError("--budget must be a positive number of dollars");
@@ -108,9 +111,28 @@ export function summarize(c, rows) {
 	return [`${c.name} (${c.better} is better)`, ...lines.map((l) => "  " + l.map((cell, i) => cell.padEnd(widths[i])).join("  ").trimEnd())].join("\n");
 }
 
+// the saved replies scored again; a reply that was an error stays one
+export function rescore(c, saved) {
+	if (!Array.isArray(saved?.runs)) throw new ConfigError("--rescore: the file has no runs array");
+	if (saved.meta?.case && saved.meta.case !== c.name) throw new ConfigError(`--rescore: the file is for case ${saved.meta.case}, not ${c.name}`);
+	return saved.runs.map((r) => (typeof r.text === "string" ? { ...r, score: toScore(c.score(r.text)) } : r));
+}
+
 export async function main(argv) {
 	const opts = parseOptions(argv);
 	const c = await loadCase(opts.caseName);
+	if (opts.rescore) {
+		let saved;
+		try {
+			saved = JSON.parse(fs.readFileSync(opts.rescore, "utf8"));
+		} catch (err) {
+			throw new ConfigError(`--rescore: cannot read ${opts.rescore}: ${err.message}`);
+		}
+		const rows = rescore(c, saved);
+		if (opts.json) console.log(JSON.stringify({ meta: saved.meta, runs: rows }, null, 2));
+		else console.log(summarize(c, rows));
+		return 0;
+	}
 	const variants = pickVariants(c, opts.variants);
 	const log = opts.json ? (s) => process.stderr.write(s + "\n") : (s) => console.log(s);
 	const most = opts.runs * variants.length * opts.budget;

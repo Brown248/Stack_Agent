@@ -185,6 +185,7 @@ npm run micro -- --case import-request --model sonnet --budget 0.05 --runs 5 --d
 | `--variant NAME` | Run only these variants (repeat it). The control always runs. |
 | `--out DIR` | Where to write `results.json` (default: a new folder under the system temp dir). |
 | `--dry-run` | Print every variant's prompt and the most the run can cost. Never calls `claude`. |
+| `--rescore FILE` | Score the replies saved in a `results.json` again with the case's current `score()`. Never calls `claude` and needs no `--model` or `--budget`. Read the replies before trusting a score: the first live run of `import-request` scored replies that refused as passes, because they named `verify.json` and the function; after the scorer was fixed, `--rescore` gave the right numbers for free. |
 | `--json` | Print the results as JSON. |
 
 **Cost.** At most runs × variants × budget, printed before the first call. Each call runs in a new empty folder with `--tools ""`, `--no-session-persistence`, `--setting-sources project,local`, and `--strict-mcp-config`, so only the prompt reaches the model. Calls go in rounds (every variant once, then again), so a drift during the run hits every variant alike. The summary shows the mean, the lowest and highest score, the errors, and the mean cost per variant; a failed call counts as an error, never as a score of 0.
