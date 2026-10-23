@@ -19,7 +19,7 @@ If the diff cannot be read (the command is refused or fails), stop: output an em
 ## For each candidate
 
 1. Read the cited location and enough around it to understand it, in the review root.
-2. Try to refute the claim from the code (for a `spec` candidate, also from the spec: does it really ask for this, or rule it out?): is the path reachable, is it handled elsewhere, does a guard or validation already stop it, is the rule cited actually about this, does the behavior in the diff differ from what the claim says?
+2. Try to refute the claim from the code (for a `spec` candidate, also from the spec: does it really ask for this, or rule it out?): is the path reachable, is it handled elsewhere, does a guard or validation already stop it, is the rule cited actually about this (for a `rules.md:<line>` or `standards:<file>:<line>` candidate, read that line of that file), does the behavior in the diff differ from what the claim says?
 3. If a read-only command decides it (the guard, the API map check, a test), run it and keep its command and the relevant output.
 4. Decide:
    - `confirmed` only with a concrete observation: the command and its output, or the exact code path that shows the problem. Give `severity` (`blocking` if it breaks behavior, a rule, or a check; otherwise `non-blocking`), `kind` (`repeatable` if an agent is likely to make this mistake again and a rule or check could stop it; otherwise `one-off`), `observed`, and `fix`.

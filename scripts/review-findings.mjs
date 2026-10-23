@@ -26,7 +26,11 @@ export const FINAL_VERDICTS = VERDICTS.filter((v) => v !== "candidate");
 export const SEVERITIES = ["blocking", "non-blocking"];
 export const KINDS = ["repeatable", "one-off"];
 // where a finding comes from; script-verifiable sources may be confirmed by re-running the script
-export const SOURCE_RE = /^(guard:[\w-]+|api-map|verify-evidence|rules\.md:\d+|correctness|spec)$/;
+export const SOURCE_RE = /^(guard:[\w-]+|api-map|verify-evidence|rules\.md:\d+|standards:[^\s:]+:\d+|correctness|spec)$/;
+// files a repo writes its own standards in; a `standards:<file>:<line>` finding cites one of them, in any folder
+export const STANDARDS_FILES = ["CONTRIBUTING.md", "CODING_STANDARDS.md", "STYLEGUIDE.md", "STYLE.md", "AGENTS.md", "CLAUDE.md"];
+const STANDARDS_RE = /^standards:([^\s:]+):(\d+)$/;
+const SOURCE_LIST = "guard:<rule-id>, api-map, verify-evidence, rules.md:<line>, standards:<file>:<line>, correctness, or spec";
 // a `spec` finding quotes what was asked: { from: "commit-message" | <file relative to the root>, quote }
 export const SPEC_FROM_COMMIT = "commit-message";
 // rule ids the guard reports on its own, not from guard.config.json
@@ -78,7 +82,12 @@ export function checkRecords(records, { stage = "final" } = {}) {
 			if (ids.has(r.id)) errors.push(`${at}: duplicate id`);
 			ids.add(r.id);
 		}
-		if (r.source !== undefined && !(typeof r.source === "string" && SOURCE_RE.test(r.source))) errors.push(`${at}: source must be guard:<rule-id>, api-map, verify-evidence, rules.md:<line>, correctness, or spec`);
+		if (r.source !== undefined && !(typeof r.source === "string" && SOURCE_RE.test(r.source))) errors.push(`${at}: source must be ${SOURCE_LIST}`);
+		const std = typeof r.source === "string" ? STANDARDS_RE.exec(r.source) : null;
+		if (std) {
+			if (path.isAbsolute(std[1]) || std[1].split(/[\\/]/).includes("..")) errors.push(`${at}: ${r.source} must cite a file relative to the project root`);
+			else if (!STANDARDS_FILES.some((n) => n.toLowerCase() === path.posix.basename(toPosix(std[1])).toLowerCase())) errors.push(`${at}: ${r.source} must cite one of ${STANDARDS_FILES.join(", ")}`);
+		}
 		if (r.source === "spec") {
 			const s = r.spec;
 			if (!s || typeof s !== "object" || Array.isArray(s)) errors.push(`${at}: a spec finding needs spec: { from, quote }`);
@@ -179,10 +188,12 @@ export function checkGrounding(records, read, readBefore = () => null, readMessa
 			else if (!norm(text).includes(norm(r.spec.quote))) errors.push(`${at}: spec.quote does not appear in ${r.spec.from === SPEC_FROM_COMMIT ? `the message of commit ${r.commit}` : r.spec.from}`);
 		}
 		const ruleLine = /^rules\.md:(\d+)$/.exec(src);
-		if (ruleLine) {
-			const text = read(".stack-agent/rules.md");
-			if (text === null) errors.push(`${at}: ${src} cites .stack-agent/rules.md, which does not exist`);
-			else if (Number(ruleLine[1]) < 1 || Number(ruleLine[1]) > text.split(/\r?\n/).length) errors.push(`${at}: ${src} is past the end of .stack-agent/rules.md`);
+		const std = STANDARDS_RE.exec(src);
+		const [file, line] = ruleLine ? [".stack-agent/rules.md", ruleLine[1]] : std ? [toPosix(std[1]), std[2]] : [];
+		if (file) {
+			const text = read(file);
+			if (text === null) errors.push(`${at}: ${src} cites ${file}, which does not exist`);
+			else if (Number(line) < 1 || Number(line) > text.split(/\r?\n/).length) errors.push(`${at}: ${src} is past the end of ${file}`);
 		}
 	});
 	return errors;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { COMMON, FIELDS, FINAL_VERDICTS, KINDS, SEVERITIES, VERDICTS, checkRecords, logRows, main, validateFindings } from "../scripts/review-findings.mjs";
+import { COMMON, FIELDS, FINAL_VERDICTS, KINDS, SEVERITIES, STANDARDS_FILES, VERDICTS, checkRecords, logRows, main, validateFindings } from "../scripts/review-findings.mjs";
 import { main as worktree } from "../scripts/review-worktree.mjs";
 import { main as verify } from "../scripts/verify.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
@@ -138,6 +138,23 @@ test("guard rule ids and rules.md lines must exist", () => {
 	assert.deepEqual(valid([confirmed({ source: "rules.md:3" })]), []);
 	has(valid([confirmed({ source: "rules.md:40" })]), /past the end of \.stack-agent\/rules\.md/);
 	has(validateFindings([confirmed({ source: "rules.md:1", location: { file: "a.js", line: 1, excerpt: "abc" }, evidence: [{ file: "a.js", line: 1, excerpt: "abc", description: "x" }] })], { root: tempDir() }), /cites \.stack-agent\/rules\.md, which does not exist/);
+});
+
+test("a standards finding cites a line of the repo's own standards file", () => {
+	const dir = tempDir();
+	write(dir, SERVICE, NEW);
+	write(dir, "CONTRIBUTING.md", "# Contributing\n\nValidate every argument in the service.\n");
+	write(dir, "docs/coding_standards.md", "# Standards\n\n- Services validate their input.\n");
+	write(dir, "src/notes.md", "Validate input.\n");
+	const std = (source) => validateFindings([confirmed({ commit: "worktree", source })], { root: dir });
+	assert.deepEqual(std("standards:CONTRIBUTING.md:3"), []);
+	assert.deepEqual(std("standards:docs/coding_standards.md:3"), [], "any folder, any case");
+	has(std("standards:CONTRIBUTING.md:9"), /past the end of CONTRIBUTING\.md/);
+	has(std("standards:STYLE.md:1"), /cites STYLE\.md, which does not exist/);
+	has(std("standards:src/notes.md:1"), /must cite one of CONTRIBUTING\.md, CODING_STANDARDS\.md/);
+	has(std("standards:../CONTRIBUTING.md:1"), /must cite a file relative to the project root/);
+	has(std("standards:CONTRIBUTING.md"), /source must be .*standards:<file>:<line>/);
+	has(checkRecords([confirmed({ source: "standards:CONTRIBUTING.md:3", verified_by: "script:guard" })]), /only guard, api-map, and verify-evidence findings can be verified by a script/);
 });
 
 test("size limits: too many records and too many errors", () => {
@@ -276,7 +293,8 @@ test("the reviewer and verifier prompts name every field and value the validator
 	const skill = read("skills/sample-review/SKILL.md");
 	for (const k of [...COMMON, ...FIELDS.candidate]) assert.ok(reviewer.includes(`\`${k}\``), `agents/reviewer.md does not mention \`${k}\``);
 	assert.ok(reviewer.includes("`candidate`"));
-	for (const src of ["guard:<rule-id>", "api-map", "verify-evidence", "rules.md:<line>", "correctness", "`spec`"]) assert.ok(reviewer.includes(src), `reviewer.md does not mention ${src}`);
+	for (const src of ["guard:<rule-id>", "api-map", "verify-evidence", "rules.md:<line>", "standards:<file>:<line>", "correctness", "`spec`"]) assert.ok(reviewer.includes(src), `reviewer.md does not mention ${src}`);
+	for (const name of STANDARDS_FILES) assert.ok(reviewer.includes(`\`${name}\``), `reviewer.md does not name ${name}`);
 	const verifierFields = [...COMMON, ...new Set(FINAL_VERDICTS.flatMap((v) => FIELDS[v]))].filter((k) => !["found_by", "verified_by"].includes(k));
 	for (const k of verifierFields) assert.ok(verifier.includes(`\`${k}\``), `agents/finding-verifier.md does not mention \`${k}\``);
 	for (const v of [...VERDICTS.filter((v) => v !== "candidate"), ...SEVERITIES, ...KINDS]) assert.ok(verifier.includes(`\`${v}\``), `finding-verifier.md does not mention \`${v}\``);
