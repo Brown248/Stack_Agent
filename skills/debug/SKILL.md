@@ -20,6 +20,10 @@ Pick the narrowest one that reaches the bug: a test at the function that misbeha
 
 Run it on the code as it is now: `node .stack-agent/bin/verify.mjs --skip-tests --check <name> --json` (the JSON holds an HTTP check's response body and the server log), or the single test file. Done when you have run it at least once and its output shows the user's symptom (the wrong status, the error text, the wrong output), and a second run gives the same verdict. Show the command and the relevant output lines.
 
+The red must be the failure the user reported. A repro that fails some other way nearby (a 500 when they reported a 201, a crash when they reported a wrong count) finds a different bug, and fixing that one leaves theirs in place. Compare the output with the user's words before you go on.
+
+If it fails on some runs only, run it in a loop and report how many runs out of how many go red. Raise that rate before step 2: more runs, more load, a fixed seed or clock, a narrower timing window. A bug that fails half the time can be worked on; one that fails once in a hundred cannot.
+
 If you cannot make it go red, stop and say so: list what you tried and ask the user for what would reproduce it (an environment, a captured request, a log). Theories without a red repro are guesses, so the next steps wait.
 
 ## 2. Shrink it
@@ -38,10 +42,12 @@ For a slowdown, measure instead of logging: time the repro before and after each
 
 ## 5. Fix
 
+Keep the repro where it reaches the real bug pattern as it happens at the call site. If the only place a test fits is too shallow to show it (the bug needs two callers and the test has one, or a chain the unit test cannot build), a test there passes with the bug still in. Say so in the report: that the code has no place to lock this bug down is itself a finding, and the verify check from step 1 stays the proof.
+
 Change the code, then run the full verify with no flags: `node .stack-agent/bin/verify.mjs`. Its against step runs your repro on the code the session started from; the repro must fail there and pass now. That is the proof the repro catches this bug. Read the against line and act on it:
 
 - `detecting` names your check, or `tests (...)` with your repro test among the failures in its output: done, go to step 6.
-- `FAIL against` or `SKIP against: the changed tests also pass`: the repro passes on the old code. If the bug was already there when the session started, the repro does not reach it: go back to step 1. If this session introduced the bug, the old code is correct, so passing there is expected: keep the repro as a regression check, and make sure the session's change has a check the old code fails (see the verify skill), or say that the bug and its fix are both from this session and show the red run from step 1 as the proof.
+- `FAIL against` or `SKIP against: the changed tests also pass`: the repro passes on the old code. If the bug was already there when the session started, the repro does not reach it: go back to step 1. If this session introduced the bug, the old code is correct, so passing there is expected: keep the repro as a regression check, and make sure the session's change has a check the old code fails (see the verify skill), or say that the bug and its fix are both from this session and show the red run from step 1 as the proof. If you make the repro go red again by putting the bug back (reverting the fix, editing a fixture), show `git diff` of that edit before the red run, so the red is proven to come from the edit, then undo it and show `git diff` again with the edit gone. An edit that silently changed nothing gives a red you cannot trust.
 - `SKIP against` for another reason (the test imports something the old code lacks, no test command in `verify.json`, a test file outside the kept test globs, `verify.json` missing at the reference commit): the step proves nothing either way. Turn the repro into a verify check if you can, or set `against.keep` for the test's folder; otherwise report the red run from step 1 as the proof and say the against step skipped.
 
 ## 6. Clean up
@@ -54,4 +60,4 @@ Done when all of these hold:
 
 ## Report
 
-The repro (its name and command), the red output before the fix, the hypothesis that turned out right and the evidence for it, the fix, and the verify evidence path. If no repro could be built, say so and what you need, and make no fix.
+The repro (its name and command), the red output before the fix (and the red rate, for a bug that fails only sometimes), the hypothesis that turned out right and the evidence for it, the fix, any missing place for a test (step 5), and the verify evidence path. If no repro could be built, say so and what you need, and make no fix.
