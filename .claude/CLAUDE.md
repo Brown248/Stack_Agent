@@ -1,6 +1,6 @@
 # Stack Agent: working in this repo
 
-This repo is a Claude Code plugin and a template others fork. Read `README.md` for what it is, `docs/design-notes.md` for why each piece exists, and `docs/customizing.md` for where things live.
+This repo is a Claude Code plugin and a template others fork. Read `README.md` for what it is, `docs/design-notes.md` for why each piece exists, `docs/customizing.md` for where things live, and `docs/out-of-scope.md` for what was decided against (check it before adding a feature).
 
 - Keep it generic. Nothing here may assume one company, codebase, or language. Project-specific choices belong in a target repo's `.stack-agent/` files or in a preset template.
 - Scripts in `scripts/` are plain Node ESM with zero dependencies. Target repos vendor them into `.stack-agent/bin/`, and CI runs them without `npm install`.

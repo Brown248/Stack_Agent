@@ -32,3 +32,17 @@ for (const file of ["docs/adoption.md", "docs/th/adoption.md"]) {
 		}
 	});
 }
+
+// docs come in English and Thai; a page in one language and not the other is a missed translation
+test("every page in docs/ has a Thai twin with as many headings, linked both ways", () => {
+	const md = (dir) => fs.readdirSync(path.join(repoRoot, dir)).filter((f) => f.endsWith(".md")).sort();
+	assert.deepEqual(md("docs/th"), md("docs"));
+	for (const file of md("docs")) {
+		const en = fs.readFileSync(path.join(repoRoot, "docs", file), "utf8");
+		const th = fs.readFileSync(path.join(repoRoot, "docs/th", file), "utf8");
+		const headings = (text) => text.split("\n").filter((l) => /^#{1,3} /.test(l)).length;
+		assert.equal(headings(th), headings(en), `${file}: the English and Thai pages have different numbers of headings`);
+		assert.ok(en.includes(`(th/${file})`), `docs/${file} links to its Thai page`);
+		assert.ok(th.includes(`(../${file})`), `docs/th/${file} links to its English page`);
+	}
+});

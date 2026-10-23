@@ -1,6 +1,6 @@
 # Customizing Stack Agent for your team
 
-Stack Agent is meant to be forked. This page shows where each piece lives and how to change it without breaking the rest.
+Stack Agent is meant to be forked. This page shows where each piece lives and how to change it without breaking the rest. Ideas it decided not to adopt, and why, are in [out-of-scope.md](out-of-scope.md).
 
 [ภาษาไทย](th/customizing.md)
 
