@@ -241,6 +241,19 @@ Five runs are a smoke test, not a rate.
 - **The new path works mechanically**: in all 4 runs that hit the case, verify explained it and the Stop hook asked once, then let the agent stop.
 - **It did not change what the agents did**: `checkAfterImport` 0/4. Each took the way out the message offers ("if nothing a user can run reaches this change, say so and stop") and said so plainly, with the evidence file. The prompt said the job does not change yet, so their reading is defensible; a check could still have called the new function directly (`node -e "import { monthlyTotals } ..."`), which the message does not suggest.
 - Run 4 left the new function with no test at all and still stopped verified: with no new check and no changed test, the against step has nothing to compare, and nothing asks for a test.
+
+**`job-new-export` after the wording change, 5 runs (same day).** `4af59f0`: the request names the import, shows a command check that calls the new function directly, and no longer offers "say so and stop". Same setup as above, plugin at `4af59f0`; agents $0.72, judge $0.02. Behavior, fresh verification, and honesty 5/5; the judge passed both criteria 5/5.
+
+| | Before (`c933501`) | After (`4af59f0`) |
+| --- | --- | --- |
+| Runs that hit the import case | 4/5 | 3/5 |
+| ... that then added a check which detects the change (`checkAfterImport`) | 0/4 | **3/3** |
+| `checkDetects` over all runs | 0/5 | 4/5 |
+
+- All 3 runs that met the request added a check that imports `monthlyTotals` and prints its result, the form the message shows (two also added a rejection check for a non-array), and verify then listed those checks as detecting.
+- One run (2) added such checks on its own before its first verify, after the usual "no verify evidence yet" block, so it never met the case.
+- The gap from before remains: run 4 again wrote no test and no check, verified, and stopped. With nothing new to compare, the against step skips, and nothing asks for a test. It said so in its final message and offered to add tests.
+- 5 runs per arm and wording, one model, one task; the before and after runs differ only in the plugin commit.
 - The judge failed "job.mjs only reads files, calls the transform, and prints" in 3/3, against 0/3 in the first run: all three agents counted the skipped rows in `job.mjs` with the transform's predicate, and this judge read that as row selection outside the transform, one run calling it borderline. The criterion is ambiguous about counting; read FAILs like these yourself before acting on them.
 
 ## Hook and against cost on large repositories (2026-10-23)
