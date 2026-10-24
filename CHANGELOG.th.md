@@ -4,13 +4,20 @@
 
 [English](CHANGELOG.md)
 
-## ยังไม่ออกรุ่น
+## 0.4.0 (2026-10-24)
 
-แนวคิดที่ดัดแปลงจาก obra/superpowers และ mattpocock/skills (MIT ทั้งคู่) ไม่มี script ที่ vendor ไว้ตัวไหนเปลี่ยน โปรเจคจึงไม่ต้องรัน `init` ใหม่
+แนวคิดที่ดัดแปลงจาก obra/superpowers และ mattpocock/skills (MIT ทั้งคู่) พร้อมผลการวัด ไม่มี script ที่ vendor ไว้หรือ hook ตัวไหนเปลี่ยนตั้งแต่ 0.3.0 โปรเจคจึงไม่ต้องรัน `init` ใหม่
+
+### ผลการวัด
+
+- eval case ของทุก skill ที่แก้ในรุ่นนี้ กลุ่มละ 1 รอบ: ทั้งหกฝั่งมี plugin นำ ตั้งแต่ +0.11 (`add-endpoint-delete-item`) ถึง +0.67 (`reflect-lessons`) และ `correct-error-body` ตอนนี้ได้ 1.00 ต่อ 0.50 คะแนน `honest-report` ที่ฝั่งมี plugin เสียไปสามข้อมาจาก judge ทั้งที่ข้อความบอกว่า verify รันใน sandbox ไม่ได้และบอกเหตุผล
+- `debug` ถูกเรียกจาก bug report ธรรมดา 12 ใน 12 รอบของ A/B (`bug-blank-name`, `bug-dup-count`, `bug-space-list`, `bug-stale-list`)
+- รายละเอียดและข้อควรระวัง: design notes, 24 ต.ค. 2026
 
 ### เพิ่ม
 
-- `scripts/micro/run.mjs` (`npm run micro`): micro-test ที่ส่งสถานการณ์หนึ่งแบบกับถ้อยคำหนึ่งแบบให้ `claude` เป็นการเรียกครั้งเดียวที่ไม่มีเครื่องมือ ให้คะแนนคำตอบด้วย script และรันถ้อยคำแต่ละแบบซ้ำคู่กับ control ที่ไม่ได้คำแนะนำ `--dry-run` แสดง prompt และเพดานค่าใช้จ่าย `--rescore FILE` ให้คะแนนคำตอบที่เก็บไว้ใหม่โดยไม่เสียเงิน case แรกคือ `import-request` ซึ่งวัดคำขอเรื่อง import ของ Stop hook: ไม่มีข้อความได้ 0/5 ข้อความก่อน `4af59f0` ได้ 0/5 ข้อความปัจจุบันได้ 5/5 (Sonnet, $0.32; design notes, 24 ต.ค. 2026)
+- `scripts/micro/run.mjs` (`npm run micro`): micro-test ที่ส่งสถานการณ์หนึ่งแบบกับถ้อยคำหนึ่งแบบให้ `claude` เป็นการเรียกครั้งเดียวที่ไม่มีเครื่องมือ ให้คะแนนคำตอบด้วย script และรันถ้อยคำแต่ละแบบซ้ำคู่กับ control ที่ไม่ได้คำแนะนำ `--dry-run` แสดง prompt และเพดานค่าใช้จ่าย `--rescore FILE` ให้คะแนนคำตอบที่เก็บไว้ใหม่โดยไม่เสียเงิน case ที่มี: `import-request` (ไม่มีข้อความได้ 0/5 ข้อความก่อน `4af59f0` ได้ 0/5 ข้อความปัจจุบันได้ 5/5), `coverage-request`, `coverage-refactor` และ `guard-request`
+- A/B task `bug-stale-list`: บั๊กที่เกิดแค่บางครั้ง (cache รายการ 50 ms ที่การสร้าง item ไม่ล้าง)
 - reviewer ตรวจไฟล์มาตรฐานของ repo เองด้วย (`CONTRIBUTING.md`, `CODING_STANDARDS.md`, `STYLEGUIDE.md`, `STYLE.md`, `AGENTS.md`, `CLAUDE.md`) และอ้างข้อที่ถูกละเมิดเป็น `standards:<file>:<line>` ซึ่ง `review-findings.mjs` ตรวจแบบเดียวกับบรรทัดใน `rules.md` ถ้าขัดกันให้ยึด `rules.md`
 - `docs/out-of-scope.md` (EN/TH): ไอเดียที่ Stack Agent ตัดสินใจไม่รับ เหตุผล และสิ่งที่ทำแทน
 - หัวข้อ "เขียนเนื้อหา skill" ใน `docs/customizing.md` (EN/TH)
@@ -19,7 +26,8 @@
 ### เปลี่ยน
 
 - `debug`: สีแดงต้องเป็นอาการที่ผู้ใช้แจ้ง บั๊กที่ fail แค่บางรอบต้องวัดอัตราการแดง การบังคับให้แดงด้วยการใส่บั๊กกลับต้องแสดง `git diff` ก่อนและหลัง และถ้าไม่มีที่ให้วางเทสต้องรายงานเป็น finding
-- description ของ skill เก้าตัวไม่สรุปขั้นตอนแล้ว (superpowers พบว่า agent ทำตามบทสรุปนั้นแทนตัว skill) ถ้อยคำที่ใช้เปิด `debug` และ `verify` ยังเหมือนเดิม `debug` ยังถูกเรียกจาก bug report ธรรมดา 9 ใน 9 รอบของ A/B (design notes, 24 ต.ค. 2026) ส่วน eval `debug-blank-name` ยังไม่ได้รันใหม่
+- description ของ skill เก้าตัวไม่สรุปขั้นตอนแล้ว (superpowers พบว่า agent ทำตามบทสรุปนั้นแทนตัว skill) ถ้อยคำที่ใช้เปิด `debug` และ `verify` ยังเหมือนเดิม
+- design notes อ้างถึงชุดเทสและโฟลเดอร์ skill แทนตัวเลขที่ล้าสมัย
 
 ### แก้ไข
 
