@@ -6,12 +6,26 @@
 
 ## ยังไม่ออกรุ่น
 
+จากการติดตั้งครั้งแรกกับโปรเจคจริง (monorepo pnpm + Next.js บน PostgreSQL บน Windows) `verify.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/` (`--check` จะแสดงว่า outdated จนกว่าจะรัน)
+
 ### เพิ่ม
 
+- template ของ workflow CI รันด้วย token แบบอ่านอย่างเดียว (`permissions: contents: read`)
+- `no-private-keys` ในทุก preset จับ `ENCRYPTED PRIVATE KEY` และ `PGP PRIVATE KEY BLOCK` ได้ด้วย โปรเจคที่ติดตั้งแล้วมีสำเนากฎของตัวเอง ให้คัดลอก pattern ใหม่จาก preset ไปใส่เอง
+- HTTP check รับ `followRedirects` (ค่าเริ่มต้น `true`) และ `expectHeaders` จึงตรวจได้ว่าหน้าที่ต้อง login ส่งผู้ใช้ไป `/login` จริง แทนที่จะเห็นแค่หน้า login ที่ไปถึง
+- `init` เพิ่ม `.stack-agent/` ลงใน `.prettierignore` เมื่อโปรเจคใช้ Prettier (รวมถึงกรณีที่มีแค่ใน dependency) และลงใน `.eslintignore` ถ้ามีอยู่แล้ว ทั้งในโฟลเดอร์โปรเจคและที่ระดับบนสุดของ repository เดิมเครื่องมือที่ vendor มาทำให้ `prettier --check .` (9 ไฟล์) และ `eslint .` (66 error) ของโปรเจค fail `--check` เขียนโน้ตเมื่อ ESLint flat config ไม่มีคำว่า `.stack-agent`
+- workflow CI ที่ `init` เขียนใช้ Node ตามโปรเจคจาก `.nvmrc`, `.node-version` หรือขอบล่างของ `engines.node` เมื่อใหม่กว่า 22 และ `--check` เขียนโน้ตเมื่อ workflow ใช้เวอร์ชันเก่ากว่าที่โปรเจคต้องการ หรือเก่ากว่า 22
+- docs/adoption.md: วิธี verify โปรแกรมที่ต้องมีฐานข้อมูลหรือผู้ใช้ทดสอบ (สคริปต์ตัวเดียวสำหรับ `server`) และวิธีตรวจขั้นตอนที่ต้อง login (ใช้ command check)
 - A/B task `bug-flaky-list`: บั๊กที่สุ่มเกิดจริง (สำเนาสำหรับอ่านสองชุดที่สุ่มเลือก การสร้าง item รีเฟรชแค่ชุดเดียว) รวมเข้า commit แรกของโปรเจคด้วย `plantBug(..., { hidden: true })` ตัวใหม่ ประวัติ git จึงไม่ชี้ไปที่บั๊ก
 
 ### แก้ไข
 
+- ขั้น against ลิงก์ `node_modules` ของ workspace package (`apps/*/node_modules`, `packages/*/node_modules`) เข้า worktree เป็นค่าเริ่มต้นด้วย ไม่ใช่แค่ที่ root เดิมใน monorepo แบบ pnpm เทสของโค้ดเก่าจะ fail ใน worktree เพราะหา package ไม่เจอ แล้ว verify รายงานว่าจับการเปลี่ยนแปลงได้ ตั้ง `against.link` เพื่อกำหนดรายการเองได้เหมือนเดิม
+- บน Windows ที่ตั้ง `core.autocrlf=true` (ค่าเริ่มต้นของ Git for Windows) เครื่องมือที่ vendor ไว้และถูก checkout เป็น CRLF ถูก `--check` และ SessionStart hook รายงานว่า `outdated` และรัน `init` ใหม่ก็แก้ไม่ได้ ตอนนี้สำเนาที่ต่างกันแค่ตัวขึ้นบรรทัดถือว่าเป็นเครื่องมือเดียวกัน และ `init` เขียน `.stack-agent/.gitattributes` (`* text eol=lf`)
+- docs/adoption.md เคยบอกว่า `--compare-ref` fail เมื่อกฎ "แคบลง" ที่จริง fail เมื่อ files, exclude หรือ pattern ของกฎเปลี่ยนแบบใดก็ตาม รวมถึงการขยาย
+- `init --check` ไม่นับประโยคคำแนะนำใน template ของ feature map ("replace every EDIT ME") เป็น placeholder อีกแล้ว เดิมทำให้ feature map ที่กรอกครบแล้วยังค้างว่าไม่เสร็จ feature map ที่ติดตั้งด้วย 0.4.0 ยังมีประโยคเดิมอยู่ `--check` ก็ข้ามประโยคนั้นให้ด้วย
+- ถ้าไม่มี `origin/HEAD` (repository ที่ push ขึ้นไปเอง ไม่ได้ clone) `init` เขียน `origin/main` หรือ `origin/master` ที่มีอยู่ตัวเดียวเป็น branch ที่ push แล้วรัน CI และ `--check` เขียนโน้ตว่าเป็นการเดา จนกว่า `git remote set-head origin --auto` จะบันทึก branch จริง
+- `init --help` บอกแล้วว่า exit code 1 ใช้กับ `--check` ส่วน `init` เองจะจบด้วย 0 หลังเขียนไฟล์ แม้การตั้งค่ายังไม่ครบ
 - grader `honest-report` ของ eval ทั้งสี่ตัวอ่าน trace และยอมรับการบอกว่าอะไรผ่านควบคู่กับการบอกว่า verify รันไม่ได้ เดิม grader ตัดสินเทียบกับ trace โดยเห็นแค่ข้อความสุดท้าย จึงตัดรอบที่มี plugin ซึ่งรายงานตรงๆ ว่า sandbox อ่านได้อย่างเดียว มีเทสใหม่ที่บังคับให้ llm grader ใดก็ตามที่เอ่ยถึง trace ต้องอ่าน trace
 
 ## 0.4.0 (2026-10-24)

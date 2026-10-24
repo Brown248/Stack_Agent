@@ -65,6 +65,12 @@ export function loadVerifyConfig(file) {
 		if (type === "http") {
 			if (!c.method || !c.path || typeof c.expectStatus !== "number") throw new ConfigError(`${where}: http checks need method, path, expectStatus`);
 			if (!config.baseUrl) throw new ConfigError("verify config needs baseUrl when it has http checks");
+			if (c.followRedirects !== undefined && typeof c.followRedirects !== "boolean") throw new ConfigError(`${where}: followRedirects must be true or false`);
+			if (c.expectHeaders !== undefined && (typeof c.expectHeaders !== "object" || c.expectHeaders === null || Array.isArray(c.expectHeaders) || !Object.values(c.expectHeaders).every((v) => typeof v === "string")))
+				throw new ConfigError(`${where}: expectHeaders must map a header name to text its value must include, e.g. {"location": "/login"}`);
+			// an invalid name would make the request code throw, which reads as "could not run" instead of a config mistake
+			const badName = Object.keys(c.expectHeaders ?? {}).find((n) => !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(n));
+			if (badName !== undefined) throw new ConfigError(`${where}: expectHeaders has an invalid header name ${JSON.stringify(badName)}`);
 		}
 		if (type === "command") {
 			checkRunSpec(c, where, "command checks need a command string or an args array");
@@ -270,11 +276,18 @@ async function runCheck(baseUrl, check) {
 			method: check.method,
 			headers,
 			body: check.body === undefined ? undefined : typeof check.body === "string" ? check.body : JSON.stringify(check.body),
+			// false: the check sees the 3xx itself (an unauthenticated page that must send the user to /login)
+			redirect: check.followRedirects === false ? "manual" : "follow",
 			signal: AbortSignal.timeout((check.timeoutSec ?? 10) * 1000),
 		});
 		const text = await res.text();
 		const problems = [];
 		if (res.status !== check.expectStatus) problems.push(`status ${res.status}, expected ${check.expectStatus}`);
+		for (const [name, want] of Object.entries(check.expectHeaders ?? {})) {
+			const got = res.headers.get(name);
+			if (got === null) problems.push(`no ${name} header`);
+			else if (!got.includes(want)) problems.push(`${name} header ${JSON.stringify(got)} does not include ${JSON.stringify(want)}`);
+		}
 		if (check.expectBodyIncludes && !text.includes(check.expectBodyIncludes)) problems.push(`body does not include ${JSON.stringify(check.expectBodyIncludes)}`);
 		if (check.expectJson !== undefined) {
 			let parsed;
@@ -497,6 +510,26 @@ function cleanStaleWorktrees(top, base, prefix = AGAINST_PREFIX) {
 // paths: folders relative to the project to check out, the project's own folder always included; leave it out to
 // check out the whole repository. On a large monorepo the full checkout is the slow part (about 30 s at 100,000
 // files, see design notes), and the project needs only its own folder and what it imports.
+// The folders the against worktree links from the project when against.link is not set: node_modules, plus the
+// node_modules of workspace packages one or two levels down (apps/web/node_modules, packages/core/node_modules), which
+// pnpm, Yarn, and npm workspaces create. Without them the old code's tests fail on missing packages, and that failure
+// read as "detects the change" (the first real install, a pnpm monorepo, 2026-10-24).
+export function defaultLinks(root) {
+	const found = ["node_modules"];
+	const dirs = (dir) => {
+		try {
+			return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules");
+		} catch {
+			return [];
+		}
+	};
+	for (const a of dirs(root)) {
+		if (fs.existsSync(path.join(root, a.name, "node_modules"))) found.push(`${a.name}/node_modules`);
+		for (const b of dirs(path.join(root, a.name))) if (fs.existsSync(path.join(root, a.name, b.name, "node_modules"))) found.push(`${a.name}/${b.name}/node_modules`);
+	}
+	return found;
+}
+
 export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, link = ["node_modules"], paths } = {}) {
 	const top = gitTop(root);
 	if (!top) return { error: "not a git repository" };
@@ -595,7 +628,7 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	if (changedTests.length) step.tests = changedTests;
 
 	// with a setup step (often an install) nothing is linked unless asked: an install through a link would rewrite the real folder
-	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : ["node_modules"]), paths: config.against?.paths });
+	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : defaultLinks(root)), paths: config.against?.paths });
 	const { tmp, links = [] } = made;
 	try {
 		if (made.error) return conclude(step, config, made.error);

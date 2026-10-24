@@ -18,6 +18,12 @@ preset ที่มี: `generic` (ค่าเริ่มต้น), `backend-
 
 เครื่องมือใน `.stack-agent/bin/` ต้อง commit ไปกับโปรเจค (CI รันจากที่นั่น) จึงจะเห็นไฟล์ `.mjs` ไม่กี่ไฟล์ใน diff แม้โปรเจคไม่ได้ใช้ JavaScript `init` จะอัปเดตไฟล์เหล่านี้เมื่อคุณอัปเดต Stack Agent
 
+อย่าให้ formatter และ linter ของโปรเจคไปยุ่งกับ `.stack-agent/` เพราะเครื่องมือถูก copy มาแบบตรงทุก byte (`--check` จะรายงานไฟล์ที่ถูกจัดรูปแบบใหม่ว่า `outdated`) และขั้น `prettier --check .` หรือ `eslint .` ใน CI ของคุณจะ fail เพราะไฟล์เหล่านี้ ถ้าโปรเจคใช้ Prettier (มี `.prettierignore`, ไฟล์ config ของ Prettier, key `prettier` ใน `package.json` หรือมี `prettier` เป็น dependency) `init` จะเพิ่ม `.stack-agent/` ลงใน `.prettierignore` และเพิ่มบรรทัดเดียวกันใน `.eslintignore` ถ้ามีไฟล์นี้อยู่แล้ว ถ้าโปรเจคอยู่ในโฟลเดอร์ย่อยของ repository จะทำแบบเดียวกันที่ระดับบนสุดของ repository ด้วย เพราะ `prettier --check .` ที่รันจาก root อ่านแค่ไฟล์ ignore ที่ root และบรรทัดนี้ตรงกับโฟลเดอร์ที่ทุกระดับความลึก ไฟล์ที่ ignore โฟลเดอร์นี้อยู่แล้ว หรือตั้งใจไม่ ignore ด้วย `!.stack-agent/` จะไม่ถูกแก้ ส่วน ESLint แบบ flat config (`eslint.config.*`) แก้ให้อย่างปลอดภัยไม่ได้ `--check` จึงเขียนโน้ตเมื่อไฟล์นั้น (ในโฟลเดอร์โปรเจคหรือที่ระดับบนสุดของ repository) ไม่มีคำว่า `.stack-agent` เลย ให้เพิ่ม `"**/.stack-agent/**"` ใน `ignores` เอง เครื่องมืออื่น (Biome, Ruff, pre-commit hook ที่จัดรูปแบบโค้ด) ให้เพิ่มโฟลเดอร์นี้ในรายการ ignore เอง
+
+workflow CI ที่ `init` เขียนใช้ Node 22 หรือเวอร์ชันที่โปรเจคต้องการถ้าใหม่กว่า โดยดูจาก `.nvmrc` หรือ `.node-version` ก่อน (ข้ามบรรทัด comment) ไม่มีก็ใช้เวอร์ชันต่ำสุดที่ `engines.node` ใน `package.json` ยอมรับ (ขอบล่างที่น้อยที่สุดในแต่ละทางเลือกที่คั่นด้วย `||` ถ้าช่วงไม่มีขอบล่าง เช่น `<25` จะถือว่าไม่ได้ระบุ) อ่านจากโฟลเดอร์โปรเจคก่อน แล้วจึงอ่านที่ระดับบนสุดของ repository สคริปต์ของ Stack Agent เองต้องใช้ Node 22 workflow จึงไม่ต่ำกว่านั้น `--check` เขียนโน้ตเมื่อ `node-version` ใน workflow เก่ากว่าที่โปรเจคต้องการ หรือเก่ากว่า 22
+
+`init` เขียน `.stack-agent/.gitattributes` (`* text eol=lf`) ด้วย เครื่องมือจึงเป็น LF ทุกระบบปฏิบัติการ Git for Windows แปลงไฟล์เป็น CRLF ตอน checkout เป็นค่าเริ่มต้น (`core.autocrlf=true`) และ `--check` กับ SessionStart hook จะเทียบเครื่องมือกับสำเนาของ plugin สำเนาที่ต่างกันแค่ตัวขึ้นบรรทัดถือว่าเป็นเครื่องมือเดียวกัน โปรเจคที่รัน Prettier บน Windows อาจต้องใส่ `* text=auto eol=lf` ใน `.gitattributes` ของตัวเองด้วยเหตุผลเดียวกัน workflow ที่ `init` เขียนรันด้วย token แบบอ่านอย่างเดียว (`permissions: contents: read`) เพราะ job ไม่ได้เขียนอะไรกลับ และขั้นติดตั้งรันสคริปต์ของ package ภายนอก
+
 ## 1. Verification
 
 แก้ `.stack-agent/verify.json` แทนที่ `EDIT ME` ทุกจุด
@@ -30,7 +36,7 @@ check มีสองแบบ:
 
 | แบบ | ฟิลด์ | ใช้กับ |
 | --- | --- | --- |
-| HTTP | `method`, `path`, `expectStatus` และใส่เพิ่มได้คือ `body`, `headers`, `expectJson`, `expectBodyIncludes` (ต้องมี `baseUrl`) | API, หน้าเว็บ |
+| HTTP | `method`, `path`, `expectStatus` และใส่เพิ่มได้คือ `body`, `headers`, `expectJson`, `expectBodyIncludes`, `expectHeaders`, `followRedirects` (ค่าเริ่มต้น `true`) (ต้องมี `baseUrl`) | API, หน้าเว็บ |
 | Command | `command` หรือ `args` และใส่เพิ่มได้คือ `expectExit` (ค่าเริ่มต้น 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches`, `expectOutputFlags` (ค่าเริ่มต้น `m`), `needsServer`, `cwd`, `env`, `timeoutSec` (ค่าเริ่มต้น 120) | CLI, library, script, ตัวรัน e2e และอื่นๆ |
 
 รายละเอียดของ command check:
@@ -47,7 +53,23 @@ check มีสองแบบ:
 node .stack-agent/bin/verify.mjs
 ```
 
+รายละเอียดของ HTTP check:
+
+- โดยปกติจะตาม redirect ไปจนสุด check จึงเห็นหน้าที่ผู้ใช้ไปถึงจริง ถ้าต้องการเห็นตัว redirect เอง ให้ตั้ง `"followRedirects": false` เช่นหน้าที่ต้องส่งผู้ใช้ที่ยังไม่ login ไป `/login`: `{"method": "GET", "path": "/dashboard", "followRedirects": false, "expectStatus": 307, "expectHeaders": {"location": "/login"}}`
+- `expectHeaders` จับคู่ชื่อ header (ตัวพิมพ์ใหญ่เล็กไม่สำคัญ) กับข้อความที่ค่าของ header ต้องมี ถ้าไม่มี header นั้น check จะ fail
+- HTTP check แต่ละตัวคือ request เดียว ไม่มีการส่ง cookie ต่อกัน ขั้นตอนที่ต้อง login ก่อน (login แล้วทำงานในฐานะผู้ใช้นั้น) ให้เขียนสคริปต์สั้นๆ ที่ส่ง request เองแล้วพิมพ์ข้อความยืนยัน แล้วรันเป็น command check ที่มี `"needsServer": true` และ `"expectOutputIncludes"`
+
 ต้องได้ `verify: ok` ถ้าโปรแกรมต้องใช้ secret หรือฐานข้อมูลภายนอก ให้หาวิธีรันในเครื่องก่อน (docker compose, ฐานข้อมูลทดสอบ) ห้ามปลอม check เพื่อให้ผ่าน
+
+### โปรแกรมที่ต้องมีฐานข้อมูลหรือผู้ใช้ทดสอบ
+
+`server` เปิดได้ process เดียว ถ้าโปรแกรมต้องเตรียมอย่างอื่นก่อนจะตอบได้ (ฐานข้อมูล, migration, ผู้ใช้ทดสอบ) ให้ชี้ `server` ไปที่สคริปต์สั้นๆ ใน repository ที่ทำขั้นตอนเหล่านั้นแล้วเปิดโปรแกรมค้างไว้ เช่น `"server": {"args": ["node", "scripts/verify-env.mjs", "serve"], ...}` ถ้า integration test ต้องใช้ฐานข้อมูลด้วย ก็ให้ขั้น test ใช้วิธีเดียวกัน สิ่งที่ทำให้ใช้ได้จริงในการติดตั้งครั้งแรกกับโปรเจคจริง (แอป Next.js บน PostgreSQL บน Windows):
+
+- ฐานข้อมูลใหม่ทุกครั้งในโฟลเดอร์ temp ของเครื่อง (แบบ embedded หรือ container) ไม่ใช้ฐานข้อมูลของนักพัฒนา
+- secret ที่โปรแกรมจะอ่านจาก `.env` ให้สคริปต์ตั้งเป็นค่าว่าง verify จะได้ไม่ส่งอีเมลจริงหรือเรียก API ที่เสียเงิน ตัวโหลด env หลายตัว (`node --env-file`, `process.loadEnvFile`, dotenv) ไม่ทับตัวแปรที่ตั้งไว้แล้ว
+- เลือกพอร์ตว่างตอนเริ่มให้ฐานข้อมูล ไม่ใช้พอร์ตตายตัว เพราะบน Windows process ลูกของฐานข้อมูลตัวเก่าอาจถือพอร์ตไว้ต่อหลัง process แม่ปิดแล้ว
+- ใช้โฟลเดอร์ build หรือ cache แยก ถ้า framework ไม่ยอมเปิด dev server ตัวที่สองในโฟลเดอร์เดียวกัน (Next.js 16 เป็นแบบนี้) verify จะได้รันได้แม้นักพัฒนาเปิด dev server ค้างไว้
+- บน Windows verify ปิด server ด้วย `taskkill /T /F` ขั้นเก็บกวาดของสคริปต์จึงไม่ได้รัน ให้สคริปต์เขียน process id ลงในโฟลเดอร์ temp ของตัวเอง แล้วตอนเริ่มให้ลบโฟลเดอร์ที่ process เจ้าของไม่อยู่แล้ว บน Linux และ macOS verify ส่ง SIGTERM ก่อน ขั้นเก็บกวาดใน signal handler จึงได้รัน
 
 พฤติกรรมที่ควรรู้:
 
@@ -68,7 +90,7 @@ check หรือเทสที่ผ่านทั้งก่อนแล�
 - commit อ้างอิงคือ HEAD ตอนที่ session ของ Claude เริ่ม (SessionStart hook บันทึกไว้) การ commit ระหว่างทำงานจึงไม่ทำให้การแก้หายไปจากการเทียบ ถ้าไม่มีบันทึกของ session จะใช้ `HEAD` และกำหนดเองได้ด้วย `--against <ref>` ถ้ารัน verify ใน CI ให้ใส่ `--against origin/<base branch>` เพราะใน CI ค่า `HEAD` มีการแก้อยู่แล้ว ขั้นนี้จะข้ามไป
 - ขั้นนี้จะข้ามและบอกเหตุผลใน output เมื่อ: โปรเจกต์ไม่อยู่ใน git, ไม่มี `verify.json` ที่ commit อ้างอิง, ไม่มี check ใหม่และไม่มีไฟล์เทสเปลี่ยน (การเปลี่ยนชื่อ check หรือแก้แค่ `timeoutSec` ไม่นับ) หรือแก้แค่ check กับไฟล์เทส (เพิ่มการทดสอบให้พฤติกรรมเดิม) เทสที่ import โมดูลที่โค้ดเก่าไม่มีนับเป็น inconclusive ไม่ใช่การจับได้ check ที่ถูกลบตั้งแต่ commit อ้างอิงจะแสดงรายชื่อ และ check ที่ถูกแก้โดยใช้ชื่อเดิมก็แสดงด้วย (ตัวที่แก้จะรันเหมือน check ใหม่)
 - ผลที่พิสูจน์อะไรไม่ได้นับเป็น "inconclusive" และข้ามขั้นนี้แทนที่จะให้ผ่าน: server ของโค้ดเก่าเปิดไม่ขึ้น, คำสั่งรันไม่ได้ จบด้วย exit 127 หมดเวลา หรือแจ้งว่าหาโมดูลหรือโปรแกรมไม่เจอ (มักเป็นไฟล์ build ที่ gitignore เช่น `dist/` ซึ่ง checkout เก่าไม่มี), request ต่อไม่ได้ ถ้าต้องการให้กรณีเหล่านี้ fail ให้ตั้ง `"against": { "required": true }`
-- worktree จะได้ `verify.json` ปัจจุบันและไฟล์เทสปัจจุบัน (`test/**`, `tests/**`, `__tests__/**`, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `*_test.go` เปลี่ยนได้ด้วย `against.keep`) และลิงก์ `node_modules` จากโปรเจกต์เข้าไป (กำหนดรายการด้วย `against.link`) ถ้าโค้ดเก่าต้อง build หรือติดตั้งก่อน ให้ใส่ `command` หรือ `args` ใน `against.setup` เมื่อมี setup จะไม่ลิงก์อะไรเลยถ้าไม่ได้ตั้ง `against.link` เพราะการติดตั้งผ่านลิงก์จะเขียนทับโฟลเดอร์จริง ห้ามใส่คำสั่งติดตั้งใน `setup` พร้อมกับลิงก์ `node_modules` ส่วน `against.tmpDir` ใช้ย้าย worktree ออกจากไดรฟ์ระบบที่เล็ก git hook ไม่ทำงานตอน checkout ลิงก์ถูกลบก่อนลบ worktree และของค้างจากการรันที่ถูกฆ่าจะถูกเก็บกวาดหลังสองชั่วโมง
+- worktree จะได้ `verify.json` ปัจจุบันและไฟล์เทสปัจจุบัน (`test/**`, `tests/**`, `__tests__/**`, `*.test.*`, `*.spec.*`, `test_*.py`, `*_test.py`, `*_test.go` เปลี่ยนได้ด้วย `against.keep`) และลิงก์ `node_modules` จากโปรเจกต์เข้าไป รวมถึง `node_modules` ของ workspace package ที่อยู่ลึกลงไปหนึ่งหรือสองชั้น (`apps/web/node_modules`, `packages/core/node_modules` แบบที่ pnpm, Yarn และ npm workspaces สร้าง) ถ้าตั้ง `against.link` จะใช้รายการนั้นแทน เดิมถ้าไม่ลิงก์โฟลเดอร์เหล่านี้ เทสของ monorepo จะ fail ใน worktree เพราะหา package ไม่เจอ และถูกอ่านว่าจับการเปลี่ยนแปลงได้ ถ้าโค้ดเก่าต้อง build หรือติดตั้งก่อน ให้ใส่ `command` หรือ `args` ใน `against.setup` เมื่อมี setup จะไม่ลิงก์อะไรเลยถ้าไม่ได้ตั้ง `against.link` เพราะการติดตั้งผ่านลิงก์จะเขียนทับโฟลเดอร์จริง ห้ามใส่คำสั่งติดตั้งใน `setup` พร้อมกับลิงก์ `node_modules` ส่วน `against.tmpDir` ใช้ย้าย worktree ออกจากไดรฟ์ระบบที่เล็ก git hook ไม่ทำงานตอน checkout ลิงก์ถูกลบก่อนลบ worktree และของค้างจากการรันที่ถูกฆ่าจะถูกเก็บกวาดหลังสองชั่วโมง
 - ใน repository ขนาดใหญ่ การ checkout คือส่วนที่ช้า (ราว 30 วินาทีในการ checkout และ 11 วินาทีในการลบที่ 100,000 ไฟล์ ดู design notes) `against.paths` จะ checkout เฉพาะ folder ของโปรเจกต์เอง folder ที่ระบุไว้ (นับจากโปรเจกต์ เช่น `["../packages/shared"]` สำหรับโค้ดที่ import) และไฟล์ที่ root ของ repository โดยใช้ sparse checkout ของ git ถ้าไม่ใส่จะ checkout ทั้งหมดเหมือนเดิม ถ้า folder ที่โค้ดเก่าต้องใช้ไม่อยู่ในรายการ เทสหรือ check จะเริ่มไม่ได้ ซึ่งนับเป็น inconclusive ไม่ใช่การจับการแก้ได้
 - ปิดด้วย `--no-against` หรือ `"against": false` หลักฐานจะบันทึกไว้ และ Stop hook จะรับก็ต่อเมื่อ session เริ่มด้วย `"against": false` อยู่แล้ว การปิดขั้นนี้หลังเจอ `FAIL against` จึงผ่านไม่ได้ การรันบางส่วนจะไม่รันขั้นนี้ ขั้นนี้เปิด server รอบที่สอง จึงใช้เวลาเพิ่มเมื่อมี check ใหม่
 
@@ -162,9 +184,9 @@ node <path-to-Stack_Agent>/scripts/init.mjs . --shared-rules <path>/stack-agent-
 - พอเลยวันหมดอายุ guard จะ fail อีกครั้ง
 - guard พิสูจน์ไม่ได้ว่า `by=` อนุมัติจริง ส่วนนี้ต้องพึ่งการรีวิว (ดูหัวข้อถัดไป)
 
-CI: `.github/workflows/stack-agent.yml` รัน guard, รัน `guard.mjs --compare-ref origin/<base>` ใน pull request (fail ถ้า baseline โตขึ้น หรือกฎถูกลบหรือแคบลง) และรันแผนที่ API เมื่อมี `api-map.json` นอกจากนี้มี job `verify` แยกต่างหากที่รัน `node .stack-agent/bin/verify.mjs` ทุก push และ pull request โดยใน pull request จะใส่ `--against origin/<base>` และอัปโหลด `.stack-agent/evidence/` เป็น artifact job นี้ทำให้ `latest.json` ที่ปลอมขึ้นมาไม่มีค่า เปิดไว้เป็นค่าเริ่มต้น และจะแดงจนกว่าจะกรอก `verify.json` ครบและแทนที่ขั้น `EDIT ME: install your dependencies` (`npm ci`, `pip install ...` หรือบล็อก `services:` สำหรับฐานข้อมูล) ซึ่ง `init.mjs --check` จะรายงานขั้นนี้ job จะไม่ถูกข้ามแม้ยังมี placeholder เหลืออยู่ เพราะถ้าข้ามโดยดูจากข้อความ marker pull request ก็ปิดด่านนี้ได้เอง ควรตั้ง `guard` และ `verify` เป็น required status check และใส่ `.github/workflows/` กับ `.stack-agent/` ไว้ใน CODEOWNERS เพราะ pull request ยังแก้ workflow หรือทำให้ `verify.json` หย่อนลงได้ ถ้าใช้ CI ระบบอื่นให้รันคำสั่งเดียวกัน
+CI: `.github/workflows/stack-agent.yml` รัน guard, รัน `guard.mjs --compare-ref origin/<base>` ใน pull request (fail ถ้า baseline โตขึ้น หรือกฎถูกลบ หรือ files, exclude หรือ pattern ของกฎเปลี่ยน guard แยกไม่ออกว่า pattern กว้างขึ้นหรือแคบลง การขยายกฎจึงต้องให้คนตรวจและ merge pull request นั้นเองด้วย) และรันแผนที่ API เมื่อมี `api-map.json` นอกจากนี้มี job `verify` แยกต่างหากที่รัน `node .stack-agent/bin/verify.mjs` ทุก push และ pull request โดยใน pull request จะใส่ `--against origin/<base>` และอัปโหลด `.stack-agent/evidence/` เป็น artifact job นี้ทำให้ `latest.json` ที่ปลอมขึ้นมาไม่มีค่า เปิดไว้เป็นค่าเริ่มต้น และจะแดงจนกว่าจะกรอก `verify.json` ครบและแทนที่ขั้น `EDIT ME: install your dependencies` (`npm ci`, `pip install ...` หรือบล็อก `services:` สำหรับฐานข้อมูล) ซึ่ง `init.mjs --check` จะรายงานขั้นนี้ job จะไม่ถูกข้ามแม้ยังมี placeholder เหลืออยู่ เพราะถ้าข้ามโดยดูจากข้อความ marker pull request ก็ปิดด่านนี้ได้เอง ควรตั้ง `guard` และ `verify` เป็น required status check และใส่ `.github/workflows/` กับ `.stack-agent/` ไว้ใน CODEOWNERS เพราะ pull request ยังแก้ workflow หรือทำให้ `verify.json` หย่อนลงได้ ถ้าใช้ CI ระบบอื่นให้รันคำสั่งเดียวกัน
 
-workflow รันเมื่อมี pull request และเมื่อ push เข้า default branch ของ repository `init` อ่านชื่อ branch นั้นจาก `origin/HEAD` (ซึ่งได้มาตอน clone) แล้วเขียนแทน `main` ใน template ถ้าไม่มี `origin/HEAD` (repository ที่ยังไม่มี remote) จะคง `main` ไว้ และ `init.mjs --check` จะเขียนโน้ตว่ายังไม่รู้ชื่อ branch นอกจากนี้ยังเขียนโน้ตเมื่อ `branches` ของ workflow ไม่มี default branch อยู่ด้วย
+workflow รันเมื่อมี pull request และเมื่อ push เข้า default branch ของ repository `init` อ่านชื่อ branch นั้นจาก `origin/HEAD` (ซึ่งได้มาตอน clone) แล้วเขียนแทน `main` ใน template repository ที่ push ขึ้นไปเองแทนการ clone จะไม่มี `origin/HEAD` กรณีนี้ถ้ามี `origin/main` หรือ `origin/master` อยู่อย่างใดอย่างหนึ่งเท่านั้น `init` จะเขียน branch นั้นลงไป และ `--check` จะเขียนโน้ตว่าเป็นการเดาไปเรื่อยๆ (อาจมี `origin/main` เก่าค้างอยู่ทั้งที่ default branch ชื่อ `develop`) จนกว่า `git remote set-head origin --auto` จะบันทึก branch จริง ถ้าไม่มีทั้งสองอย่าง (repository ที่ยังไม่มี remote) จะคง `main` ไว้ และ `init.mjs --check` จะเขียนโน้ตว่ายังไม่รู้ชื่อ branch (`git remote set-head origin --auto` บันทึกให้ได้เมื่อมี remote แล้ว) นอกจากนี้ยังเขียนโน้ตเมื่อ `branches` ของ workflow ไม่มี default branch อยู่ด้วย
 
 **Monorepo** GitHub อ่าน workflow จาก `.github/workflows/` ที่ root ของ repository เท่านั้น ถ้าโปรเจกต์อยู่ใน subfolder (`init.mjs services/api`) `init` จะเขียน `.github/workflows/stack-agent-services-api.yml` ไว้ที่ root แทน workflow นี้รันคำสั่งใน `services/api` (`defaults.run.working-directory`) รันเฉพาะเมื่อไฟล์ใน folder นั้นหรือตัว workflow เองเปลี่ยน (`paths`) และอัปโหลด evidence ของ folder นั้น แต่ละโปรเจกต์ใน repository จะได้ workflow ของตัวเอง `init.mjs --check` จะแจ้งถ้ามี `stack-agent.yml` ค้างอยู่ใน subfolder ซึ่ง GitHub ไม่เคยรัน ส่วน `--compare-ref` และขั้น against จะเทียบไฟล์ของโปรเจกต์นั้นเองที่ commit ฐาน
 
@@ -173,7 +195,7 @@ workflow รันเมื่อมี pull request และเมื่อ pu
 ทางเลี่ยงกฎที่ง่ายที่สุดคือแก้ตัว guard เอง ระบบกันไว้สามชั้น:
 
 1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/`, `stack-agent.yml` หรือ `stack-agent-<folder>.yml` ของ monorepo (หรือลบโฟลเดอร์ `.github` หรือ `.github/workflows` ส่วนการเพิ่มหรือคัดลอก workflow เข้าไปไม่ต้องถาม) รวมถึง inline script (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`) แม้จะประกอบ path ด้วย `path.join` หรือ `os.path.join`
-2. **ใน CI:** `--compare-ref` fail เมื่อ baseline โตขึ้น หรือกฎถูกลบหรือแคบลง
+2. **ใน CI:** `--compare-ref` fail เมื่อ baseline โตขึ้น หรือกฎถูกลบหรือขอบเขตของกฎเปลี่ยน (รวมถึงการขยาย เพราะ guard แยกสองกรณีนี้ไม่ออก)
 3. **ในการรีวิว:** เพิ่ม `.github/CODEOWNERS` ให้คนที่ระบุต้องอนุมัติทุกการแก้ใน `.stack-agent/` เช่น `/.stack-agent/ @your-org/leads` (init ไม่ได้สร้างให้ เพราะไม่รู้ชื่อทีม)
 
 ช่องโหว่ที่ยังเหลือ: hook PostToolUse ตรวจเฉพาะไฟล์ที่แก้ผ่าน Edit/Write ถ้าแก้ผ่านคำสั่ง shell (เช่น `sed -i`) CI และ Stop hook จะจับได้ทีหลัง ส่วน hook ที่ดักคำสั่ง shell ใช้การจับ pattern จึงไม่ครอบคลุมทุกรูปแบบ: path ที่ประกอบจากตัวแปร, interpreter ที่ hook ไม่รู้จัก หรือไฟล์ script ที่รันด้วย `node fix.js` จะผ่านไปได้ CI คือด่านที่ต้องมีเสมอ

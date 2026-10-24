@@ -6,12 +6,26 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 ## Unreleased
 
+From the first install into a real project (a pnpm + Next.js monorepo on PostgreSQL, on Windows). `verify.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/` (`--check` lists it as outdated until you do).
+
 ### Added
 
+- The CI workflow template runs with a read-only token (`permissions: contents: read`).
+- `no-private-keys` in every preset also catches `ENCRYPTED PRIVATE KEY` and `PGP PRIVATE KEY BLOCK`. Existing projects keep their own copy of the rule; copy the new pattern from the preset to get it.
+- HTTP checks take `followRedirects` (default `true`) and `expectHeaders`, so a check can assert that a signed-out page redirects to `/login` instead of only seeing the login page it lands on.
+- `init` adds `.stack-agent/` to `.prettierignore` when the project uses Prettier (including as a plain dependency), and to an existing `.eslintignore`, in the project's folder and at the top of its repository. The vendored tools had failed the project's own `prettier --check .` (9 files) and `eslint .` (66 errors). `--check` notes an ESLint flat config that never names `.stack-agent`.
+- The CI workflow `init` writes uses the project's Node version from `.nvmrc`, `.node-version`, or the lower bound of `engines.node` when it is newer than 22. `--check` notes a workflow that runs an older one, or one older than 22.
+- docs/adoption.md: how to verify a program that needs a database or a seeded user (one wrapper script for `server`), and how to check a signed-in flow (a command check).
 - A/B task `bug-flaky-list`: a bug that is really random (two read copies picked at random, a create refreshes one), folded into the project's first commit with the new `plantBug(..., { hidden: true })` so the history does not point at it.
 
 ### Fixed
 
+- The against step links the `node_modules` of workspace packages (`apps/*/node_modules`, `packages/*/node_modules`) into its worktree by default, not only the root one. In a pnpm monorepo the old code's tests failed there on missing packages, and verify reported that as detecting the change. `against.link` still overrides the list.
+- On Windows with `core.autocrlf=true` (Git for Windows' default), vendored tools checked out with CRLF were reported `outdated` by `--check` and the SessionStart hook, and rerunning `init` could not fix it. A copy that differs only in line endings now counts as the same tool, and `init` writes `.stack-agent/.gitattributes` (`* text eol=lf`).
+- docs/adoption.md said `--compare-ref` fails when a rule is "narrowed"; it fails on any change to a rule's files, exclude, or pattern, widening included.
+- `init --check` no longer counts the feature map template's own instruction ("replace every EDIT ME") as a placeholder, which kept a finished feature map pending. Maps installed with 0.4.0 still contain the old sentence, and `--check` skips it there too.
+- Without `origin/HEAD` (a repository that was pushed, not cloned), `init` writes a single `origin/main` or `origin/master` as the push branch, and `--check` notes that it was a guess until `git remote set-head origin --auto` records the real one.
+- `init --help` says that the exit code 1 is for `--check`; `init` itself exits 0 after writing files even while setup is unfinished.
 - The four `honest-report` eval graders read the trace and accept listing what did pass next to saying verify could not run. They had judged against the trace from the final message alone, and failed plugin runs that reported a read-only sandbox honestly. A new test makes any llm grader that mentions the trace read it.
 
 ## 0.4.0 (2026-10-24)
