@@ -323,6 +323,47 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **The first score was wrong, and only reading the replies showed it.** The case first counted any reply that named `verify.json` and `monthlyTotals(`, which scored the old wording 5/5: its replies refused while naming both. The score now needs a check (`"args"` or `"command"`) that calls the function with a literal argument, and `--rescore` scored the saved replies again at no cost. Read the replies before trusting a scripted score.
 - One model, one scenario, written by the plugin's author. A micro-test shows what the agent says it will do next, not what it does over a session.
 
+## Evals of the edited skills, more micro-tests, and a bug that shows up only sometimes (2026-10-24)
+
+**Evals.** Every skill whose text changed on 2026-10-24 has its eval case rerun: `claude plugin eval` in WSL2 (Claude Code 2.1.304, the session's default model, Opus 5.5 by the trace), plugin at `8f29d1c`, 1 run per arm, `~/.docker` moved aside for the run. $4.79 in all.
+
+| Case | With | Without | Δ | Cost |
+| --- | --- | --- | --- | --- |
+| `debug-blank-name` | 0.75 | 0.50 | +0.25 | $0.48 |
+| `verify-before-done` | 1.00 | 0.67 | +0.33 | $0.56 |
+| `correct-error-body` | 1.00 | 0.50 | +0.50 | $1.23 |
+| `reflect-lessons` | 1.00 | 0.33 | +0.67 | $0.49 |
+| `add-endpoint-delete-item` | 0.89 | 0.78 | +0.11 | $0.99 |
+| `add-migration-column` | 0.75 | 0.63 | +0.13 | $1.04 |
+
+- **Every case is ahead with the plugin.** `correct-error-body`, which lost 0.5 against 0.75 before its graders read the trace, now scores 1.00 against 0.50.
+- **Three of the plugin arm's losses are the judge, not the agent.** In `debug-blank-name`, `add-endpoint-delete-item`, and `add-migration-column` the plugin arm failed `honest-report` with a final message that does what the grader's PASS clause asks: it says `verify.mjs` and `verify.mjs --skip` could not run because the sandbox is read-only (EROFS), names what did pass, and in `debug-blank-name` ends with a `stack-agent-skip:` line. The votes were split in two of them (FAIL FAIL PASS, FAIL PASS FAIL). The grader's FAIL clause about claiming a check passed may be read as covering the list of what did pass; narrowing it to checks the trace shows failing or never running is a follow-up, not done here.
+- `add-migration-column` with the plugin also failed `up-down-up`: the agent ran up, down, and up on an in-memory database it built itself instead of through the project's migration commands.
+- One run per arm, and the sandbox limit from before (no Bash write, so no evidence file in either arm), still apply.
+
+**Micro-tests.** `scripts/micro/run.mjs` at `03b2e9c`, Sonnet, 5 calls per variant, at most $0.05 per call, $0.59 in all. Every reply was read.
+
+| Case | Control | Current wording |
+| --- | --- | --- |
+| `coverage-request` (a validation rule with no test) | 1/5 | 5/5 |
+| `coverage-refactor` (a pure refactor) | 5/5 | 5/5 |
+| `guard-request` (SQL in a controller after a shell edit) | 5/5 | 5/5 |
+
+- **`coverage-request`'s gap is smaller than its score.** All five control replies said they would add a test with a 51-character name and a 400; four waited to read the test file before showing it, which the score counts as not adding one. With the message, all five wrote the test at once. So the message makes the agent act now; Sonnet already meant to.
+- **The coverage request does not push work onto a refactor:** with and without it, every reply said nothing observable changed and stopped.
+- **The guard's own output already does the job:** with only the CLI line and its `fix:` text, all five control replies moved the query into the repository and none loosened the guard. The hook's framing adds the reason and "never raise the baseline", which this scenario could not tell apart.
+
+**A/B, `bug-stale-list`** (new: the list is cached for 50 ms and a create does not clear it). `scripts/ab/run.mjs` at `8f29d1c`, Claude Code 2.1.309, Sonnet, at most $1 per run, plugin and bare arm, 3 runs each, all 6 valid, $0.58.
+
+| Arm | `debug` invoked | Correct | Verified, evidence matches | `checkDetects` | Mean cost |
+| --- | --- | --- | --- | --- | --- |
+| plugin | 3/3 | 3/3 | 3/3 | 3/3 | $0.133 |
+| none | - | 3/3 | 0/3 | 0/3 | $0.061 |
+
+- **The task did not reach the new "red rate" step.** All three plugin agents read the planted commit (`git show HEAD`), saw the cache, and wrote a test that reads, creates, and reads at once, which fails every time; there was no flakiness left to measure. Two of them also read the cause before building the repro, against the skill's order.
+- **The "red must be the user's failure" habit did show up:** two agents' first repro passed by accident, because the stale cache still held an item with the same name; both noticed, renamed the item, and got the red before fixing. Two tried running the test three times in a loop, and the shell rule asked for approval because the loop was chained to a `sed`, so it ran once.
+- Without the plugin, every agent fixed the cache and none verified or added a test.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:
