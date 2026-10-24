@@ -387,7 +387,9 @@ export function addedChecks(dir) {
 
 // Plant a bug for a bug-report task: apply exact text edits and commit them, so the session's start commit has the
 // bug and the against step can prove a repro the agent adds. Each edit is [file, from, to]; a missing `from` throws.
-export function plantBug(dir, edits, message) {
+// With { hidden: true } the bug is folded into the scaffold's own commit instead, so `git show HEAD` or `git log`
+// does not point at it and the agent has to find it from the behavior.
+export function plantBug(dir, edits, message, { hidden = false } = {}) {
 	for (const [rel, from, to] of edits) {
 		const file = path.join(dir, rel);
 		const text = fs.readFileSync(file, "utf8");
@@ -396,6 +398,7 @@ export function plantBug(dir, edits, message) {
 	}
 	const git = (...args) => execFileSync("git", ["-c", "user.name=eval", "-c", "user.email=eval@example.com", "-c", "commit.gpgsign=false", ...args], { cwd: dir, stdio: "ignore" });
 	git("add", "-A");
-	git("commit", "-qm", message);
+	if (hidden) git("commit", "-q", "--amend", "--no-edit");
+	else git("commit", "-qm", message);
 	git("tag", "ab-start");
 }

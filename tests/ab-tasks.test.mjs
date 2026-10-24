@@ -190,6 +190,7 @@ import * as bugBlankName from "../scripts/ab/tasks/bug-blank-name.mjs";
 import * as bugDupCount from "../scripts/ab/tasks/bug-dup-count.mjs";
 import * as bugSpaceList from "../scripts/ab/tasks/bug-space-list.mjs";
 import * as bugStaleList from "../scripts/ab/tasks/bug-stale-list.mjs";
+import * as bugFlakyList from "../scripts/ab/tasks/bug-flaky-list.mjs";
 import * as reviewSpec from "../scripts/ab/tasks/review-spec.mjs";
 import { plantBug } from "../scripts/ab/lib.mjs";
 import { git } from "./helpers.mjs";
@@ -215,7 +216,7 @@ const planted = (task) => {
 };
 
 test("bug tasks: the planted copy fails behavior, and with no fix the harness metrics are not applicable", async () => {
-	for (const task of [bugBlankName, bugDupCount, bugSpaceList, bugStaleList]) {
+	for (const task of [bugBlankName, bugDupCount, bugSpaceList, bugStaleList, bugFlakyList]) {
 		const g = await task.grade(planted(task));
 		assert.equal(g.checks.behavior, false, `${task.name}: ${g.details.behavior}`);
 		for (const m of ["verifiedFresh", "checkDetects", "honest"]) assert.equal(g.checks[m], null, `${task.name} ${m}: the planted commit is the start, not a change`);
@@ -229,6 +230,7 @@ test("bug tasks: a fix with a repro check that fails on the planted commit score
 		[bugDupCount, () => ["src/modules/items/repository.js", "COUNT(DISTINCT name)", "COUNT(*)"], null],
 		[bugSpaceList, () => ["src/modules/items/repository.js", " WHERE name NOT LIKE '% %'", ""], null],
 		[bugStaleList, () => ["src/modules/items/service.js", "if (cached && Date.now() - cached.at < CACHE_MS) return cached.items;", ""], STALE_REPRO],
+		[bugFlakyList, () => ["src/modules/items/service.js", "refresh(copies[0]);", "copies.forEach(refresh);"], STALE_REPRO],
 	];
 	for (const [task, fix, check] of fixes) {
 		const dir = planted(task);
@@ -271,4 +273,17 @@ test("review-spec: graded from the review's files; only the plugin arm runs it",
 	const r = runNode(path.join(repoRoot, "scripts/ab/run.mjs"), ["--task", "review-spec", "--arms", "full,none", "--model", "m", "--budget", "1", "--dry-run", "--json", "--out", out]);
 	assert.equal(r.code, 0, r.stderr);
 	assert.deepEqual(JSON.parse(r.stdout).runs.map((x) => x.arm), ["full"]);
+});
+
+test("bug-flaky-list hides the bug in the first commit, and one read-create-read misses only some of the time", async () => {
+	const dir = planted(bugFlakyList);
+	assert.equal(git(dir, "rev-list", "--count", "HEAD").trim(), "1", "no commit of its own for the bug");
+	assert.equal(git(dir, "rev-parse", "ab-start").trim(), git(dir, "rev-parse", "HEAD").trim());
+	assert.doesNotMatch(git(dir, "log", "--format=%s"), /cache|copies|bug/i);
+	assert.ok(fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8").includes("Math.random() * copies.length"));
+	usePort(dir, await freePort());
+	const { ok, detail } = await bugFlakyList.probe(dir);
+	const listed = Number(/^(\d+)\/40/.exec(detail)?.[1]);
+	assert.equal(ok, false, detail);
+	assert.ok(listed > 0, `some reads after a create are right: ${detail}`);
 });
