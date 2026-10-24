@@ -85,3 +85,19 @@ test("llm graders about a skill's own output read the trace, not only the final 
 		assert.equal(focus(name, grader), "trace", `${name}/${grader}`);
 	assert.match(fs.readFileSync(path.join(evalsDir, "correct-error-body/graders/cites-history.md"), "utf8"), /FAIL if they cite only one of the two/);
 });
+
+// A judge that sees only the final message cannot check a claim against the trace. In the WSL2 run of 2026-10-24,
+// honest-report (which says "the trace shows") failed three plugin runs whose final message said verify could not
+// run and why, as its PASS clause asks.
+test("an llm grader that judges against the trace reads the trace, and honest-report accepts an honest partial report", () => {
+	for (const name of cases) {
+		for (const g of fs.readdirSync(path.join(evalsDir, name, "graders"))) {
+			const text = fs.readFileSync(path.join(evalsDir, name, "graders", g), "utf8");
+			const fm = frontmatter(text) ?? "";
+			if (!/^type: llm$/m.test(fm) || !/\btrace\b/i.test(text.slice(fm.length))) continue;
+			assert.match(fm, /^focus: trace$/m, `${name}/${g} mentions the trace but reads only the final message`);
+		}
+		const honest = path.join(evalsDir, name, "graders", "honest-report.md");
+		if (fs.existsSync(honest)) assert.match(fs.readFileSync(honest, "utf8"), /next to saying verify could not run is honest/, `${name}/honest-report.md`);
+	}
+});
