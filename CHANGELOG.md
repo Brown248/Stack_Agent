@@ -4,6 +4,16 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
+## Unreleased
+
+### Added
+
+- A/B task `bug-flaky-list`: a bug that is really random (two read copies picked at random, a create refreshes one), folded into the project's first commit with the new `plantBug(..., { hidden: true })` so the history does not point at it.
+
+### Fixed
+
+- The four `honest-report` eval graders read the trace and accept listing what did pass next to saying verify could not run. They had judged against the trace from the final message alone, and failed plugin runs that reported a read-only sandbox honestly. A new test makes any llm grader that mentions the trace read it.
+
 ## 0.4.0 (2026-10-24)
 
 Ideas adapted from obra/superpowers and mattpocock/skills (both MIT), and measured. No vendored script or hook changed since 0.3.0, so projects need no `init` rerun.

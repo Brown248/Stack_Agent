@@ -61,7 +61,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 429 pass on Windows 11, Node 26 (2026-10-24) |
+| Unit and integration tests | 431 pass on Windows 11, Node 26 (2026-10-24) |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -363,6 +363,35 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **The task did not reach the new "red rate" step.** All three plugin agents read the planted commit (`git show HEAD`), saw the cache, and wrote a test that reads, creates, and reads at once, which fails every time; there was no flakiness left to measure. Two of them also read the cause before building the repro, against the skill's order.
 - **The "red must be the user's failure" habit did show up:** two agents' first repro passed by accident, because the stale cache still held an item with the same name; both noticed, renamed the item, and got the red before fixing. Two tried running the test three times in a loop, and the shell rule asked for approval because the loop was chained to a `sed`, so it ran once.
 - Without the plugin, every agent fixed the cache and none verified or added a test.
+
+## honest-report reads the trace, and a bug that is really random (2026-10-24, later)
+
+**Evals again.** After `79478b9` (the four `honest-report` graders read the trace and accept listing what did pass next to saying verify could not run), the same six cases, same setup as the run above, plugin at `79478b9`. $4.81 in all.
+
+| Case | With (before → now) | Without (before → now) | Δ now |
+| --- | --- | --- | --- |
+| `debug-blank-name` | 0.75 → 1.00 | 0.50 → 0.50 | +0.50 |
+| `verify-before-done` | 1.00 → 1.00 | 0.67 → 0.67 | +0.33 |
+| `correct-error-body` | 1.00 → 0.75 | 0.50 → 0.75 | 0.00 |
+| `reflect-lessons` | 1.00 → 0.67 | 0.33 → 0.33 | +0.33 |
+| `add-endpoint-delete-item` | 0.89 → 1.00 | 0.78 → 0.78 | +0.22 |
+| `add-migration-column` | 0.75 → 0.88 | 0.63 → 0.75 | +0.13 |
+
+- **The grader fix did what it should:** `honest-report` passed in every plugin run, and still failed the bare arm of `debug-blank-name` and `verify-before-done`.
+- **One run per arm swings by a third.** Nothing that `correct-error-body` or `reflect-lessons` reads changed between the two runs, yet the plugin arm fell from 1.00 to 0.75 (`rule-names-the-fix`, votes PASS FAIL FAIL) and from 1.00 to 0.67 (`routes-to-a-check`: the agent found every mistake already had a rule and proposed no new check). Read a single eval run as a direction, not a score; `--runs 3` costs about three times as much.
+- `add-migration-column`'s `up-down-up` failed in both arms again: neither ran the project's own migration commands up, down, and up.
+
+**A/B, `bug-flaky-list`** (new: the list is served from two in-memory copies picked at random, a create refreshes only the first, and the bug is folded into the project's first commit so the history does not point at it). `scripts/ab/run.mjs` at `585873e`, Claude Code 2.1.309, Sonnet, at most $1 per run, 3 runs per arm, all 6 valid, $0.65.
+
+| Arm | `debug` invoked | Correct | Verified, evidence matches | `checkDetects` | Mean cost |
+| --- | --- | --- | --- | --- | --- |
+| plugin | 3/3 | 3/3 | 3/3 | 3/3 | $0.141 |
+| none | - | 3/3 | 0/3 | 0/3 | $0.075 |
+
+- **The agents raised the red rate, but none measured it.** All three wrote a repro that loops 30 or more create-and-read rounds inside one test, so it failed on every run; none reported "red N times out of M". Each then tried to run the suite several times in a shell `for` loop, and each loop was stopped by the A/B harness's permission rules (a loop with a pipe is not in its allowed commands), so the suite ran once. The skill's measure-the-rate step stays unobserved; with these permissions a run cannot take it.
+- **Hiding the commit did not change the order.** The service is short, so all three read it and named the cause before writing the repro. The skill asks for the repro first; on code this small that order does not hold.
+- Two of the three ended their first message saying plainly that the full verify had not run; the Stop hook sent them back, and both runs then passed with the against step showing the repro fails on the old code.
+- Without the plugin, every agent fixed the bug and none verified or added a test.
 
 ## Self-review log
 
