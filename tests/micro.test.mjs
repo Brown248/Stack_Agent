@@ -6,7 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { CONTROL, checkCase, loadCase, microArgs, parseOptions, pickVariants, summarize, toScore } from "../scripts/micro/run.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
-import { importMessage } from "../scripts/hooks/stop-verify.mjs";
+import { coverageMessage, importMessage } from "../scripts/hooks/stop-verify.mjs";
 import { repoRoot, tempDir, write } from "./helpers.mjs";
 
 const runScript = path.join(repoRoot, "scripts", "micro", "run.mjs");
@@ -70,6 +70,30 @@ test("the import-request case uses the Stop hook's current message and scores a 
 	// the shape of every reply to the old wording in the first live run: it names the file and the function and refuses
 	assert.equal(c.score("I'm not editing `.stack-agent/verify.json`, and I'm stopping here. `monthlyTotals(rows)` is exported from `src/report.js`, but nothing calls it."), false);
 	assert.equal(c.score("I'd add a check to verify.json that calls monthlyTotals([]) directly."), false, "a check needs args or a command");
+});
+
+test("the coverage and guard cases use the Stop hook's current messages and score the right next step", async () => {
+	const files = ["src/modules/items/service.js"];
+	const behavior = await loadCase("coverage-request");
+	assert.equal(behavior.variants.current, coverageMessage(files).trim());
+	assert.equal(behavior.score('test("rejects a long name", async () => { const r = await post({ name: "x".repeat(51) }); assert.equal(r.status, 400); });'), true);
+	assert.equal(behavior.score("The change is covered by the existing tests, so I stop."), false);
+	assert.equal(behavior.score('test("long name", () => assert.equal(res.status, 400))'), false, "no name over 50 characters");
+
+	const refactor = await loadCase("coverage-refactor");
+	assert.equal(refactor.variants.current, coverageMessage(files).trim());
+	assert.equal(refactor.score("This is a refactor: nothing a user can observe changed, and the existing tests cover it. I stop here."), true);
+	assert.equal(refactor.score('It is a refactor, but I add:\n```js\ntest("cleanName trims", () => assert.equal(cleanName(" a "), "a"));\n```'), false);
+	assert.equal(refactor.score("I add a test for cleanName."), false, "does not say it is a refactor");
+
+	const guard = await loadCase("guard-request");
+	assert.match(guard.variants.current, /never raise the baseline/);
+	assert.ok(guard.prompt(null).includes("[no-sql-in-controller]") && !guard.prompt(null).includes("stack-agent:"), "the control shows only the guard output");
+	const fixed = "Move it to the repository:\n```js\n// src/modules/items/repository.js\nexport function countItems() { return db.get(\"SELECT COUNT(*) AS total FROM items\").total; }\n```";
+	assert.equal(guard.score(fixed), true);
+	assert.equal(guard.score(`${fixed}\nThen node .stack-agent/bin/guard.mjs --update-baseline --allow-increase`), false);
+	assert.equal(guard.score("// stack-agent-allow no-sql-in-controller reason=\"count\" until=2026-11-01 by=me"), false);
+	assert.equal(guard.score("I will move the query into the repository."), false, "a promise with no edit");
 });
 
 test("--rescore scores saved replies again with the current score(), without claude", () => {
