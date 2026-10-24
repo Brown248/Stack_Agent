@@ -189,9 +189,24 @@ test("rename-field: a correct rename passes the probe", async () => {
 import * as bugBlankName from "../scripts/ab/tasks/bug-blank-name.mjs";
 import * as bugDupCount from "../scripts/ab/tasks/bug-dup-count.mjs";
 import * as bugSpaceList from "../scripts/ab/tasks/bug-space-list.mjs";
+import * as bugStaleList from "../scripts/ab/tasks/bug-stale-list.mjs";
 import * as reviewSpec from "../scripts/ab/tasks/review-spec.mjs";
 import { plantBug } from "../scripts/ab/lib.mjs";
 import { git } from "./helpers.mjs";
+
+// a timing-dependent bug needs a repro that tries many times: a command check that reads the server from
+// verify.json, creates an item between two reads 20 times, and fails on any miss
+const STALE_REPRO = {
+	name: "list-shows-new-item-every-time",
+	needsServer: true,
+	args: [
+		"node",
+		"--input-type=module",
+		"-e",
+		'import fs from "node:fs"; const base = JSON.parse(fs.readFileSync(".stack-agent/verify.json", "utf8")).baseUrl; let miss = 0; for (let i = 0; i < 20; i++) { await fetch(base + "/items"); await fetch(base + "/items", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "r" + i }) }); const { items } = await (await fetch(base + "/items")).json(); if (!items.some((x) => x.name === "r" + i)) miss++; } console.log("misses " + miss); process.exit(miss ? 1 : 0);',
+	],
+	expectOutputIncludes: "misses 0",
+};
 
 const planted = (task) => {
 	const dir = project(task.example);
@@ -200,7 +215,7 @@ const planted = (task) => {
 };
 
 test("bug tasks: the planted copy fails behavior, and with no fix the harness metrics are not applicable", async () => {
-	for (const task of [bugBlankName, bugDupCount, bugSpaceList]) {
+	for (const task of [bugBlankName, bugDupCount, bugSpaceList, bugStaleList]) {
 		const g = await task.grade(planted(task));
 		assert.equal(g.checks.behavior, false, `${task.name}: ${g.details.behavior}`);
 		for (const m of ["verifiedFresh", "checkDetects", "honest"]) assert.equal(g.checks[m], null, `${task.name} ${m}: the planted commit is the start, not a change`);
@@ -213,6 +228,7 @@ test("bug tasks: a fix with a repro check that fails on the planted commit score
 		[bugBlankName, () => ["src/modules/items/service.js", 'input.name : ""', 'input.name.trim() : ""'], { name: "blank-name-rejected", method: "POST", path: "/items", body: { name: "   " }, expectStatus: 400 }],
 		[bugDupCount, () => ["src/modules/items/repository.js", "COUNT(DISTINCT name)", "COUNT(*)"], null],
 		[bugSpaceList, () => ["src/modules/items/repository.js", " WHERE name NOT LIKE '% %'", ""], null],
+		[bugStaleList, () => ["src/modules/items/service.js", "if (cached && Date.now() - cached.at < CACHE_MS) return cached.items;", ""], STALE_REPRO],
 	];
 	for (const [task, fix, check] of fixes) {
 		const dir = planted(task);

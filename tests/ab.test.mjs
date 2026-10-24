@@ -197,7 +197,7 @@ test("--model and --budget are required, and bad values are usage errors", () =>
 test("an unknown task names the available ones", () => {
 	const r = runNode(runScript, ["--task", "nope", "--model", "m", "--budget", "1", "--dry-run", "--out", path.join(tempDir(), "o")]);
 	assert.equal(r.code, 2);
-	assert.match(r.stderr, /unknown task "nope" \(available: bug-blank-name, bug-dup-count, bug-space-list, cli-minlen, dup-name, endpoint, item-note, job-new-export, job-skip-blank, lib-maxlength, multi-rule, refactor-items, rename-field, review-spec, validate, validate-hurry, web-roundup, webhook\)/);
+	assert.match(r.stderr, /unknown task "nope" \(available: bug-blank-name, bug-dup-count, bug-space-list, bug-stale-list, cli-minlen, dup-name, endpoint, item-note, job-new-export, job-skip-blank, lib-maxlength, multi-rule, refactor-items, rename-field, review-spec, validate, validate-hurry, web-roundup, webhook\)/);
 });
 
 test("hooks-only and skills-only plugin copies really lack the removed part", () => {
