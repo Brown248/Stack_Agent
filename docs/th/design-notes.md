@@ -61,7 +61,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 504 เทสบน Windows 11 กับ Node 26 และบน Linux (WSL2 Ubuntu) กับ Node 22 (26 ต.ค. 2026) |
+| Unit และ integration test | ผ่าน 506 เทสบน Windows 11 กับ Node 26 และบน Linux (WSL2 Ubuntu) กับ Node 22 (26 ต.ค. 2026) |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -436,7 +436,7 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 
 **ผลการวัด** `feature-map-lookup` (ใหม่ แขนละ 2 รอบ $0.57): 1.00 เมื่อมี plugin เทียบกับ 0.00 และ 0.50 เมื่อไม่มี เมื่อมี plugin agent อ่าน feature map ทั้งสองครั้ง เมื่อไม่มีไม่อ่านเลย `verify-before-done` หลังเปลี่ยนรายการฟิลด์ในสกิล (แขนละ 2 รอบ $0.91): 1.00 ทั้งสองแขน แขนที่ไม่มี plugin เคยได้ 0.67 ในรอบก่อน นี่จึงเป็นความแกว่งระหว่างรอบตามที่ข้อสังเกตใน `run-evals` อธิบาย
 
-**A/B `init-library`** (ใหม่: library ที่เอา Stack Agent ออก แล้วเรียกสกิลด้วยชื่อ แขน plugin 2 รอบ $0.45): verify และ guard ผ่านทั้งสองรอบ และเขียน workflow แล้ว แต่ `init --check` ไม่ผ่านเลย agent ทั้งสองถูก hook ของ path ที่ป้องกันไว้หยุด: การแก้ `guard.config.json` และ workflow ต้องถามคน และ session แบบ headless ไม่มีคนตอบ การแก้จึงถูกปฏิเสธ agent ตัวหนึ่งบอกตรงๆ ว่าการแก้ไหนรอการอนุมัติและเพราะอะไร อีกตัวทำ guard เสร็จแล้วทิ้งขั้นติดตั้งของ workflow ไว้พร้อมโน้ต ใน headless task นี้จึงวัดว่าการติดตั้งไปได้แค่ไหนเมื่อไม่มีการอนุมัติ ส่วนคำถามว่า guard config หรือ workflow ที่ยังไม่เคย commit ควรแก้ได้โดยไม่ถามหรือไม่ เป็นเรื่องของการออกแบบที่รอบนี้ยังไม่ได้ตัดสิน
+**A/B `init-library`** (ใหม่: library ที่เอา Stack Agent ออก แล้วเรียกสกิลด้วยชื่อ แขน plugin 2 รอบ $0.45): verify และ guard ผ่านทั้งสองรอบ และเขียน workflow แล้ว แต่ `init --check` ไม่ผ่านเลย agent ทั้งสองถูก hook ของ path ที่ป้องกันไว้หยุด: การแก้ `guard.config.json` และ workflow ต้องถามคน และ session แบบ headless ไม่มีคนตอบ การแก้จึงถูกปฏิเสธ agent ตัวหนึ่งบอกตรงๆ ว่าการแก้ไหนรอการอนุมัติและเพราะอะไร อีกตัวทำ guard เสร็จแล้วทิ้งขั้นติดตั้งของ workflow ไว้พร้อมโน้ต ใน headless task นี้จึงวัดว่าการติดตั้งไปได้แค่ไหนเมื่อไม่มีการอนุมัติ **ตัดสินในวันเดียวกัน:** Edit/Write บน guard config หรือ workflow ของ Stack Agent ที่ git ยังไม่เคยเห็นและยังมี `EDIT ME` ไม่ต้องถามแล้ว (template ที่ init เพิ่งเขียนยังไม่มีกฎให้ผ่อน เมื่อ stage, commit หรือกรอกครบแล้วจะถามอีกครั้ง) รันซ้ำ 2 รอบ ($0.42): รอบหนึ่งทำจนจบ (`init --check` ผ่าน เป็นการติดตั้งครบครั้งแรกโดยไม่มีคน) อีกรอบเขียนไฟล์ด้วย `node -e` ผ่าน shell ซึ่งยังต้องถาม จึงหยุด ข้อความปฏิเสธของสองไฟล์นี้จึงบอกให้ใช้ Edit หรือ Write กับ template และสกิลก็บอกแบบเดียวกัน รันซ้ำ 3 รอบ ($0.68): `init --check`, verify และ guard ผ่านทั้ง 3 รอบ agent ตัวหนึ่งลองเขียนผ่าน shell ก่อน อ่านคำแนะนำ แล้วเปลี่ยนไปใช้ Edit ทุกรอบคงกฎสากลไว้ เพิ่มกฎของตัวเอง 3 หรือ 4 ข้อ (ตัวอย่างต้อง import package ด้วยชื่อ, `src/internal` อยู่หลัง public entry, ไม่มี runtime dependency) และเปลี่ยนขั้นติดตั้งของ workflow เป็นโน้ตว่าไม่มีอะไรต้องติดตั้ง
 
 **ที่ยังไม่ได้ทำ** reference ของ eval บอกว่า grader แบบ `regex` อ่าน trace ได้ (`target: trace`) และ `tool_used` รับ `input_match` ซึ่งจะทำให้ `up-down-up` และ `guard-passed` ไม่ต้องพึ่ง judge ที่เห็น trace ยาวถูกตัดตรงกลาง แต่ยังไม่มีเอกสารสาธารณะยืนยันและยังไม่ได้ลอง
 

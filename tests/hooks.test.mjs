@@ -460,3 +460,61 @@ test("the after-shell guard reaches a monorepo project when the command runs at 
 	assert.match(r.stderr, /apps\/api\/src\/modules\/items\/controller\.js:1 \[no-sql-in-controller\]/);
 	assert.doesNotMatch(r.stderr, /loose\.js/, "a file outside every project has no guard config");
 });
+
+test("pre-edit-protect lets setup fill in a guard config or workflow that init wrote and git has never seen, and asks otherwise", () => {
+	const script = hook("pre-edit-protect.mjs");
+	const decision = (dir, rel, tool = "Edit") => {
+		const out = runNode(script, [], { input: hookInput({ tool_name: tool, cwd: dir, tool_input: { file_path: rel } }) }).stdout;
+		return out ? JSON.parse(out).hookSpecificOutput.permissionDecision : "allow";
+	};
+	// a library with no Stack Agent yet, committed; init writes the templates
+	const dir = tempDir("stack-agent-setup-");
+	write(dir, "package.json", JSON.stringify({ name: "lib", type: "module", scripts: { test: "node --test" } }));
+	write(dir, "src/index.js", "export const x = 1;\n");
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	assert.equal(runNode(path.join(repoRoot, "scripts", "init.mjs"), [dir, "--preset", "library"]).code, 0);
+	const config = ".stack-agent/guard.config.json";
+	const workflow = ".github/workflows/stack-agent.yml";
+	for (const rel of [config, workflow]) assert.match(fs.readFileSync(path.join(dir, rel), "utf8"), /EDIT ME/, `${rel} is a template`);
+
+	assert.equal(decision(dir, config), "allow", "untracked, with EDIT ME: setup fills it in");
+	assert.equal(decision(dir, workflow, "Write"), "allow");
+	assert.equal(decision(dir, path.join(dir, config)), "allow", "an absolute path works the same");
+	assert.equal(decision(dir, ".stack-agent/guard-baseline.json", "Write"), "ask", "the baseline is never a template");
+	assert.equal(decision(dir, ".stack-agent/bin/guard.mjs"), "ask", "nor are the tools");
+
+	// placeholders gone: the config now says something, so editing it asks
+	const filled = fs.readFileSync(path.join(dir, config), "utf8").replaceAll("EDIT ME", "done");
+	fs.writeFileSync(path.join(dir, config), filled);
+	assert.equal(decision(dir, config), "ask");
+	fs.writeFileSync(path.join(dir, config), filled.replace("done", "EDIT ME"));
+
+	// staged, committed, or committed and then unstaged: git has seen it, so it asks
+	git(dir, "add", config);
+	assert.equal(decision(dir, config), "ask", "staged");
+	git(dir, "commit", "-qm", "setup");
+	assert.equal(decision(dir, config), "ask", "committed");
+	git(dir, "rm", "-q", "--cached", config);
+	assert.equal(decision(dir, config), "ask", "unstaged but still in HEAD");
+
+	// outside git nothing tells a fresh template from a config in use
+	const loose = tempDir("stack-agent-setup-");
+	write(loose, config, '{ "rules": [], "note": "EDIT ME" }\n');
+	assert.equal(decision(loose, config), "ask");
+	// a guard config Write would create from nothing is not a template init wrote
+	assert.equal(decision(tempDir("stack-agent-setup-"), config, "Write"), "ask");
+});
+
+test("a shell write to the guard config or workflow still asks, and points setup at Edit or Write", () => {
+	const hint = /use the Edit or Write tool instead/;
+	for (const cmd of [`node -e "require('fs').writeFileSync('.stack-agent/guard.config.json','{}')"`, "sed -i s/x/y/ .github/workflows/stack-agent.yml"]) {
+		const r = classify(cmd);
+		assert.equal(r?.decision, "ask", cmd);
+		assert.match(r.reason, hint, cmd);
+	}
+	const baseline = classify("sed -i s/1/5/ .stack-agent/guard-baseline.json");
+	assert.equal(baseline?.decision, "ask");
+	assert.doesNotMatch(baseline.reason, hint, "the baseline is never a template");
+});

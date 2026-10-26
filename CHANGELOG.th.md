@@ -11,8 +11,8 @@
 ### ผลการวัด
 
 - `feature-map-lookup` (ใหม่) แขนละ 2 รอบ: 1.00 เมื่อมี plugin เทียบกับเฉลี่ย 0.25 เมื่อไม่มี และมีแค่แขน plugin ที่อ่าน feature map ส่วน `verify-before-done` หลังแก้สกิล: 1.00 ทั้งสองแขน
-- A/B `init-library` (ใหม่) แขน plugin 2 รอบ: verify และ guard ผ่านทั้งสองรอบ แต่ `init --check` ไม่ผ่านเลย เพราะ session แบบ headless อนุมัติการแก้ guard config และ workflow ที่ป้องกันไว้ไม่ได้ รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026 (รอบหลัง)
-- `npm test`: 504 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
+- A/B `init-library` (ใหม่) แขน plugin: ก่อนการเปลี่ยนเรื่องการติดตั้งด้านล่าง `init --check` ผ่าน 0 ใน 2 รอบ เพราะ session แบบ headless อนุมัติการแก้ guard config และ workflow ที่ป้องกันไว้ไม่ได้ หลังเปลี่ยนและเพิ่มคำแนะนำให้ใช้ Edit หรือ Write ผ่าน 3 ใน 3 รอบ แต่ละรอบมีกฎ guard ของตัวเองและเช็กจริง รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026 (รอบหลัง)
+- `npm test`: 506 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
 
 ### แก้ไข
 
@@ -27,10 +27,11 @@
 
 - บันทึกในเอกสารสิ่งที่โค้ดรองรับอยู่แล้ว: `--config` และ `--json` ของ verify, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, `timeoutSec` ของ HTTP check, `type` และค่าเริ่มต้นของ `evidenceDir`, ส่วนของ guard คือ `baseline`, `--files`, `--strict`, `--json`, `--config` และ `pythonRoots`, ของ api-map คือ `--config`, `--json` และ `verifyConfig`, ของ feature-map คือ `--map` และ `--json`, ของ review-findings คือ `--stage` และ `rows --date` และ `--disallowed-tools` ของ A/B harness
 - eval case `feature-map-lookup` (บนตัวอย่าง library) และ A/B task `init-library` (ติดตั้ง Stack Agent จากศูนย์ผ่านสกิล) `evals/scaffold.mjs` รับชื่อตัวอย่างที่จะคัดลอก และ `run-evals` บอกว่าแต่ละสกิลวัดผลอย่างไร และทำไม `mine-corrections` จึงไม่ได้วัด
-- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 504 เทสต์)
+- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 506 เทสต์)
 
 ### เปลี่ยน
 
+- การติดตั้งทำจนจบได้โดยไม่ต้องมีคนเฝ้า: Edit/Write บน `guard.config.json` หรือ workflow ของ Stack Agent ที่ git ยังไม่เคยเห็นและยังมี placeholder `EDIT ME` ไม่ต้องถามแล้ว ใน A/B `init-library` agent ทั้งสองถูกหยุดตรงนี้ เพราะ session แบบ headless อนุมัติไม่ได้ เมื่อ placeholder หมดหรือไฟล์ถูก stage หรือ commit แล้ว การแก้จะถามอีกครั้ง ส่วนการเขียนผ่าน shell ยังถามเหมือนเดิม และข้อความปฏิเสธบอกให้ใช้ Edit หรือ Write กับ template ซึ่งสกิล init ก็บอกแบบเดียวกัน
 - micro-test `guard-request` ไม่บอกแล้วว่า hook หลังแก้ไฟล์มองไม่เห็นการแก้ผ่าน shell สถานการณ์ตอนนี้ให้ agent ทำงานต่อโดยไม่ได้แก้ตามที่ hook หลังคำสั่ง shell รายงาน คะแนนก่อนหน้านี้จึงเทียบกันตรงๆ ไม่ได้
 
 ## 0.5.0 (2026-10-26)

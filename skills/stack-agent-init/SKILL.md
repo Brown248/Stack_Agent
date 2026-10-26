@@ -32,6 +32,8 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/init.mjs" . --preset <preset>
 
 It copies `guard.mjs`, `verify.mjs`, `api-map.mjs`, `feature-map.mjs`, and their `lib/` helpers into `.stack-agent/bin/` so CI can run them without the plugin, with a `VERSION` file naming the plugin version. It adds the preset's config templates and `.github/workflows/stack-agent.yml` only where none exist (for a project in a subfolder of a monorepo, the workflow is `stack-agent-<folder>.yml` at the top of the repository, because GitHub reads workflows only there), and adds `.stack-agent/evidence/` to `.gitignore`. Re-running it is safe. Node.js 22+ must be installed even when the project uses another language. Only the tools need it.
 
+Fill in the files it wrote with the Edit or Write tool, not a shell command. `guard.config.json` and the workflow are protected: while they still have `EDIT ME` and are not committed, Edit and Write on them go through, but a shell write to them asks a human.
+
 ## 3. Verification first (`.stack-agent/verify.json`)
 
 Find the repo's real test command, and how a user actually runs it, from `package.json`, `pyproject.toml`, `Makefile`, `go.mod`, `Cargo.toml`, the README, or CI config. Replace every `EDIT ME`. Use HTTP checks for things served over HTTP and command checks for everything else. Then run:

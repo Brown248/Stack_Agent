@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 
 export const PROTECTED = [
@@ -93,14 +95,41 @@ export function protectedMentioned(text) {
 	return MENTION_RES.find((p) => forms.some((t) => p.re.test(t)))?.what ?? null;
 }
 
+// A guard config or CI workflow that init wrote and nobody has filled in or committed: it still has EDIT ME
+// placeholders and git has never seen it (not in the index, not in HEAD). It holds no rule yet that an edit could
+// loosen, and the setup skill has to fill it in, so Edit and Write on it do not ask. Once the placeholders are gone
+// or the file is committed, edits ask again; what it says when first committed is reviewed like any other change.
+export const FILLED_IN_AT_SETUP = new Set(["the guard rules", "the Stack Agent CI workflow"]);
+
+export function isUncommittedTemplate(abs) {
+	let text;
+	try {
+		text = fs.readFileSync(abs, "utf8");
+	} catch {
+		// a file Write would create is not a template init wrote
+		return false;
+	}
+	if (!text.includes("EDIT ME")) return false;
+	const dir = path.dirname(abs);
+	const git = (...args) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+	// outside git nothing tells a fresh template from a config someone relies on, so it stays protected
+	if (git("rev-parse", "--is-inside-work-tree").status !== 0) return false;
+	const name = path.basename(abs);
+	if (git("ls-files", "--error-unmatch", "--", name).status === 0) return false;
+	// unstaged with git rm --cached, but still in the last commit
+	return git("cat-file", "-e", `HEAD:./${name}`).status !== 0;
+}
+
 export function askForProtected(what) {
 	if (PROTECTED.find((p) => p.what === what)?.evidence)
 		return {
 			decision: "ask",
 			reason: `this writes ${what} by hand. Only verify.mjs writes it (run it, or use verify.mjs --skip "<reason>"), so a hand-written one would claim a verification that did not happen; a human must approve it.`,
 		};
+	// a shell write to a template is asked about too; the setup skill can fill it in with Edit or Write instead
+	const setup = FILLED_IN_AT_SETUP.has(what) ? " If you are filling in the template init just wrote (it still has EDIT ME and is not committed), use the Edit or Write tool instead: those do not ask for it." : "";
 	return {
 		decision: "ask",
-		reason: `this changes ${what}. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead.`,
+		reason: `this changes ${what}. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead.${setup}`,
 	};
 }

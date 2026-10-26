@@ -11,8 +11,8 @@ From a detailed review of 0.5.0 (four agents reading the code independently, and
 ### Measured
 
 - `feature-map-lookup` (new), 2 runs per arm: 1.00 with the plugin against a mean of 0.25 without; only the plugin arm read the feature map. `verify-before-done` after its skill edit: 1.00 in both arms.
-- A/B `init-library` (new), plugin arm, 2 runs: verify and the guard pass in both, but `init --check` in neither, because a headless session cannot approve edits to the protected guard config and workflow. Details and caveats: design notes, 2026-10-26 (later).
-- `npm test`: 504 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
+- A/B `init-library` (new), plugin arm: before the setup change below, `init --check` passed in 0 of 2 runs, because a headless session cannot approve edits to the protected guard config and workflow; after it, and the hint to use Edit or Write, in 3 of 3, each with its own guard rules and real checks. Details and caveats: design notes, 2026-10-26 (later).
+- `npm test`: 506 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
 
 ### Fixed
 
@@ -27,10 +27,11 @@ From a detailed review of 0.5.0 (four agents reading the code independently, and
 
 - Documented what the code already accepted: verify's `--config` and `--json`, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, the HTTP check `timeoutSec`, `type`, and the `evidenceDir` default; the guard's `baseline`, `--files`, `--strict`, `--json`, `--config`, and `pythonRoots`; api-map's `--config`, `--json`, and `verifyConfig`; feature-map's `--map` and `--json`; review-findings' `--stage` and `rows --date`; and the A/B harness's `--disallowed-tools`.
 - Eval case `feature-map-lookup` (on the library example) and A/B task `init-library` (Stack Agent set up from scratch through the skill). `evals/scaffold.mjs` takes the example to copy. `run-evals` says how each skill is measured, and why `mine-corrections` is not.
-- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 504 tests).
+- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 506 tests).
 
 ### Changed
 
+- Setup can finish without a human at the keyboard: Edit/Write on a `guard.config.json` or Stack Agent workflow that git has never seen and that still has `EDIT ME` placeholders no longer asks. In the `init-library` A/B runs both agents were stopped there, since a headless session cannot approve. Once the placeholders are gone, or the file is staged or committed, edits ask again. A shell write to it still asks, and the refusal now says to use Edit or Write for a template; the init skill says the same.
 - The `guard-request` micro-test no longer says the after-edit hook misses shell edits; its scenario now has the agent move on past the after-shell hook's report. Its earlier scores are not directly comparable.
 
 ## 0.5.0 (2026-10-26)
