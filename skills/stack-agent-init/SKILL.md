@@ -30,7 +30,7 @@ Run from the repo root:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/init.mjs" . --preset <preset>
 ```
 
-It copies `guard.mjs`, `verify.mjs`, `api-map.mjs` into `.stack-agent/bin/` so CI can run them without the plugin, with a `VERSION` file naming the plugin version. It adds the preset's config templates and `.github/workflows/stack-agent.yml` only where none exist (for a project in a subfolder of a monorepo, the workflow is `stack-agent-<folder>.yml` at the top of the repository, because GitHub reads workflows only there), and adds `.stack-agent/evidence/` to `.gitignore`. Re-running it is safe. Node.js 22+ must be installed even when the project uses another language. Only the tools need it.
+It copies `guard.mjs`, `verify.mjs`, `api-map.mjs`, `feature-map.mjs`, and their `lib/` helpers into `.stack-agent/bin/` so CI can run them without the plugin, with a `VERSION` file naming the plugin version. It adds the preset's config templates and `.github/workflows/stack-agent.yml` only where none exist (for a project in a subfolder of a monorepo, the workflow is `stack-agent-<folder>.yml` at the top of the repository, because GitHub reads workflows only there), and adds `.stack-agent/evidence/` to `.gitignore`. Re-running it is safe. Node.js 22+ must be installed even when the project uses another language. Only the tools need it.
 
 ## 3. Verification first (`.stack-agent/verify.json`)
 

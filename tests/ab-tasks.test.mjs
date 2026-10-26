@@ -9,7 +9,7 @@ import * as cliMinlen from "../scripts/ab/tasks/cli-minlen.mjs";
 import * as dupName from "../scripts/ab/tasks/dup-name.mjs";
 import * as itemNote from "../scripts/ab/tasks/item-note.mjs";
 import * as refactorItems from "../scripts/ab/tasks/refactor-items.mjs";
-import { freePort, repoRoot, runNode, tempDir, usePort, write } from "./helpers.mjs";
+import { freePort, pythonSkip, repoRoot, runNode, tempDir, usePort, write } from "./helpers.mjs";
 
 const project = (example) => {
 	const dir = tempDir("stack-agent-abt-");
@@ -67,7 +67,7 @@ test("item-note: a correct multi-file change passes the behavior probe", async (
 	assert.equal(g.checks.behavior, true, g.details.behavior);
 });
 
-test("cli-minlen: an exit-code-only rejection check is caught by the against step; an output check detects", async () => {
+test("cli-minlen: an exit-code-only rejection check is caught by the against step; an output check detects", { skip: pythonSkip }, async () => {
 	const dir = project("sample-cli");
 	edit(dir, "wordfreq/cli.py", '    args = parser.parse_args(argv)', '    parser.add_argument("--min-length", type=int, default=1, help="ignore words shorter than N letters")\n    args = parser.parse_args(argv)\n    if args.min_length < 1:\n        print("wordfreq: --min-length must be at least 1", file=sys.stderr)\n        return 2');
 	edit(dir, "wordfreq/cli.py", "pairs = top_words(text, args.top)", "pairs = top_words(text, args.top, args.min_length)");

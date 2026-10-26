@@ -28,16 +28,18 @@ workflow CI ที่ `init` เขียนใช้ Node 22 หรือเว
 
 แก้ `.stack-agent/verify.json` แทนที่ `EDIT ME` ทุกจุด
 
-- `test.command` (หรือ `test.args`): คำสั่งรันเทสของ repo เช่น `npm test`, `pytest`, `go test ./...`, `cargo test`
-- `server` (ใส่หรือไม่ก็ได้): วิธีเปิดโปรแกรมในเครื่อง พร้อม `env` และ `readyUrl` ที่ตอบเมื่อพร้อมใช้งาน
+- `test.command` (หรือ `test.args`): คำสั่งรันเทสของ repo เช่น `npm test`, `pytest`, `go test ./...`, `cargo test` และรับ `cwd`, `env`, `timeoutSec` (ค่าเริ่มต้น 600) ได้ด้วย
+- `server` (ใส่หรือไม่ก็ได้): วิธีเปิดโปรแกรมในเครื่อง พร้อม `env` และ `readyUrl` ที่ตอบเมื่อพร้อมใช้งาน และ `readyTimeoutSec` (ค่าเริ่มต้น 30) คือเวลาที่ verify รอให้พร้อม
 - `checks[]`: สิ่งที่ผู้ใช้ทำจริง แต่ละเรื่องต้องมีทั้งกรณีสำเร็จ และกรณีที่ต้องถูกปฏิเสธอย่างน้อยหนึ่งกรณี
 
 check มีสองแบบ:
 
 | แบบ | ฟิลด์ | ใช้กับ |
 | --- | --- | --- |
-| HTTP | `method`, `path`, `expectStatus` และใส่เพิ่มได้คือ `body`, `headers`, `expectJson`, `expectBodyIncludes`, `expectHeaders`, `followRedirects` (ค่าเริ่มต้น `true`) (ต้องมี `baseUrl`) | API, หน้าเว็บ |
+| HTTP | `method`, `path`, `expectStatus` และใส่เพิ่มได้คือ `body`, `headers`, `expectJson`, `expectBodyIncludes`, `expectHeaders`, `followRedirects` (ค่าเริ่มต้น `true`), `timeoutSec` (ค่าเริ่มต้น 10) (ต้องมี `baseUrl`) | API, หน้าเว็บ |
 | Command | `command` หรือ `args` และใส่เพิ่มได้คือ `expectExit` (ค่าเริ่มต้น 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches`, `expectOutputFlags` (ค่าเริ่มต้น `m`), `needsServer`, `cwd`, `env`, `timeoutSec` (ค่าเริ่มต้น 120) | CLI, library, script, ตัวรัน e2e และอื่นๆ |
+
+check ที่มี `command` หรือ `args` เป็น command check ส่วนแบบอื่นเป็น HTTP check และระบุให้ชัดได้ด้วย `"type": "http"` หรือ `"type": "command"`
 
 รายละเอียดของ command check:
 
@@ -45,7 +47,7 @@ check มีสองแบบ:
 - `"args": ["python", "-c", "print('hi there')"]` รันโปรแกรมตรงๆ โดยไม่ผ่าน shell แต่ละช่องใน array จะเป็น argument หนึ่งตัวพอดีบนทุก OS ให้ใช้ `args` กับทุกคำสั่งที่มี quote, มีเว้นวรรคอยู่ใน argument หรือมีอักขระอย่าง `&`, `|`, `%` ส่วน `test` และ `server` ก็ใช้ `args` ได้ หลักฐานจะบันทึก request เป็น args ที่ต่อกันด้วยเว้นวรรค พร้อม array `args`
 - เมื่อไม่ผ่าน shell จะใช้ pipe, `&&`, glob หรือการแทนค่า `$VAR` ไม่ได้ และบน Windows `args` รันได้เฉพาะโปรแกรมจริง (`.exe`) ส่วน `npm`, `npx` และ script `.cmd` หรือ `.bat` อื่นๆ จะเปิดไม่ขึ้น (verify จะบอกและชี้มาที่นี่) ให้ใช้ `command` กับคำสั่งพวกนี้ (`"command": "npm test"`) หรือเรียก `node` พร้อม path ของ script
 - เรียกชื่อตัวแปลภาษาให้ตรงกับที่ CI และเพื่อนร่วมทีมมี `python` มีบน Windows และเมื่อใช้ `actions/setup-python` แต่ macOS และ Debian แบบติดตั้งมาตรฐานมีแค่ `python3`
-- output คือ stdout และ stderr รวมกัน การตรวจทุกแบบเห็น output ทั้งหมดได้ถึง 8 MB ถ้าเกินจะตัดส่วนกลางออกและ check จะ fail พร้อมบอกเหตุผล ให้ลด output ของคำสั่งที่พิมพ์เยอะมาก
+- output คือ stdout และ stderr รวมกัน การตรวจทุกแบบเห็น output ทั้งหมดได้ถึง 8 MB ถ้าเกินจะตัดส่วนกลางออกและ check จะ fail พร้อมบอกเหตุผล ให้ลด output ของคำสั่งที่พิมพ์เยอะมาก คำสั่งที่จบไปแล้วแต่ process ที่มันเปิดไว้ยังถือ output อยู่ (เซิร์ฟเวอร์ที่เปิดด้วย `&` หรือ `start /b`) จะตัดสินจาก exit code เมื่อ output เงียบไป 1.5 วินาที (รอนานสุด 10 วินาที) verify จะบอกเรื่องนี้ใน output และบน Linux กับ macOS จะหยุด process นั้น (บน Windows process นั้นยังทำงานต่อ ต้องปิดเอง) คำสั่งที่ถูก signal ฆ่าจะรายงานเป็น `killed by SIGSEGV` (หรือ signal ที่เกิด) ไม่ใช่ exit code และถ้า verify เองถูกหยุดด้วย Ctrl+C หรือ SIGTERM จะหยุดเซิร์ฟเวอร์และคำสั่งที่มันเปิดไว้ก่อนจบ
 - `expectOutputMatches` เป็น regex ของ JavaScript แยกตัวพิมพ์ใหญ่เล็กโดยค่าเริ่มต้น `expectOutputFlags` ใช้ตั้ง flag (ค่าเริ่มต้น `m` ทำให้ `^` และ `$` ตรงกับทุกบรรทัด ถ้าไม่สนตัวพิมพ์ใหญ่เล็กให้ใช้ `im`)
 - command check ไม่เปิด server ให้ ถ้า check ไหนต้องใช้ server (เช่นเทสบนเบราว์เซอร์) ให้ใส่ `"needsServer": true`
 
@@ -76,7 +78,7 @@ node .stack-agent/bin/verify.mjs
 - verify จะไม่ยุ่งกับ server ที่ไม่ได้เปิดเอง ถ้าพอร์ตมีคนใช้อยู่จะหยุดและบอก ถ้าตั้งใจยิง server ที่เปิดอยู่แล้วให้ใช้ `--reuse`
 - server และคำสั่งเทสหรือ command check ที่รันเกินเวลา จะถูกปิดทั้ง process tree
 - `baseUrl` มี path prefix ได้ เช่น `http://127.0.0.1:3999/api/v1`
-- การรันที่นับว่าเสร็จคือการรันแบบไม่ใส่ flag (`latest.json` มี `"full": true`) ส่วน `--skip-tests`, `--skip-checks`, `--check` และ `--reuse` ใช้ระหว่างแก้ได้ แต่ Stop hook จะไม่นับเป็นหลักฐาน
+- การรันที่นับว่าเสร็จคือการรันแบบไม่ใส่ flag (`latest.json` มี `"full": true`) ส่วน `--skip-tests`, `--skip-checks`, `--check` และ `--reuse` ใช้ระหว่างแก้ได้ แต่ Stop hook จะไม่นับเป็นหลักฐาน มีสอง flag ที่เปลี่ยนแค่วิธีอ่านหรือรายงานผล: `--config FILE` อ่าน verify.json ไฟล์อื่น และ `--json` พิมพ์บันทึกหลักฐาน (รวม body ของ HTTP และ log ของเซิร์ฟเวอร์) แทนสรุป
 - `--check <name> --repeat N` (N ตั้งแต่ 2 ถึง 1000) รันแต่ละเช็กที่ระบุ N รอบแล้วรายงานว่ากี่รอบที่ red ใช้กับบั๊กที่ล้มเหลวเป็นบางรอบ: `RED check list x30: GET /items -> red in 7 of 30 runs (23%)` ตามด้วยความล้มเหลวแต่ละแบบพร้อมจำนวนครั้งที่เกิด และ output ของรอบแรกที่ red ชุดเทสต์จะไม่ถูกรัน ถ้า repro เป็นเทสต์ ใช้ `--skip-checks --repeat N` เพื่อรันชุดเทสต์ N รอบแทน (`RED tests x20: ...`) และจะไม่รันเช็กใด เซิร์ฟเวอร์เริ่มครั้งเดียวและเปิดค้างไว้ตลอด N รอบ ดังนั้น state ที่รอบหนึ่งทิ้งไว้อาจส่งผลถึงรอบถัดไป ถ้าต้องการ process ใหม่ทุกรอบ ให้ทำ repro เป็น command check รอบที่ timeout, เริ่มไม่ได้ หรือไม่มีการตอบกลับ นับเป็น red และถูกระบุว่า inconclusive ด้วย exit code เป็น 1 เมื่อมีรอบใด red เป็นการรันบางส่วนแบบเดียวกับ `--check` จึงไม่รัน against step และไม่นับว่าเสร็จ
 - หลักฐานบันทึก fingerprint ของโค้ดตอนเริ่มรัน คือ git blob id ของทุกไฟล์ที่ git มองเห็นในโปรเจกต์ (ไฟล์ที่ track หรือไฟล์ใหม่ที่ไม่ได้ gitignore) ยกเว้นเอกสาร `*.md` และ `.stack-agent/` (รายการ `stopHookIgnore`) แต่นับ `verify.json` เสมอ ไฟล์ที่ gitignore เช่น `.env` ไม่นับ การ commit ไม่ทำให้ค่าเปลี่ยน แต่ถ้าแก้โค้ดหรือ check ภายหลังค่าจะเปลี่ยน ถ้าการรันเปลี่ยนไฟล์เอง (snapshot, codegen, ฐานข้อมูลที่อยู่นอกโฟลเดอร์ที่ gitignore) จะแสดงรายชื่อใน output และ Stop hook จะไม่รับหลักฐานนั้น ไฟล์ใหม่ให้ gitignore ส่วนไฟล์ที่ track อยู่แล้วแต่การรันเขียนทับ (รายงาน coverage, fixture) ให้ใส่ใน `stopHookIgnore` ซึ่งมีผลใน session ถัดไป
 
@@ -101,7 +103,7 @@ check หรือเทสที่ผ่านทั้งก่อนแล�
 
 - ก่อนอย่างอื่น hook จะรัน guard กับไฟล์ที่ session แก้ (ทั้งใน working tree และที่ commit ไปหลังเริ่ม session) เทียบกับ baseline แบบเดียวกับ CI ถ้ามีการผิดกฎใหม่ จะบล็อกพร้อมชื่อกฎและวิธีแก้ แม้จะแก้ผ่าน shell (`sed -i` หรือ script) แล้ว agent ไม่ได้แก้ตามที่ hook หลังคำสั่ง shell รายงาน ไฟล์ skip ใช้ยกเว้นเรื่องนี้ไม่ได้ ไฟล์ที่คุณแก้ค้างไว้ก่อนเริ่ม session และ agent ไม่ได้แตะจะไม่ถูกนับ และยังใช้เพดานบล็อก 3 ครั้งเหมือนเดิม
 - นับเฉพาะสิ่งที่แก้ใน session นี้ ถ้าโค้ดมีการแก้ค้างไว้ก่อนเริ่ม session จะไม่ถูกบล็อกและไม่ถูกแสดงในรายชื่อ การ commit งานไม่ทำให้หลุด เพราะ hook เทียบกับ fingerprint ที่บันทึกตอนเริ่ม session
-- ค่า `stopHook`, `stopHookIgnore`, `evidenceDir` และ `against` อ่านตอนเริ่ม session และเก็บในบันทึกของ session ที่ตำแหน่งตายตัว (`.stack-agent/evidence/sessions/` ไม่ว่า `evidenceDir` จะตั้งเป็นอะไร) การแก้ค่าเหล่านี้ใน `verify.json` จึงมีผลใน session ถัดไป ไม่ใช่กลาง session ที่กำลังถูกตรวจ และผลการรัน verify ที่ใช้ `stopHookIgnore` ต่างจากตอนเริ่ม session จะไม่ถูกรับ
+- ค่า `stopHook`, `stopHookIgnore`, `evidenceDir` (ค่าเริ่มต้น `.stack-agent/evidence`) และ `against` อ่านตอนเริ่ม session และเก็บในบันทึกของ session ที่ตำแหน่งตายตัว (`.stack-agent/evidence/sessions/` ไม่ว่า `evidenceDir` จะตั้งเป็นอะไร) การแก้ค่าเหล่านี้ใน `verify.json` จึงมีผลใน session ถัดไป ไม่ใช่กลาง session ที่กำลังถูกตรวจ และผลการรัน verify ที่ใช้ `stopHookIgnore` ต่างจากตอนเริ่ม session จะไม่ถูกรับ
 - ถ้า SessionStart hook ไม่ได้ทำงาน (เปิด plugin กลาง session) บันทึกจะถูกเขียนก่อนที่ agent จะใช้ Edit, Write, MultiEdit, NotebookEdit หรือรันคำสั่ง shell ครั้งแรกแทน การแก้ผ่านเครื่องมืออื่นก่อนหน้านั้น (เช่นเครื่องมือแก้ไฟล์ของ MCP) จะไม่อยู่ในบันทึก มีแค่กรณีที่ agent จบงานก่อนใช้เครื่องมือเหล่านี้เท่านั้นที่ hook จะใช้ `git status` และค่าปัจจุบัน
 - บันทึกตั้งต้นถูกสร้างได้ครั้งเดียวต่อ session (มีโน้ตในโฟลเดอร์ข้อมูลของ plugin หรือโฟลเดอร์ temp ของระบบจำไว้) การลบบันทึกจึงไม่ทำให้เริ่มนับใหม่ hook จะบล็อกต่อด้วยเหตุผล "the session record was removed" จนกว่างานจะถูก verify หรือ skip คำสั่ง shell ที่ลบ ย้าย หรือเขียนทับบันทึกหรือโน้ตเหล่านี้ (รวมถึงแบบใช้ glob) จะถามคนก่อน ส่วนการอ่านไม่ถาม ด่านนี้เป็นแค่ด่านเบื้องต้น agent ที่ตั้งใจลบทั้งสองอย่างผ่านคำสั่งทางอ้อมยังหลุดได้ ด่านสุดท้ายจึงเป็น CI ไม่ใช่ hook
 - ถ้ารัน verify ไม่ได้จริงๆ (ไม่มีฐานข้อมูล ไม่มีเน็ต) agent ต้องบันทึกเหตุผลด้วย `node .stack-agent/bin/verify.mjs --skip "<เหตุผล>"` (อย่างน้อย 15 ตัวอักษร) ถ้ารันคำสั่งไม่ได้เลย (sandbox ไม่มี Node หรือไฟล์เป็นแบบอ่านอย่างเดียว) ให้ปิดข้อความสุดท้ายด้วยบรรทัด `stack-agent-skip: <เหตุผล>` แล้ว Stop hook ซึ่งทำงานนอก sandbox จะบันทึกการข้ามแบบเดียวกันให้ ระบบนับเฉพาะบรรทัดสุดท้ายของข้อความ การยกตัวอย่างบรรทัดนี้ไว้ก่อนหน้าจึงไม่มีผล ถ้าผู้ใช้สั่งไม่ให้ตรวจ ให้ระบุไว้ในเหตุผลด้วย คำสั่งนี้เขียน `.stack-agent/verify-skip.json` ซึ่งเป็นไฟล์ที่ git มองเห็น (ไม่ได้ gitignore) จึงโผล่ใน `git status` และใน diff เมื่อ add แล้ว และ hook จะแสดงเหตุผลให้คุณเห็นหนึ่งครั้ง การ skip ใช้ได้กับโค้ดชุดที่บันทึกไว้เท่านั้น ถ้าแก้ต่อต้อง verify หรือ skip ใหม่
@@ -128,10 +130,11 @@ check หรือเทสที่ผ่านทั้งก่อนแล�
 - pattern เป็น regex ของ JavaScript ไม่ใช่ของ Python หรือ PCRE ไวยากรณ์ที่มีเฉพาะใน Python เช่น `(?P<name>...)` จะ error
 - pattern เป็นแบบ multiline เสมอ `^` และ `$` ตรงกับทุกบรรทัด ไม่ใช่แค่ต้นและท้ายไฟล์ ถ้าไม่สนตัวพิมพ์ใหญ่เล็กให้ใส่ `"flags": "i"`
 - pattern อยู่ใน JSON จึงต้องเขียน backslash ซ้ำสองตัวเสมอ เช่น regex `\bSELECT\b` ต้องเขียน `"\\bSELECT\\b"` ถ้าเขียน `\b` ตัวเดียวใน JSON จะกลายเป็นตัวอักษร backspace และ guard จะแจ้ง config error
-- `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`, `declinedRules` ต้องเป็น array ของ string ถ้าใส่เป็น string เดี่ยว guard จะแจ้ง config error
+- `files`, `exclude`, `to`, `toSpecifiers`, `publicEntry`, `ignore`, `declinedRules`, `pythonRoots` ต้องเป็น array ของ string ถ้าใส่เป็น string เดี่ยว guard จะแจ้ง config error
 - โฟลเดอร์เหล่านี้ถูกข้ามเสมอ: `node_modules`, `.git`, `dist`, `build`, `coverage`, `__pycache__`, `.venv`, `venv`, `.tox`, `.pytest_cache`, `.mypy_cache`, `target`, `.stack-agent/evidence`, `.stack-agent/bin` ถ้าต้องการข้ามเพิ่มให้ใส่ใน `ignore`
-- ใน repo ที่เป็น git นั้น guard และแผนที่ API อ่านเฉพาะไฟล์ที่ git จะ commit คือไฟล์ที่ track อยู่ และไฟล์ untracked ที่ไม่ได้ gitignore ไฟล์ `.env` หรือไฟล์ key ที่ gitignore ไว้จะไม่ถูกสแกน เหมือนใน CI ที่ไม่มีไฟล์นั้นอยู่ ข้อนี้ใช้กับไฟล์ที่ระบุด้วย `--files` และกับ hook หลังแก้ไฟล์ด้วย ไฟล์ที่ track อยู่จะถูกสแกนเสมอแม้ pattern ใน gitignore จะตรงกับมัน ถ้าไม่ได้อยู่ใน git จะสแกนทุกไฟล์ใต้ root
+- ใน repo ที่เป็น git นั้น guard และแผนที่ API อ่านเฉพาะไฟล์ที่ git จะ commit คือไฟล์ที่ track อยู่ และไฟล์ untracked ที่ไม่ได้ gitignore ไฟล์ `.env` หรือไฟล์ key ที่ gitignore ไว้จะไม่ถูกสแกน เหมือนใน CI ที่ไม่มีไฟล์นั้นอยู่ ข้อนี้ใช้กับไฟล์ที่ระบุด้วย `--files` และกับ hook หลังแก้ไฟล์ด้วย ไฟล์ที่ track อยู่จะถูกสแกนเสมอแม้ pattern ใน gitignore จะตรงกับมัน ถ้าไม่ได้อยู่ใน git จะสแกนทุกไฟล์ใต้ root ไฟล์ที่ระบุทีละไฟล์ (ด้วย `--files` หรือโดย hook หลังแก้ไฟล์และหลังคำสั่ง shell) ก็ข้ามโฟลเดอร์ข้างบนและรายการ `ignore` ของ config เหมือนการสแกนทั้งโปรเจกต์ที่ CI รัน
 - ไฟล์ที่ใหญ่เกิน 1 MB จะไม่ถูกตรวจ guard จะแจ้งชื่อแต่ละไฟล์เป็น warning ถ้าตั้งใจให้ข้ามจริงให้ใส่ไว้ใน `ignore`
+- `baseline` ใน guard.config.json ใช้ย้ายไฟล์ baseline (ค่าเริ่มต้น `.stack-agent/guard-baseline.json`) นอกจากคำสั่งด้านล่าง `guard.mjs` ยังรับ `--files <paths>` (ตรวจเฉพาะไฟล์เหล่านั้น), `--strict` (ไม่ใช้ baseline และรายงานการผิดกฎทั้งหมด), `--json` และ `--config FILE`
 - `to` เทียบกับไฟล์ที่ import ไปถึงจริง เช่น import `../db/index.js` ต้องเขียน `"to": ["src/db/**"]` ถ้าเขียน `"src/db"` จะไม่จับอะไรเลย
 - glob รองรับ `*`, `**`, `?` และ `{js,ts}`
 - import แบบ path alias (เช่น `@/modules/x`) ต้องตั้ง `"aliases": {"@/": "src/"}`
@@ -195,7 +198,7 @@ workflow รันเมื่อมี pull request และเมื่อ pu
 
 ทางเลี่ยงกฎที่ง่ายที่สุดคือแก้ตัว guard เอง ระบบกันไว้สามชั้น:
 
-1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/`, `stack-agent.yml` หรือ `stack-agent-<folder>.yml` ของ monorepo (หรือลบโฟลเดอร์ `.github` หรือ `.github/workflows` ส่วนการเพิ่มหรือคัดลอก workflow เข้าไปไม่ต้องถาม) รวมถึง inline script (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`) แม้จะประกอบ path ด้วย `path.join` หรือ `os.path.join`
+1. **ตอนทำงาน:** hook ถามคนก่อนเมื่อ Edit/Write หรือคำสั่ง shell (Bash หรือ PowerShell) จะแก้ `guard.config.json`, `guard-baseline.json`, `.stack-agent/bin/`, `stack-agent.yml` หรือ `stack-agent-<folder>.yml` ของ monorepo (หรือลบโฟลเดอร์ `.github` หรือ `.github/workflows` ส่วนการเพิ่มหรือคัดลอก workflow เข้าไปไม่ต้องถาม) รวมถึง inline script (`node -e`, `node --eval=`, `-pe`, `python -c`, `py -3 -c`, `deno eval`) แม้จะประกอบ path ด้วย `path.join` หรือ `os.path.join` hook ยังปฏิเสธการปิด git hook ด้วย: `--no-verify` ในรูปย่อใดก็ตามที่ git รับ (`--no-verif`), `-c` หรือ `--config-env` ที่ตั้ง `core.hooksPath` และการตั้งค่าถาวรด้วย `git config core.hooksPath`
 2. **ใน CI:** `--compare-ref` fail เมื่อ baseline โตขึ้น หรือกฎถูกลบหรือขอบเขตของกฎเปลี่ยน (รวมถึงการขยาย เพราะ guard แยกสองกรณีนี้ไม่ออก)
 3. **ในการรีวิว:** เพิ่ม `.github/CODEOWNERS` ให้คนที่ระบุต้องอนุมัติทุกการแก้ใน `.stack-agent/` เช่น `/.stack-agent/ @your-org/leads` (init ไม่ได้สร้างให้ เพราะไม่รู้ชื่อทีม)
 
@@ -221,7 +224,7 @@ node .stack-agent/bin/api-map.mjs --draft > .stack-agent/api-map.md
 node .stack-agent/bin/api-map.mjs
 ```
 
-`--draft` ใส่คอลัมน์ Handler เป็นไฟล์และบรรทัดที่ประกาศ route ให้ชี้ไปที่ไฟล์ handler จริง (เขียนเป็น `path` หรือ `path:line` ก็ได้) แล้วเติม Calls และ Owner จากโค้ด แถวที่ไม่แน่ใจให้คงคำว่า `TODO` ไว้ให้คนตรวจ
+`--draft` ใส่คอลัมน์ Handler เป็นไฟล์และบรรทัดที่ประกาศ route ให้ชี้ไปที่ไฟล์ handler จริง (เขียนเป็น `path` หรือ `path:line` ก็ได้) แล้วเติม Calls และ Owner จากโค้ด แถวที่ไม่แน่ใจให้คงคำว่า `TODO` ไว้ให้คนตรวจ `--config FILE` อ่าน api-map.json ไฟล์อื่น `--json` พิมพ์ผลเป็นข้อมูล และ `verifyConfig` ใน api-map.json ชี้ไปที่ verify.json ที่อยู่ที่อื่นสำหรับคำเตือนเรื่องการครอบคลุมของเช็ก
 
 คำสั่งที่สอง:
 
@@ -246,7 +249,7 @@ node .stack-agent/bin/feature-map.mjs --draft
 node .stack-agent/bin/feature-map.mjs
 ```
 
-`--draft` พิมพ์แถวละหนึ่ง verify check ไว้เป็นจุดเริ่ม ตัวตรวจจะ fail (exit 1) เมื่อไฟล์ใน `Where` หายไป บรรทัดเกินความยาวไฟล์ ข้อความ anchor ไม่อยู่ในไฟล์แล้ว หรือ check ที่อ้างถึงไม่มีใน `verify.json` และจะเตือนเมื่อ feature ไม่มี check หรือยังมีช่อง `TODO` CI จะรันเมื่อมีไฟล์นี้ ควรใช้ `path#text` มากกว่า `path:line` เพราะข้อความเปลี่ยนก็ต่อเมื่อสิ่งที่ผู้ใช้แตะเปลี่ยน โปรเจกต์ที่ติดตั้งไว้ก่อนมี feature map จะไม่ได้ไฟล์นี้เมื่อรัน `init` ซ้ำ ให้เริ่มเองด้วย `--draft` ตัวอย่างที่ไม่ใช่ backend ทั้งสี่มีไฟล์นี้แล้ว
+`--draft` พิมพ์แถวละหนึ่ง verify check ไว้เป็นจุดเริ่ม ตัวตรวจจะ fail (exit 1) เมื่อไฟล์ใน `Where` หายไป บรรทัดเกินความยาวไฟล์ ข้อความ anchor ไม่อยู่ในไฟล์แล้ว หรือ check ที่อ้างถึงไม่มีใน `verify.json` และจะเตือนเมื่อ feature ไม่มี check หรือยังมีช่อง `TODO` CI จะรันเมื่อมีไฟล์นี้ ควรใช้ `path#text` มากกว่า `path:line` เพราะข้อความเปลี่ยนก็ต่อเมื่อสิ่งที่ผู้ใช้แตะเปลี่ยน โปรเจกต์ที่ติดตั้งไว้ก่อนมี feature map จะไม่ได้ไฟล์นี้เมื่อรัน `init` ซ้ำ ให้เริ่มเองด้วย `--draft` ตัวอย่างที่ไม่ใช่ backend ทั้งสี่มีไฟล์นี้แล้ว `--map FILE` ใช้ตรวจแผนที่ที่เก็บไว้ที่อื่น และ `--json` พิมพ์ผลเป็นข้อมูล
 
 ## 4. กฎของทีม และตรวจว่าตั้งค่าครบ
 
@@ -295,7 +298,7 @@ agent ทั้งสองตัวรัน git แบบ `git -C "<review roo
 
 candidate จาก guard และ API map ไม่ส่งให้ verifier แต่ skill รัน check นั้นซ้ำเองแล้วบันทึก `verified_by: "script:<command>"` คนตั้ง `found_by` กับ `verified_by` คือ skill ไม่ใช่ agent ส่งให้ verifier ได้ไม่เกิน 8 รายการต่อรอบ ที่เหลือเป็น `needs_validation`
 
-`review-findings.mjs validate` ตรวจทุกไฟล์ก่อนใช้: ฟิลด์ที่แต่ละคำตัดสินต้องมีหรือห้ามมี, id ไม่ซ้ำ, คนเจอไม่ได้ตรวจของตัวเอง, ใช้ script เป็นผู้ตรวจได้เฉพาะ finding จาก guard, API map หรือ evidence, กฎ guard บรรทัดใน `rules.md` และบรรทัดในไฟล์มาตรฐานที่อ้างมีอยู่จริง (และ source แบบ standards ต้องชี้ไปที่ไฟล์ในรายชื่อข้างบน) โค้ดที่ยกมาต้องอยู่ภายใน 3 บรรทัดจากบรรทัดที่อ้างใน commit ที่รีวิว (`--root <checkout>` หรือ `--ref <commit>`), finding ของ commit ใดต้องอ้าง (ในตำแหน่งหรือหลักฐานอย่างน้อยหนึ่งรายการ) ไฟล์ที่ commit นั้นแก้ จะได้ไม่โยนปัญหาที่มีอยู่ก่อนแล้วให้ commit ที่กำลังรีวิว และถ้าใส่ `--candidates` ก็ตรวจว่าไม่มี candidate ไหนหายไประหว่างทาง มันพิสูจน์แค่รูปแบบกับการอ้างอิงโค้ด ไม่ได้พิสูจน์ว่า finding ถูก `review-findings.mjs rows` แปลงไฟล์สุดท้ายเป็นแถวใน review log ไฟล์เหล่านี้อยู่ใน `.stack-agent/evidence/review/<date>-<seed>/` ซึ่ง gitignore ไว้พร้อม evidence อื่น ส่วน `.stack-agent/review-log.md` คือบันทึกที่ commit
+`review-findings.mjs validate` ตรวจทุกไฟล์ก่อนใช้: ฟิลด์ที่แต่ละคำตัดสินต้องมีหรือห้ามมี, id ไม่ซ้ำ, คนเจอไม่ได้ตรวจของตัวเอง, ใช้ script เป็นผู้ตรวจได้เฉพาะ finding จาก guard, API map หรือ evidence, กฎ guard บรรทัดใน `rules.md` และบรรทัดในไฟล์มาตรฐานที่อ้างมีอยู่จริง (และ source แบบ standards ต้องชี้ไปที่ไฟล์ในรายชื่อข้างบน) โค้ดที่ยกมาต้องอยู่ภายใน 3 บรรทัดจากบรรทัดที่อ้างใน commit ที่รีวิว (`--root <checkout>` หรือ `--ref <commit>`), finding ของ commit ใดต้องอ้าง (ในตำแหน่งหรือหลักฐานอย่างน้อยหนึ่งรายการ) ไฟล์ที่ commit นั้นแก้ จะได้ไม่โยนปัญหาที่มีอยู่ก่อนแล้วให้ commit ที่กำลังรีวิว และถ้าใส่ `--candidates` ก็ตรวจว่าไม่มี candidate ไหนหายไประหว่างทาง มันพิสูจน์แค่รูปแบบกับการอ้างอิงโค้ด ไม่ได้พิสูจน์ว่า finding ถูก `review-findings.mjs rows` แปลงไฟล์สุดท้ายเป็นแถวใน review log ไฟล์เหล่านี้อยู่ใน `.stack-agent/evidence/review/<date>-<seed>/` ซึ่ง gitignore ไว้พร้อม evidence อื่น ส่วน `.stack-agent/review-log.md` คือบันทึกที่ commit `--stage candidates` ใช้ตรวจ candidate ของผู้รีวิวก่อนส่งให้ผู้ตรวจยืนยัน (stage ค่าเริ่มต้นคือ `final`) และ `rows` ต้องมี `--date YYYY-MM-DD` เป็นวันที่ของแถวที่สร้าง
 
 สำหรับงานที่กำลังทำอยู่ reviewer จะรัน `node .stack-agent/bin/verify.mjs --evidence-status` ด้วย ซึ่งบอกว่า evidence ล่าสุดเป็นการรันครบที่ผ่านสำหรับโค้ดตอนนี้หรือไม่ โดยไม่รันอะไรเลย โปรเจคที่ตั้งค่าก่อนมี flag นี้ต้องอัปเดตเครื่องมือที่ vendor ไว้: รัน `node <path-to-Stack_Agent>/scripts/init.mjs .` อีกครั้ง (`init.mjs --check` จะแจ้ง `.stack-agent/bin/verify.mjs` ว่า outdated จนกว่าจะทำ)
 

@@ -74,30 +74,35 @@ function shortFlags(rest) {
 }
 
 function classifyGit({ env, globals, sub, rest }) {
-	if (globals.some((g) => /^-c=?core\.hookspath=/i.test(g)))
+	// git accepts any unambiguous prefix of a long option (--no-verif for --no-verify, --del for --delete), so long
+	// options are matched by prefix down to the shortest form git takes for that subcommand
+	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t.split("=")[0]));
+	if (globals.some((g) => /^(-c|--config-env)=?core\.hookspath=/i.test(g)))
 		return { decision: "deny", reason: "blocked: overriding core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead." };
+	// `git config core.hooksPath x` (or `git config set ...`) turns the hooks off for every later command; reading or
+	// unsetting it does not
+	if (sub === "config" && rest.some((t) => /^core\.hookspath$/i.test(t)) && !rest.some((t) => /^(--get|--get-all|--get-regexp|--unset|--unset-all|--list|-l|get|unset|list)$/.test(t)))
+		return { decision: "deny", reason: "blocked: setting core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead." };
 	if ((sub === "commit" || sub === "push" || sub === "merge") && env.some((e) => HOOK_DISABLING_ENV.test(e)))
 		return { decision: "deny", reason: `blocked: \`${env.join(" ")}\` turns off the repo's git hooks for this \`git ${sub}\`. Fix what the hook reports instead.` };
-	if ((sub === "commit" || sub === "push" || sub === "merge" || sub === "am" || sub === "rebase") && rest.includes("--no-verify"))
+	if ((sub === "commit" || sub === "push" || sub === "merge" || sub === "am" || sub === "rebase") && long("--no-verify", 8))
 		return { decision: "deny", reason: `blocked: \`git ${sub} --no-verify\` skips the repo's guard and checks. Fix what the hook reports instead.` };
 	if (sub === "commit" && shortFlags(rest).includes("n"))
 		return { decision: "deny", reason: "blocked: `git commit -n` is --no-verify and skips the repo's guard and checks. Fix what the hook reports instead." };
 	if (sub === "push") {
-		const forced = shortFlags(rest).includes("f") || rest.some((t) => t === "--force" || t.startsWith("--force-with-lease") || t.startsWith("--force-if-includes") || t === "--mirror" || /^\+/.test(t) || /^[^-][^:]*:\+/.test(t));
+		const forced = shortFlags(rest).includes("f") || rest.some((t) => t === "--force" || t.startsWith("--force-") || /^\+/.test(t) || /^[^-][^:]*:\+/.test(t)) || long("--mirror", 3);
 		if (forced) return { decision: "ask", reason: "force-push rewrites shared history and cannot be undone for others. A human must approve it." };
-		const deletes = shortFlags(rest).includes("d") || rest.includes("--delete") || rest.includes("--prune") || rest.some((t) => /^:[^:]+$/.test(t));
+		const deletes = shortFlags(rest).includes("d") || long("--delete", 4) || long("--prune", 5) || rest.some((t) => /^:[^:]+$/.test(t));
 		if (deletes) return { decision: "ask", reason: "this push deletes a remote branch or tag. A human must approve it." };
 	}
-	if (sub === "reset" && (rest.includes("--hard") || rest.includes("--merge") || rest.includes("--keep")))
+	if (sub === "reset" && (long("--hard", 3) || long("--merge", 4) || long("--keep", 3)))
 		return { decision: "ask", reason: "`git reset --hard` discards uncommitted work permanently. A human must approve it." };
-	if (sub === "clean" && (shortFlags(rest).includes("f") || rest.includes("--force")))
+	if (sub === "clean" && (shortFlags(rest).includes("f") || long("--force", 3)))
 		return { decision: "ask", reason: "`git clean -f` deletes untracked files permanently. A human must approve it." };
 	const onlyUnstages = sub === "restore" && (rest.includes("--staged") || rest.includes("-S")) && !rest.includes("--worktree") && !rest.includes("-W");
 	if ((sub === "checkout" || sub === "restore") && !onlyUnstages && rest.some((t) => t === "." || t === ":/" || t === "*"))
 		return { decision: "ask", reason: "this discards local changes to every file permanently. A human must approve it." };
 	// -d alone refuses to delete a branch whose commits are not merged anywhere; -D or --delete --force deletes them
-	// git accepts any unambiguous prefix of a long option: --del for --delete, --forc for --force
-	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t));
 	if (sub === "branch" && (shortFlags(rest).includes("D") || ((shortFlags(rest).includes("d") || long("--delete", 5)) && (shortFlags(rest).includes("f") || long("--force", 6)))))
 		return { decision: "ask", reason: "`git branch -D` deletes a branch even when its commits are not merged anywhere, which can lose work. A human must approve it." };
 	// these point an existing branch somewhere else; its old commits survive only in the reflog. -M (force rename)

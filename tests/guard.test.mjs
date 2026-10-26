@@ -278,3 +278,18 @@ test("--compare-ref fails when the baseline grows or a rule is removed or narrow
 	assert.match(loosened.text, /rule changed scope: no-sql-in-controller/);
 	assert.throws(() => guard(dir, "--compare-ref", "no-such-ref"), /not a commit/);
 });
+
+test("files named one by one skip the config's ignore list and the default folders, as the full scan does", () => {
+	const dir = copySample();
+	const key = "-----BEGIN PRIVATE KEY-----\n";
+	write(dir, "test/fixtures/key.pem", key);
+	write(dir, "dist/bundle.js", key);
+	write(dir, "src/leak.js", key);
+	assert.equal(guard(dir).code, 1, "the full scan still sees src/leak.js");
+	const named = guard(dir, "--files", "test/fixtures/key.pem", "dist/bundle.js");
+	assert.equal(named.code, 0, named.text);
+	const leak = guard(dir, "--files", "test/fixtures/key.pem", "src/leak.js");
+	assert.equal(leak.code, 1);
+	assert.match(leak.text, /src\/leak\.js:1 {2}\[no-private-keys\]/);
+	assert.doesNotMatch(leak.text, /fixtures/);
+});

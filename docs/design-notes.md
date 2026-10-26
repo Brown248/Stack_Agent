@@ -61,7 +61,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 464 pass on Windows 11, Node 26 (2026-10-26) |
+| Unit and integration tests | 504 pass on Windows 11, Node 26, and on Linux (WSL2 Ubuntu), Node 22 (2026-10-26) |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -423,6 +423,22 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **`up-down-up` passed for the first time: 2 of 3 with the plugin, 0 of 3 without.** Every earlier run failed it in both arms, because the sandbox cannot write a scratch database file. With the sample's new `redo`, run 1's trace shows the new migration applied, rolled back, and applied again, and `migrate: redo ok`. Run 3's judges split (PASS FAIL FAIL) and its evidence held no runner output. The bare arm read `migrate.mjs`, `redo` included, and never ran a round trip.
 - `guard-passed` split in both arms (1 of 3 with, 2 of 3 without), on a step nothing here changed. The judge's evidence for a long trace (50 to 80 KB here) is cut in the middle, so a guard run there may not reach it; the final messages report `guard: ok`. Left as a grader limit.
 - `debug-blank-name`: `repro-before-fix` passed 2 of 2 with the plugin and 0 of 2 without, after the wording that allows reading the code before the repro.
+
+## A detailed review of 0.5.0 (2026-10-26, later)
+
+**Method.** Four agents read the code independently (a bug hunt with reproductions, docs against code in both languages, behavior with no test, and the eval grader reference), and the CI steps ran on Linux (WSL2 Ubuntu, Node 22) against the release commit. Every finding below was reproduced again or read in the code before it was fixed; each fix has a test.
+
+- **Two ways around the guard.** git takes any unambiguous prefix of a long option, so `git commit --no-verif` committed past a failing pre-commit hook while the shell hook let it through; so did `git --config-env=core.hooksPath=VAR commit` and a persistent `git config core.hooksPath`. Both are denied now, and the other git gates match prefixes down to the shortest form git accepts.
+- **The hooks judged files CI does not.** Given a list of files, the guard applied only `.gitignore`, not the config's `ignore` list or the default skipped folders, so a fixture with a key was blamed by the after-edit hook, the after-shell hook, and the Stop hook while CI's full scan passed it.
+- **Three faults in 0.5.0's after-shell guard.** It blamed the first command for a `.md` file left dirty before the session (the session record leaves `stopHookIgnore` files out, the guard does not); one unreadable changed file emptied the batch hash, which turned the hook off for the session; and edit hooks running at the same time overwrote each other's record. The session record now keeps every dirty file's blob id, hashing falls back to one file at a time, and the edit hook only appends to a log the shell hook reads past its own snapshot. It also groups changed files by their nearest project, so a command at the top of a monorepo reaches the projects inside it.
+- **Found while writing tests.** Output between 8 and 12 MB passed as if all of it had been matched: the truncation flag was raised only when the buffer past the 4 MB head passed 8 MB. A command that leaves a process holding its output (`start /b`) kept verify waiting until that process ended and was then reported as timed out; verify now waits for the output to go quiet (1.5 s, 10 s at most). The first version waited a fixed 1.5 s, and one full Linux run under load failed a test whose command's output arrived late; the quiet-time rule replaced it, and the same suite passed on the next loaded run.
+- **Linux.** Apart from that, the only failure was `cli-minlen` on a machine with `python3` and no `python`; it now skips like the other Python tests.
+
+**Measured.** `feature-map-lookup` (new, 2 runs per arm, $0.57): 1.00 with the plugin against 0.00 and 0.50 without; with the plugin the agent read the feature map both times, without it never. `verify-before-done` after the skill's field list changed (2 runs per arm, $0.91): 1.00 in both arms; the bare arm had scored 0.67 in the last run, so this is the run-to-run spread the `run-evals` note describes.
+
+**A/B, `init-library`** (new: a library with Stack Agent taken out, the skill started by name; plugin arm, 2 runs, $0.45): verify and the guard passed in both and the workflow was written, but `init --check` passed in neither. Both agents were stopped by the protected-path hook: edits to `guard.config.json` and the workflow ask a human, and a headless session has none, so the edits were refused. One agent said exactly which edits waited for approval and why; the other finished the guard and left the workflow's install step with a note. In a headless run this task measures how far setup gets without approval. Whether a guard config or workflow that has never been committed should be editable without asking is a design question this round does not settle.
+
+**Not done.** The eval reference says a `regex` grader can read the trace (`target: trace`) and `tool_used` takes an `input_match`; that would let `up-down-up` and `guard-passed` stop depending on a judge that sees a long trace cut in the middle. It is not confirmed by public docs and was not tried.
 
 ## Self-review log
 

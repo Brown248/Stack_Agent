@@ -22,7 +22,7 @@ Stack Agent ย้ายกฎออกจาก prompt ไปไว้ในส
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | รันเทส เปิด server (ถ้ามี) รัน HTTP check และ command check แล้วเขียนหลักฐานลง `.stack-agent/evidence/` |
 | Hard constraint (CI) | `scripts/guard.mjs` | กฎแบบ regex ใช้ได้ทุกภาษา และกฎ import สำหรับ JS/TS และ Python มี baseline แบบ ratchet คือของเดิมผ่าน แต่ของใหม่ต้อง fail ส่วน `--compare-ref` ทำให้ PR ที่แอบผ่อนกฎ fail |
-| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | ในโปรเจกต์ที่ติดตั้ง Stack Agent แล้ว บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบหรือบังคับย้าย branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้ง และไม่ให้ agent จบงานจนกว่าหลักฐานของ verify จะตรงกับโค้ดที่แก้ หรือ agent บันทึกเหตุผลว่าทำไม verify ไม่ได้ |
+| Hard constraint (ตอนทำงาน) | `hooks/hooks.json` | ในโปรเจกต์ที่ติดตั้ง Stack Agent แล้ว บล็อกการปิด git hook (`--no-verify`, `HUSKY=0`, `core.hooksPath`) และถามคนก่อน force-push, ลบหรือบังคับย้าย branch, `reset --hard` หรือแก้ไฟล์ของ guard เอง รัน guard หลังแก้ไฟล์ทุกครั้งและกับไฟล์ที่คำสั่ง shell แต่ละครั้งเปลี่ยน และไม่ให้ agent จบงานจนกว่าหลักฐานของ verify จะตรงกับโค้ดที่แก้ หรือ agent บันทึกเหตุผลว่าทำไม verify ไม่ได้ |
 | Soft constraint | `.stack-agent/rules.md` | วิธีเขียนที่ทีมชอบ โหลดเข้าทุก session |
 | Feature map (backend) | `scripts/api-map.mjs`, skill `api-map` | ร่างแผนที่ endpoint จากโค้ด และ fail เมื่อแผนที่ไม่ตรงกับโค้ด |
 | Feature map (preset อื่น) | `scripts/feature-map.mjs`, skill `feature-map` | ตารางของสิ่งที่ผู้ใช้ทำและตำแหน่งในโค้ด (`path`, `path:line` หรือ `path#text`) fail เมื่อไฟล์ บรรทัด ข้อความ anchor หรือ verify check ที่อ้างถึงหายไป |
@@ -70,9 +70,9 @@ Fork หรือ clone repo แล้วแก้ได้ทุกส่วน
 
 ## การใช้งานประจำวัน
 
-1. Agent แก้โค้ด hook จะรัน guard ทุกครั้งที่แก้ไฟล์ และบอกวิธีแก้เมื่อเจอการละเมิดกฎ
+1. Agent แก้โค้ด hook จะรัน guard ทุกครั้งที่แก้ไฟล์ และกับไฟล์ที่คำสั่ง shell เปลี่ยน แล้วบอกวิธีแก้เมื่อเจอการละเมิดกฎ
 2. ก่อนจบงาน agent รัน `node .stack-agent/bin/verify.mjs` แล้วรายงานไฟล์หลักฐาน ถ้าพยายามจบโดยไม่มีหลักฐานที่ตรงกับโค้ด Stop hook จะบล็อกไว้ได้ถึง 3 ครั้งติดกัน จากนั้นจะปล่อยให้จบและบอกคุณว่าการแก้นี้ยังไม่ได้ verify
-3. CI รัน guard และ `--compare-ref` ทุก pull request และรันการตรวจแผนที่ API ในโปรเจคที่มีแผนที่
+3. CI รัน guard (พร้อม `--compare-ref` ใน pull request) รันการตรวจแผนที่ API หรือ feature map ในโปรเจคที่มี และรัน verify ทุก push และ pull request (พร้อมขั้น against ใน pull request)
 4. เมื่อต้องแก้ agent เรื่องเดิมซ้ำสองครั้ง ให้ใช้ `/stack-agent:correct` เปลี่ยนเรื่องนั้นเป็นกฎ
 5. สุ่มตรวจ commit ล่าสุดด้วย `/stack-agent:sample-review` แทนการรีวิวทุก PR ก่อน merge
 

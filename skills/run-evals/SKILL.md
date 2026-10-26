@@ -44,11 +44,14 @@ The exit code is 0 only when every case reaches the threshold (default 1.0).
 | `add-endpoint` | `add-endpoint-delete-item` |
 | `add-migration` | `add-migration-column` |
 | `api-map` | `api-map-lookup` |
+| `feature-map` | `feature-map-lookup` (the library example, so the map is a feature map, not an API map) |
 | `debug` | `debug-blank-name` (a plain bug report; `used-debug-skill` shows whether the skill was picked up on its own) |
 | `correct` | `correct-error-body` (started by name; the planted history shows the mistake twice) |
 | `reflect` | `reflect-lessons` (started by name; the corrections are quoted in the prompt) |
 
 `sample-review` has no case: it reviews each commit in a temporary checkout, and the eval sandbox cannot write any file, so the checkout cannot be made. Measure it with the A/B task `review-spec` (`scripts/ab/run.mjs`), which runs real sessions.
+
+`stack-agent-init` has no case for the same reason (it runs `init.mjs` from the shell). The A/B task `init-library` starts a real session from a library with Stack Agent taken out and grades the result with `init --check`, verify, and the guard; run its plugin arm only. `mine-corrections` has neither: it reads past Claude Code sessions from your home folder, which neither harness gives a run, so check it by hand on a repository you have worked in.
 
 ## Read the result
 

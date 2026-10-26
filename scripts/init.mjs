@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "./guard.mjs";
 import { ConfigError, parseArgs, toPosix } from "./lib/files.mjs";
 
-const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--check] [--list-presets]
+const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--shared-rules FILE] [--check] [--list-presets]
   copies the Stack Agent tools into TARGET_DIR/.stack-agent/bin (refreshed on every run),
   adds config templates for the chosen preset and a CI workflow only where none exist,
   and ignores the evidence dir.

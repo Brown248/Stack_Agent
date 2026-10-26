@@ -150,7 +150,8 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | `--runs N` | Runs per task and arm. Default 1. |
 | `--model`, `--budget USD` | Both required. The budget is a per-run cap passed as `--max-budget-usd`; there is no default on purpose. |
 | `--plugin DIR`, `--out DIR` | Plugin to test (default: this repo) and where to write results (default: a new folder under the system temp dir). |
-| `--no-isolate` | Do not pass `--setting-sources project,local --strict-mcp-config`. Isolation is the default. |
+| `--no-isolate` | Do not pass `--setting-sources project,local --strict-mcp-config`. Isolation is the default (`--isolate` is accepted and changes nothing). |
+| `--disallowed-tools LIST` | Comma list passed to `claude --disallowedTools` in both arms, e.g. `"Bash(node:*)"` for an agent that cannot run Node. Hooks still run. |
 | `--judge MODEL` | Also score the task's `rubric` (criteria a script cannot check, such as "the controller only parses the request") with `agents/judge.md`, run as a second `claude` session with MODEL. The judge reads a blind copy of the run under a random name, with the change as `CHANGES.diff` and without the verify evidence, the skip record, or the Stack Agent configs (only `rules.md` stays), so it cannot tell the arm. Each criterion becomes a `judge:...` column; an unanswered one is not applicable. Off by default: it costs up to `--budget` more per run. |
 | `--dry-run` | Scaffold and grade an untouched copy of each project. Never calls `claude`, costs nothing. Use it to check a new task. |
 | `--json` | Print the results as JSON instead of the summary table. |

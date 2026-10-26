@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { classify } from "../scripts/hooks/pre-bash.mjs";
-import { copySample, git, repoRoot, runNode, write } from "./helpers.mjs";
+import { copySample, git, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
 const hook = (name) => path.join(repoRoot, "scripts", "hooks", name);
 const hookInput = (obj) => JSON.stringify(obj);
@@ -27,6 +27,56 @@ test("pre-bash denies guard bypasses, including global git options and hook-disa
 	]) {
 		assert.equal(classify(cmd)?.decision, "deny", cmd);
 	}
+});
+
+test("pre-bash denies the forms git also accepts: abbreviated options, --config-env, git config, and hook env on push and merge", () => {
+	for (const cmd of [
+		// git takes any unambiguous prefix of a long option
+		"git commit --no-verif -m x",
+		"git commit --no-veri -m x",
+		"git push --no-verif",
+		"git merge --no-verify feat",
+		"git am --no-verify x.patch",
+		"git rebase --no-verify main",
+		// --config-env reads the value from an environment variable
+		"X=/dev/null git --config-env=core.hooksPath=X commit -m y",
+		"git --config-env core.hooksPath=X commit -m y",
+		"git -c core.hookspath= commit -m x",
+		// a persistent setting turns the hooks off for every later command
+		"git config core.hooksPath /dev/null",
+		"git config --local core.hooksPath .nohooks",
+		"git config set core.hooksPath x",
+		"SKIP=guard git push",
+		"LEFTHOOK=0 git merge feat",
+	]) {
+		assert.equal(classify(cmd)?.decision, "deny", cmd);
+	}
+	for (const cmd of ["git config --get core.hooksPath", "git config --unset core.hooksPath", "git config core.autocrlf false", "git config get core.hooksPath", "git commit --verbose -m x", "git push --verbose"])
+		assert.equal(classify(cmd), null, cmd);
+});
+
+test("pre-bash asks for every other destructive form git accepts", () => {
+	for (const cmd of [
+		"git push --force-if-includes",
+		"git push --force-w",
+		"git push origin main:+main",
+		"git push --m",
+		"git push -d origin old",
+		"git push --de origin old",
+		"git push --prune origin",
+		"git push --pru origin",
+		"git reset --merge",
+		"git reset --keep HEAD~1",
+		"git reset --k HEAD~1",
+		"git reset --ha HEAD~1",
+		"git clean --f -d",
+		"git checkout :/",
+		"git restore *",
+		"git stash drop",
+	]) {
+		assert.equal(classify(cmd)?.decision, "ask", cmd);
+	}
+	for (const cmd of ["git reset --soft HEAD~1", "git reset HEAD file.js", "git push --progress", "git push origin main", "git clean -n", "git restore --staged ."]) assert.equal(classify(cmd), null, cmd);
 });
 
 test("pre-bash asks before destructive, baseline-raising, or guard-loosening commands", () => {
@@ -336,4 +386,77 @@ test("hooks.json runs the post-bash guard after Bash and PowerShell", () => {
 	const post = JSON.parse(fs.readFileSync(path.join(repoRoot, "hooks/hooks.json"), "utf8")).hooks.PostToolUse;
 	const entry = post.find((e) => e.hooks.some((h) => h.command.includes("post-bash-guard.mjs")));
 	assert.deepEqual(entry?.matcher.split("|").sort(), ["Bash", "PowerShell"]);
+});
+
+test("the after-edit and after-shell guards leave out what the guard config ignores, as CI does", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	write(dir, "test/fixtures/key.pem", "-----BEGIN PRIVATE KEY-----\n");
+	assert.equal(runNode(hook("post-edit-guard.mjs"), [], { input: hookInput({ tool_name: "Write", cwd: dir, session_id: "ig", tool_input: { file_path: "test/fixtures/key.pem" } }) }).code, 0);
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: dir, session_id: "ig2", tool_input: { command: "cp a b" } }) }).code, 0);
+});
+
+test("files left dirty before the session are not blamed on a command or on the session, docs included", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	// a conflict marker in a doc the human left half-merged; the Stop hook's fingerprint leaves *.md out, the guard does not
+	write(dir, "docs/notes.md", "intro\n<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> other\n");
+	assert.equal(runNode(hook("session-start.mjs"), [], { input: hookInput({ hook_event_name: "SessionStart", cwd: dir, session_id: "md" }) }).code, 0);
+	const bash = hookInput({ tool_name: "Bash", cwd: dir, session_id: "md", tool_input: { command: "ls" } });
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: bash }).code, 0, "ls changed nothing");
+	write(dir, "src/modules/items/service.js", fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8") + "\n");
+	const stop = runNode(hook("stop-verify.mjs"), [], { input: hookInput({ hook_event_name: "Stop", cwd: dir, session_id: "md" }) });
+	assert.doesNotMatch(stop.stderr, /notes\.md/, "the Stop hook's guard leaves the human's file out too");
+});
+
+test("blobIds hashes every file it can, even when one in the batch cannot be read", async () => {
+	const { blobIds } = await import("../scripts/hooks/session-record.mjs");
+	const dir = copySample();
+	git(dir, "init", "-q");
+	const ids = blobIds(dir, ["src/app.js", "gone/missing.js", "src/server.js"]);
+	assert.deepEqual([...ids.keys()].sort(), ["src/app.js", "src/server.js"]);
+	assert.match(ids.get("src/app.js"), /^[0-9a-f]{40}$/);
+	if (process.platform !== "win32") {
+		write(dir, '"quoted.js', "x\n");
+		assert.ok(blobIds(dir, ['"quoted.js', "src/app.js"]).has('"quoted.js'), "a name git would unquote is hashed on its own");
+	}
+});
+
+test("after-edit hooks running at the same time keep every entry, and the after-shell hook reports none of them again", async () => {
+	const { spawn } = await import("node:child_process");
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	const files = Array.from({ length: 8 }, (_, i) => `src/modules/m${i}/controller.js`);
+	for (const f of files) write(dir, f, 'export const q = "SELECT * FROM t";\n');
+	const run = (f) =>
+		new Promise((resolve) => {
+			const child = spawn(process.execPath, [hook("post-edit-guard.mjs")], { stdio: ["pipe", "ignore", "ignore"] });
+			child.on("close", resolve);
+			child.stdin.end(hookInput({ tool_name: "Write", cwd: dir, session_id: "par", tool_input: { file_path: f } }));
+		});
+	await Promise.all(files.map(run));
+	const { readSeen } = await import("../scripts/hooks/session-record.mjs");
+	assert.deepEqual(Object.keys(readSeen(dir, "par")).filter((f) => files.includes(f)).sort(), [...files].sort());
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: dir, session_id: "par", tool_input: { command: "npm test" } }) }).code, 0);
+});
+
+test("the after-shell guard reaches a monorepo project when the command runs at the top of the repository", () => {
+	const top = tempDir("stack-agent-mono-");
+	fs.cpSync(copySample(), path.join(top, "apps", "api"), { recursive: true });
+	write(top, "README.md", "monorepo\n");
+	git(top, "init", "-q");
+	git(top, "add", "-A");
+	git(top, "commit", "-qm", "base");
+	write(top, "apps/api/src/modules/items/controller.js", 'export const q = "SELECT * FROM items";\n');
+	write(top, "tools/loose.js", "-----BEGIN PRIVATE KEY-----\n");
+	const r = runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: top, session_id: "mono", tool_input: { command: "sed -i ..." } }) });
+	assert.equal(r.code, 2, r.stderr);
+	assert.match(r.stderr, /apps\/api\/src\/modules\/items\/controller\.js:1 \[no-sql-in-controller\]/);
+	assert.doesNotMatch(r.stderr, /loose\.js/, "a file outside every project has no guard config");
 });

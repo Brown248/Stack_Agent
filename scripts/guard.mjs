@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { ConfigError, gitIgnored, matchesAny, parseArgs, projectFiles, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
+import { ConfigError, gitIgnored, isSkipped, matchesAny, parseArgs, projectFiles, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node guard.mjs [--root DIR] [--config FILE] [--files F...] [--json] [--strict]
                      [--update-baseline [--allow-increase]] [--compare-ref GIT_REF]
@@ -370,9 +370,10 @@ function parseAllows(lines, { today, latest, ruleIds, maxAllowDays }) {
 export const MAX_FILE_BYTES = 1_000_000;
 
 export function runGuard({ root, config, files, today = new Date().toISOString().slice(0, 10), warnings }) {
-	// gitignored files never reach CI, so they are not scanned here either, also when named one by one
+	// gitignored files never reach CI, and the full scan CI runs leaves out the config's ignore list, so neither is
+	// scanned here either, also when named one by one (the hooks name the files that changed)
 	const ignored = files ? gitIgnored(root, files) : new Set();
-	const all = files ? files.filter((f) => !ignored.has(f)) : projectFiles(root, config.ignore);
+	const all = files ? files.filter((f) => !ignored.has(f) && !isSkipped(f, config.ignore)) : projectFiles(root, config.ignore);
 	const violations = [];
 	const ruleIds = new Set(config.rules.map((r) => r.id));
 	const latest = addDays(today, config.maxAllowDays);

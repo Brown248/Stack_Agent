@@ -8,7 +8,7 @@ import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../gua
 import { matchesAny } from "../lib/files.mjs";
 import { FINGERPRINT_VERSION, SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
-import { readConfig, readStart, readState, recordLost, writeState } from "./session-record.mjs";
+import { blobIds, readConfig, readStart, readState, recordLost, writeState } from "./session-record.mjs";
 
 export { changedFiles, parsePorcelainZ };
 export const MAX_BLOCKS = 3;
@@ -160,8 +160,12 @@ export function sessionGuardFailures(root, { files, sessionStart = null, current
 		const r = spawnSync("git", ["diff", "--name-only", "--relative", sessionStart.head, "HEAD"], { cwd: root, encoding: "utf8" });
 		if (r.status === 0) for (const f of r.stdout.split("\n").filter(Boolean)) touched.add(f);
 	}
-	const dirty = sessionStart?.dirty;
-	const own = [...touched].filter((f) => fs.existsSync(path.join(root, f)) && !(dirty && current && f in dirty && dirty[f] === current.entries.get(f)));
+	// guardSeen holds every file dirty at the start, docs included; older records only have dirty, which leaves out
+	// what stopHookIgnore matches, and those files are compared through the fingerprint as before
+	const before = sessionStart?.guardSeen ?? sessionStart?.dirty;
+	const existing = [...touched].filter((f) => fs.existsSync(path.join(root, f)));
+	const now = sessionStart?.guardSeen ? blobIds(root, existing.filter((f) => f in before)) : new Map([...(current?.entries ?? [])]);
+	const own = existing.filter((f) => !(before && f in before && before[f] === now.get(f)));
 	if (!own.length) return [];
 	try {
 		const config = loadConfig(configPath);

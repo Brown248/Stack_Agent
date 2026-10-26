@@ -84,26 +84,95 @@ export function writeState(root, sessionId, state) {
 	}
 }
 
-// rel path -> git blob id; files that cannot be hashed are left out
+const isRegularFile = (abs) => {
+	try {
+		return fs.statSync(abs).isFile();
+	} catch {
+		return false;
+	}
+};
+
+const hashOne = (root, rel) => {
+	const r = spawnSync("git", ["hash-object", "--", rel], { cwd: root, encoding: "utf8" });
+	return r.status === 0 ? r.stdout.trim() : null;
+};
+
+// rel path -> git blob id; a file that cannot be hashed (unreadable, gone) is left out, and only that file. One git
+// call hashes the batch; a name --stdin-paths cannot carry (a newline, a leading quote, which git unquotes) or a batch
+// that fails is hashed one file at a time.
 export function blobIds(root, rels) {
 	const ids = new Map();
-	if (!rels.length) return ids;
-	const r = spawnSync("git", ["hash-object", "--stdin-paths"], { cwd: root, input: rels.join("\n") + "\n", encoding: "utf8" });
-	if (r.status !== 0) return ids;
-	const out = r.stdout.trim().split("\n");
-	if (out.length === rels.length) rels.forEach((rel, i) => ids.set(rel, out[i]));
+	const plain = rels.filter((rel) => !rel.includes("\n") && !rel.startsWith('"'));
+	const odd = rels.filter((rel) => !plain.includes(rel));
+	let single = odd;
+	if (plain.length) {
+		const r = spawnSync("git", ["hash-object", "--stdin-paths"], { cwd: root, input: plain.join("\n") + "\n", encoding: "utf8" });
+		const out = r.status === 0 ? r.stdout.trim().split("\n") : [];
+		if (out.length === plain.length) plain.forEach((rel, i) => ids.set(rel, out[i]));
+		else single = rels;
+	}
+	for (const rel of single) {
+		const id = hashOne(root, rel);
+		if (id) ids.set(rel, id);
+	}
 	return ids;
 }
 
-// what the guard hooks last saw; before the first check, the files the human had left dirty when the session started
-export function readSeen(root, sessionId) {
-	return readJsonOr(seenFile(root, sessionId), null) ?? { ...(readStart(root, sessionId)?.dirty ?? {}) };
+// What the guard hooks last saw, as rel path -> blob id: the snapshot the after-shell hook writes, then every line the
+// after-edit hook appended to the log since that snapshot. Before the first snapshot, the files left dirty when the
+// session started. The after-edit hook only appends, and appends do not overwrite each other, so hooks running at
+// the same time do not lose each other's entries.
+const seenLog = (root, sessionId) => seenFile(root, sessionId).replace(/\.json$/, ".log");
+
+function readLog(root, sessionId, from = 0) {
+	let text = "";
+	try {
+		text = fs.readFileSync(seenLog(root, sessionId)).subarray(from).toString("utf8");
+	} catch {}
+	const ids = {};
+	for (const line of text.split("\n")) {
+		try {
+			const [rel, id] = JSON.parse(line);
+			if (typeof rel === "string" && typeof id === "string") ids[rel] = id;
+		} catch {}
+	}
+	return ids;
 }
 
-export function writeSeen(root, sessionId, seen) {
+function logSize(root, sessionId) {
+	try {
+		return fs.statSync(seenLog(root, sessionId)).size;
+	} catch {
+		return 0;
+	}
+}
+
+export function readSeen(root, sessionId) {
+	const snap = readJsonOr(seenFile(root, sessionId), null);
+	const start = readStart(root, sessionId);
+	const base = snap?.ids ?? { ...(start?.guardSeen ?? start?.dirty ?? {}) };
+	return { ...base, ...readLog(root, sessionId, snap?.logOffset ?? 0) };
+}
+
+// the after-shell hook: the full map as it now stands; the log offset is taken before reading, so a line appended
+// while this runs is read again next time instead of being lost
+export function writeSeen(root, sessionId, ids, logOffset) {
 	try {
 		fs.mkdirSync(sessionsDir(root), { recursive: true });
-		fs.writeFileSync(seenFile(root, sessionId), JSON.stringify(seen));
+		const file = seenFile(root, sessionId);
+		const tmp = `${file}.${process.pid}.tmp`;
+		fs.writeFileSync(tmp, JSON.stringify({ ids, logOffset }));
+		fs.renameSync(tmp, file);
+	} catch {}
+}
+
+export const seenLogOffset = logSize;
+
+// the after-edit hook: one line per checked file
+export function noteSeen(root, sessionId, rel, id) {
+	try {
+		fs.mkdirSync(sessionsDir(root), { recursive: true });
+		fs.appendFileSync(seenLog(root, sessionId), JSON.stringify([rel, id]) + "\n");
 	} catch {}
 }
 
@@ -136,7 +205,7 @@ function pruneOld(root) {
 	for (const id of ids) {
 		if (Date.now() - lastActivity(root, id) <= SESSION_TTL_MS) continue;
 		// the notes go with the record, so a session resumed after pruning starts clean instead of looking tampered with
-		for (const file of [startFile(root, id), stateFile(root, id), seenFile(root, id), ledgerFile(root, id, "taken"), ledgerFile(root, id, "skipped")]) {
+		for (const file of [startFile(root, id), stateFile(root, id), seenFile(root, id), seenLog(root, id), ledgerFile(root, id, "taken"), ledgerFile(root, id, "skipped")]) {
 			try {
 				fs.unlinkSync(file);
 			} catch {}
@@ -160,12 +229,17 @@ export function ensureSessionRecord(root, sessionId) {
 	}
 	const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
 	const dirty = {};
-	for (const f of changedFiles(root) ?? []) if (!matchesAny(f, ignore)) dirty[f] = fingerprint.entries.get(f) ?? "deleted";
+	const changed = changedFiles(root) ?? [];
+	for (const f of changed) if (!matchesAny(f, ignore)) dirty[f] = fingerprint.entries.get(f) ?? "deleted";
+	// every file left dirty, docs included: the guard hooks do not blame a session for what was there before it, and
+	// guard rules can cover files the Stop hook's fingerprint leaves out (a conflict marker in a .md file)
+	const guardSeen = Object.fromEntries(blobIds(root, changed.filter((f) => isRegularFile(path.join(root, f)))));
 	const record = {
 		at: new Date().toISOString(),
 		fingerprint: fingerprint.value,
 		head: head.status === 0 ? head.stdout.trim() : null,
 		dirty,
+		guardSeen,
 		stopHook: config.stopHook === "remind" ? "remind" : "block",
 		stopHookIgnore: ignore,
 		evidenceDir,

@@ -4,6 +4,35 @@
 
 [English](CHANGELOG.md)
 
+## ยังไม่ออกรุ่น
+
+จากการตรวจ 0.5.0 อย่างละเอียด (agent สี่ตัวอ่านโค้ดแยกกัน และรันขั้นตอนของ CI บน Linux) `verify.mjs`, `guard.mjs` และ `lib/files.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/`
+
+### ผลการวัด
+
+- `feature-map-lookup` (ใหม่) แขนละ 2 รอบ: 1.00 เมื่อมี plugin เทียบกับเฉลี่ย 0.25 เมื่อไม่มี และมีแค่แขน plugin ที่อ่าน feature map ส่วน `verify-before-done` หลังแก้สกิล: 1.00 ทั้งสองแขน
+- A/B `init-library` (ใหม่) แขน plugin 2 รอบ: verify และ guard ผ่านทั้งสองรอบ แต่ `init --check` ไม่ผ่านเลย เพราะ session แบบ headless อนุมัติการแก้ guard config และ workflow ที่ป้องกันไว้ไม่ได้ รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026 (รอบหลัง)
+- `npm test`: 504 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
+
+### แก้ไข
+
+- ช่องเลี่ยง guard: hook ของ shell ปล่อย `git commit --no-verif` (git รับรูปย่อของ option ยาวที่ไม่กำกวม), `git --config-env=core.hooksPath=VAR commit` และ `git config core.hooksPath x` ผ่านไป ตอนนี้ปฏิเสธทั้งสามแบบ และด่าน git อื่นก็จับรูปย่อด้วย (`push --de`, `push --m`, `reset --k`, `clean --f`)
+- hook หลังแก้ไฟล์และหลังคำสั่ง shell, guard ของ Stop hook และ `guard.mjs --files` ไม่ใช้รายการ `ignore` ของ config และโฟลเดอร์ที่ข้ามเป็นค่าเริ่มต้น ซึ่งการสแกนทั้งโปรเจกต์ของ CI ใช้ ไฟล์ fixture หรือไฟล์ที่ generate จึงถูกโทษในเครื่องแต่ผ่านใน CI
+- guard หลังคำสั่ง shell (ใหม่ใน 0.5.0): โทษคำสั่งแรกสำหรับไฟล์ `.md` หรือ `docs/` ที่แก้ค้างไว้ก่อนเริ่ม session เพราะบันทึกของ session ตัดไฟล์พวกนี้ออก ไฟล์ที่เปลี่ยนแต่อ่านไม่ได้ไฟล์เดียวทำให้ไม่ตรวจอะไรเลยไปตลอด session hook แก้ไฟล์ที่รันพร้อมกันทำข้อมูลของกันและกันหาย การผิดกฎจึงอาจถูกรายงานซ้ำ และคำสั่งที่รันจากระดับบนสุดของ monorepo ไปไม่ถึงโปรเจกต์ใดเลย guard ของ Stop hook ก็มองไม่เห็นไฟล์ `.md` แบบเดียวกัน
+- verify: คำสั่งที่จบไปแล้วแต่ process ที่มันเปิดไว้ยังถือ output อยู่ (`start /b`, `&`) ถูกรอจนกว่า process นั้นจะจบ แล้วรายงานว่า timed out ตอนนี้ตัดสินจาก exit code เมื่อ output เงียบไป 1.5 วินาที (รอนานสุด 10 วินาที) และบน Linux กับ macOS จะหยุด process นั้น output ระหว่าง 8 ถึง 12 MB ผ่านเหมือนตรวจครบทั้งหมด ตอนนี้ขีดจำกัด 8 MB ใช้ได้จริง คำสั่งที่ถูก signal ฆ่าจะรายงานเป็น `killed by <signal>` และนับเป็น red จริงใน `--repeat` ไม่ใช่รอบที่สรุปไม่ได้ verify ที่ถูกหยุดด้วย Ctrl+C หรือ SIGTERM จะหยุดเซิร์ฟเวอร์และคำสั่งที่มันเปิดไว้ และปฏิเสธ `--skip-tests --skip-checks --repeat` แทนที่จะรันเทสต์ไปทั้งที่สั่งข้าม
+- เทสต์ A/B `cli-minlen` fail บนเครื่องที่มีแค่ `python3` ตอนนี้ข้ามไปเหมือนเทสต์ Python ตัวอื่น
+- เอกสารที่คลาดจากโค้ด: README (EN/TH) บอกว่า guard รันหลังแก้ไฟล์เท่านั้น และ CI ไม่รัน verify สกิล init บอกชื่อไฟล์ที่คัดลอกแค่สามในหกไฟล์ สกิล verify ขาด `expectHeaders`, `followRedirects` และ `timeoutSec` และ changelog ภาษาไทยข้อ `--repeat` ขาดเรื่อง output ของรอบแรกที่ red
+
+### เพิ่ม
+
+- บันทึกในเอกสารสิ่งที่โค้ดรองรับอยู่แล้ว: `--config` และ `--json` ของ verify, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, `timeoutSec` ของ HTTP check, `type` และค่าเริ่มต้นของ `evidenceDir`, ส่วนของ guard คือ `baseline`, `--files`, `--strict`, `--json`, `--config` และ `pythonRoots`, ของ api-map คือ `--config`, `--json` และ `verifyConfig`, ของ feature-map คือ `--map` และ `--json`, ของ review-findings คือ `--stage` และ `rows --date` และ `--disallowed-tools` ของ A/B harness
+- eval case `feature-map-lookup` (บนตัวอย่าง library) และ A/B task `init-library` (ติดตั้ง Stack Agent จากศูนย์ผ่านสกิล) `evals/scaffold.mjs` รับชื่อตัวอย่างที่จะคัดลอก และ `run-evals` บอกว่าแต่ละสกิลวัดผลอย่างไร และทำไม `mine-corrections` จึงไม่ได้วัด
+- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 504 เทสต์)
+
+### เปลี่ยน
+
+- micro-test `guard-request` ไม่บอกแล้วว่า hook หลังแก้ไฟล์มองไม่เห็นการแก้ผ่าน shell สถานการณ์ตอนนี้ให้ agent ทำงานต่อโดยไม่ได้แก้ตามที่ hook หลังคำสั่ง shell รายงาน คะแนนก่อนหน้านี้จึงเทียบกันตรงๆ ไม่ได้
+
 ## 0.5.0 (2026-10-26)
 
 จากการติดตั้งครั้งแรกกับโปรเจคจริง (monorepo pnpm + Next.js บน PostgreSQL บน Windows) และงานค้างจากผลการวัดของ 0.4.0 `verify.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/` (`--check` จะแสดงว่า outdated จนกว่าจะรัน)
@@ -23,7 +52,7 @@
 - workflow CI ที่ `init` เขียนใช้ Node ตามโปรเจคจาก `.nvmrc`, `.node-version` หรือขอบล่างของ `engines.node` เมื่อใหม่กว่า 22 และ `--check` เขียนโน้ตเมื่อ workflow ใช้เวอร์ชันเก่ากว่าที่โปรเจคต้องการ หรือเก่ากว่า 22
 - docs/adoption.md: วิธี verify โปรแกรมที่ต้องมีฐานข้อมูลหรือผู้ใช้ทดสอบ (สคริปต์ตัวเดียวสำหรับ `server`) และวิธีตรวจขั้นตอนที่ต้อง login (ใช้ command check)
 - A/B task `bug-flaky-list`: บั๊กที่สุ่มเกิดจริง (สำเนาสำหรับอ่านสองชุดที่สุ่มเลือก การสร้าง item รีเฟรชแค่ชุดเดียว) รวมเข้า commit แรกของโปรเจคด้วย `plantBug(..., { hidden: true })` ตัวใหม่ ประวัติ git จึงไม่ชี้ไปที่บั๊ก
-- `verify.mjs --check <name> --repeat N` รันเช็กที่ระบุ N รอบและรายงานอัตรา red (`red in 7 of 30 runs (23%)`) พร้อมความล้มเหลวแต่ละแบบและจำนวนครั้ง เซิร์ฟเวอร์เริ่มครั้งเดียวตลอดทุกรอบ `--skip-checks --repeat N` ทำแบบเดียวกันกับชุดเทสต์ สำหรับ repro ที่เขียนเป็นเทสต์ (ซึ่ง agent ทุกตัวเขียนแบบนี้ใน A/B วันที่ 26 ต.ค. 2026) ใน A/B `bug-stale-list` และ `bug-flaky-list` ไม่มี agent คนไหนวัดอัตรา red ได้ เพราะ loop ใน shell ถูก permission rules หยุดไว้ สกิล `debug` จึงชี้มาที่ flag นี้แทน
+- `verify.mjs --check <name> --repeat N` รันเช็กที่ระบุ N รอบและรายงานอัตรา red (`red in 7 of 30 runs (23%)`) พร้อมความล้มเหลวแต่ละแบบและจำนวนครั้ง และ output ของรอบแรกที่ red เซิร์ฟเวอร์เริ่มครั้งเดียวตลอดทุกรอบ `--skip-checks --repeat N` ทำแบบเดียวกันกับชุดเทสต์ สำหรับ repro ที่เขียนเป็นเทสต์ (ซึ่ง agent ทุกตัวเขียนแบบนี้ใน A/B วันที่ 26 ต.ค. 2026) ใน A/B `bug-stale-list` และ `bug-flaky-list` ไม่มี agent คนไหนวัดอัตรา red ได้ เพราะ loop ใน shell ถูก permission rules หยุดไว้ สกิล `debug` จึงชี้มาที่ flag นี้แทน
 - hook PostToolUse หลัง Bash และ PowerShell รัน guard กับไฟล์ที่คำสั่งเปลี่ยนนอกเครื่องมือแก้ไฟล์ (`sed -i`, codemod, ตัว generate โค้ด) การแก้ผ่าน shell จึงได้ feedback ทันทีแบบเดียวกับ Edit ไฟล์ถูกเทียบด้วย git blob id กับที่ hook guard เห็นครั้งล่าสุด การผิดกฎแต่ละครั้งจึงถูกรายงานครั้งเดียว และไฟล์ที่แก้ค้างไว้ก่อนเริ่ม session จะไม่ถูกนับจนกว่าคำสั่งใดจะแก้มัน ใช้เวลาประมาณ 130 ms ต่อคำสั่งเมื่อมีไฟล์เปลี่ยน 5 ไฟล์ใน repository 20,000 ไฟล์ (`scripts/bench-hooks.mjs` จับเวลาส่วนนี้แล้ว)
 - ตัวรัน migration ของ sample backend มีคำสั่ง `redo [N]`: บนฐานข้อมูล in-memory ที่ทิ้งได้ จะ apply ทุก migration, rollback N ตัวล่าสุด, apply ใหม่ แสดง schema หลังแต่ละขั้น และ fail เมื่อ schema กลับมาไม่เหมือนเดิม ไม่เขียนไฟล์ใด sandbox ที่อ่านอย่างเดียวจึงยังพิสูจน์ migration ได้ทั้งสองทาง
 - A/B: `bug-flaky-list` และ `bug-stale-list` ให้คะแนน `redRateMeasured` (มีการรัน `verify.mjs --repeat` ที่ red) จากไฟล์ evidence ทุกไฟล์ที่ session ทิ้งไว้

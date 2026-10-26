@@ -68,6 +68,11 @@ function isIgnored(rel, entry) {
 	return matchesAny(rel, [entry]);
 }
 
+// true when a full scan with this ignore list would leave rel out, so a file named one by one is judged the same way
+export function isSkipped(rel, ignore = []) {
+	return [...DEFAULT_IGNORE, ...ignore].some((s) => isIgnored(rel, s));
+}
+
 export function walk(root, ignore = []) {
 	const skip = [...DEFAULT_IGNORE, ...ignore];
 	const out = [];

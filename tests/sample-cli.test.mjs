@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { main as guard } from "../scripts/guard.mjs";
 import { main as verify } from "../scripts/verify.mjs";
-import { copyExample, repoRoot, runNode, write } from "./helpers.mjs";
-
-const hasPython = spawnSync("python", ["--version"], { encoding: "utf8" }).status === 0;
-const skip = hasPython ? false : "python is not on PATH";
+import { copyExample, pythonSkip as skip, repoRoot, runNode, write } from "./helpers.mjs";
 
 test("the Python CLI passes its own full verification", { skip }, async () => {
 	const dir = copyExample("sample-cli");

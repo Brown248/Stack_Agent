@@ -30,4 +30,5 @@ export function scaffold(target, root = defaultRoot, example = "sample-backend",
 	git("commit", "-qm", example);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) scaffold(process.cwd());
+// a case names its example after the script: node ../scaffold.mjs sample-library (default sample-backend)
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) scaffold(process.cwd(), defaultRoot, process.argv[2] ?? "sample-backend");
