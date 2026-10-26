@@ -4,9 +4,15 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.5.0 (2026-10-26)
 
-From the first install into a real project (a pnpm + Next.js monorepo on PostgreSQL, on Windows). `verify.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/` (`--check` lists it as outdated until you do).
+From the first install into a real project (a pnpm + Next.js monorepo on PostgreSQL, on Windows), and the open items from the 0.4.0 measurements. `verify.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/` (`--check` lists it as outdated until you do).
+
+### Measured
+
+- `add-migration-column`, 3 runs per arm: `up-down-up` passed for the first time, 2 of 3 with the plugin and 0 of 3 without (every earlier run failed it in both arms); mean 0.88 against 0.79. `debug-blank-name`, 2 runs per arm: 1.00 against 0.75, `repro-before-fix` 2 of 2 against 0 of 2.
+- A/B, 3 runs per arm: the new-import path ran with agents for the first time (`job-new-export`: the case came up in 2 plugin runs, and both ended with a verify check that detects the change). In `bug-flaky-list` and `bug-stale-list` every agent wrote a test repro that loops until it is red every time, so no red rate was measured or needed. The after-shell guard made no false report in 9 plugin sessions.
+- Details and caveats: design notes, 2026-10-26.
 
 ### Added
 
@@ -17,7 +23,17 @@ From the first install into a real project (a pnpm + Next.js monorepo on Postgre
 - The CI workflow `init` writes uses the project's Node version from `.nvmrc`, `.node-version`, or the lower bound of `engines.node` when it is newer than 22. `--check` notes a workflow that runs an older one, or one older than 22.
 - docs/adoption.md: how to verify a program that needs a database or a seeded user (one wrapper script for `server`), and how to check a signed-in flow (a command check).
 - A/B task `bug-flaky-list`: a bug that is really random (two read copies picked at random, a create refreshes one), folded into the project's first commit with the new `plantBug(..., { hidden: true })` so the history does not point at it.
-- `verify.mjs --check <name> --repeat N` runs the named checks N times and reports the red rate (`red in 7 of 30 runs (23%)`), each distinct failure with its count, and the first red output. The server starts once for all runs. In the `bug-stale-list` and `bug-flaky-list` A/B runs no agent measured a red rate, because permission rules stopped their shell loops; the `debug` skill now points at this flag.
+- `verify.mjs --check <name> --repeat N` runs the named checks N times and reports the red rate (`red in 7 of 30 runs (23%)`), each distinct failure with its count, and the first red output. The server starts once for all runs. `--skip-checks --repeat N` does the same for the test suite, for a repro written as a test (what every agent wrote in the 2026-10-26 A/B runs). In the `bug-stale-list` and `bug-flaky-list` A/B runs no agent measured a red rate, because permission rules stopped their shell loops; the `debug` skill now points at this flag.
+- A PostToolUse hook after Bash and PowerShell runs the guard on the files the command changed outside the edit tools (`sed -i`, a codemod, a generator), so a shell edit gets the same feedback right away that an Edit gets. Files are compared by git blob id with what the guard hooks last saw, so each violation is reported once, and files left dirty before the session are not blamed until a command changes them. About 130 ms per command with 5 changed files on a 20,000-file repository (`scripts/bench-hooks.mjs` now times it).
+- The sample backend's migration runner has `redo [N]`: on a throwaway in-memory database it applies every migration, rolls back the last N, applies them again, prints the schema after each step, and fails when the schema does not come back the same. It writes no file, so a read-only sandbox can still prove a migration both ways.
+- A/B: `bug-flaky-list` and `bug-stale-list` grade `redRateMeasured` (some `verify.mjs --repeat` run went red), from every evidence file the session left.
+
+### Changed
+
+- `add-migration`: prefer the runner's own round-trip command (the Rails redo task, the sample's `redo`), and when no file can be written use an in-memory or throwaway database instead of skipping up-down-up. In every eval run so far both arms failed `up-down-up` because the eval sandbox cannot write a scratch database file. The `up-down-up` grader accepts a `redo` run that shows all three steps.
+- `debug`: reading the code to aim the repro is fine, and spotting the cause on a short file is expected; nothing changes until the repro is red. In the A/B runs every agent read a short service before its repro, and all fixed the right bug.
+- `run-evals`: one run per arm is a direction, not a score; look at the graders an edit targets and rerun with `--runs 3` when only another grader moved.
+- The Stop hook's guard message no longer says the after-edit hook misses shell edits.
 
 ### Fixed
 

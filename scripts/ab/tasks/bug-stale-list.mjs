@@ -2,7 +2,7 @@
 // item does not clear the cache, so a list read right after a create can miss the new item, depending on how soon
 // after the previous read it comes. It tests the debug skill's steps for a timing-dependent bug: measure how often
 // the repro goes red and raise that rate before working on the cause. The bug is committed before the session.
-import { call, commonGrade, harnessGrade, plantBug, withServer } from "../lib.mjs";
+import { call, commonGrade, harnessGrade, plantBug, repeatGrade, withServer } from "../lib.mjs";
 
 export const name = "bug-stale-list";
 export const prompt = "Bug report: sometimes, right after I add an item with POST /items, GET /items does not list it yet; a moment later it shows up. It does not happen every time. Please find and fix it.";
@@ -45,5 +45,6 @@ export async function grade(dir) {
 	const h = harnessGrade(dir);
 	const { checks, details } = commonGrade(dir);
 	const behavior = await probe(dir);
-	return { checks: { behavior: behavior.ok, ...checks, ...h.checks }, details: { ...details, ...h.details, behavior: behavior.detail } };
+	const r = repeatGrade(dir);
+	return { checks: { behavior: behavior.ok, ...checks, ...h.checks, ...r.checks }, details: { ...details, ...h.details, ...r.details, behavior: behavior.detail } };
 }

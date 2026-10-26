@@ -37,7 +37,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Skills: small, composable, with scripts, getting better each use | the skills in `skills/`, `reflect` for improving them | `claude plugin validate --strict` |
 | A description says when, and a skill survives a compaction (from obra/superpowers, MIT) | descriptions name triggers only, without "then" or "step"; each SKILL.md under 20,000 characters | `tests/skills.test.mjs` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
-| A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
+| A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse (after edits and after shell commands), Stop | `tests/hooks.test.mjs` |
 
 ## Left out on purpose
 
@@ -50,7 +50,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 - Import-based rules read JS/TS and Python. Other languages use `pattern` rules. Python resolution is static: it does not follow `sys.path` changes, `importlib` calls, or installed packages, so a module not found in the repo is treated as third-party.
 - The shell hooks match patterns, so a determined workaround (an alias, or a script that writes a file without naming it) can slip past. CI with `--compare-ref` and CODEOWNERS is the gate that always holds.
-- The PostToolUse guard covers Edit/Write. Shell edits are caught by the Stop hook, which runs the guard on the files the session changed (since 2026-10-23), and by CI.
+- The PostToolUse guard covers Edit/Write, and since 2026-10-26 the files a shell command changed (compared by git blob id with what the guard hooks last saw, so each violation is reported once). The Stop hook still runs the guard on every file the session changed (since 2026-10-23), and CI on everything.
 - Evidence and the skip record are plain files. Edit/Write on them asks a human, but a determined shell write can still forge them. The `verify` job in the CI template reruns verify on every push and pull request (with `--against origin/<base>` on pull requests), so a forged file does not pass CI. That holds only while the job is a required check and the workflow and `verify.json` are under CODEOWNERS, and while the install step is filled in. The workflow has not been run on GitHub Actions yet; for now it is checked only by text tests.
 - The `against` step proves that at least one new check tells the old code from the new. It cannot judge whether the checks cover everything the change should do, and results it cannot trust (the old server does not start) skip it instead of passing it.
 - The ratchet counts per file per rule. Import rules count each imported name (baseline version 2). Version 1 counted statements, so adding a name to an existing forbidden import passed; that gap was found while planning the A/B work and closed with a regression test (`tests/guard-widening.test.mjs`).
@@ -61,7 +61,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 431 pass on Windows 11, Node 26 (2026-10-24) |
+| Unit and integration tests | 464 pass on Windows 11, Node 26 (2026-10-26) |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -392,6 +392,37 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **Hiding the commit did not change the order.** The service is short, so all three read it and named the cause before writing the repro. The skill asks for the repro first; on code this small that order does not hold.
 - Two of the three ended their first message saying plainly that the full verify had not run; the Stop hook sent them back, and both runs then passed with the against step showing the repro fails on the old code.
 - Without the plugin, every agent fixed the bug and none verified or added a test.
+
+## Repeat runs, a guard after shell commands, and migrations in a read-only sandbox (2026-10-26)
+
+**A/B.** `scripts/ab/run.mjs` on the working tree over `0fc645f` (`verify --repeat`, the after-shell guard hook, the `debug` and `add-migration` edits), Claude Code 2.1.310, Sonnet, at most $1 per run, plugin and bare arm, 3 runs each, all 18 valid, $1.99.
+
+| Task | Arm | Correct | Verified, evidence matches | `checkDetects` | Other | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-flaky-list` | plugin | 3/3 | 3/3 | 3/3 | `redRateMeasured` 0/3 | $0.122 |
+| | none | 3/3 | 0/3 | 0/3 | `redRateMeasured` 0/3 | $0.073 |
+| `bug-stale-list` | plugin | 3/3 | 3/3 | 3/3 | `redRateMeasured` 0/3 | $0.150 |
+| | none | 3/3 | 0/3 | 0/3 | `redRateMeasured` 0/3 | $0.055 |
+| `job-new-export` | plugin | 3/3 | 3/3 | 3/3 | `importCase` 2/3, `checkAfterImport` 2/2 | $0.155 |
+| | none | 3/3 | 1/3 | 0/3 | `importCase` 1/3, `checkAfterImport` 0/1 | $0.108 |
+
+- **No agent measured a red rate, and none needed to.** Every plugin agent invoked `debug` and wrote the repro as a test in the suite, not a verify check, with 30 to 40 create-and-read rounds inside it, so it went red on every run. The skill's "fails on some runs only" step never applied: the agents raised the rate first, which is what the step asks for. They also could not have used `--repeat`, which only took checks then; `--skip-checks --repeat N` now repeats the test suite. Not rerun with agents: since they amplify inside the test, a rerun would not reach that step either.
+- **The new-import path ran for the first time with agents.** In two plugin runs a full verify hit the "changed tests import what the old code lacks" case, and both times a later passing run detected the change with a verify check. One bare run hit the case and never added a check.
+- **The after-shell guard stayed silent in all 9 plugin sessions**, including the 3 `bug-stale-list` runs that edited a test with `sed -i`: no false report. The transcript shows a hook only when it says something, so its reporting path is covered by `tests/hooks.test.mjs`, not by these runs.
+- Without the plugin, every agent fixed the bug and almost none verified (1 of 9).
+
+**Hook speed.** `bench-hooks.mjs`, Windows 11, Node 26.8.1, one run per size: the after-shell guard took 125 and 133 ms with 5 changed files, and 318 and 274 ms with 1,000, on repositories of 2,000 and 20,000 files (a Node start is about 60 ms of that).
+
+**Evals.** `claude plugin eval` in WSL2 (Claude Code 2.1.304, the session's default model), the same working tree, `~/.docker` moved aside for the run. `add-migration-column` 3 runs per arm ($3.25), `debug-blank-name` 2 runs per arm ($1.02).
+
+| Case | With | Without | Δ |
+| --- | --- | --- | --- |
+| `add-migration-column` | 1.00, 0.88, 0.75 (mean 0.88) | 0.88, 0.75, 0.75 (mean 0.79) | +0.08 |
+| `debug-blank-name` | 1.00, 1.00 | 0.75, 0.75 | +0.25 |
+
+- **`up-down-up` passed for the first time: 2 of 3 with the plugin, 0 of 3 without.** Every earlier run failed it in both arms, because the sandbox cannot write a scratch database file. With the sample's new `redo`, run 1's trace shows the new migration applied, rolled back, and applied again, and `migrate: redo ok`. Run 3's judges split (PASS FAIL FAIL) and its evidence held no runner output. The bare arm read `migrate.mjs`, `redo` included, and never ran a round trip.
+- `guard-passed` split in both arms (1 of 3 with, 2 of 3 without), on a step nothing here changed. The judge's evidence for a long trace (50 to 80 KB here) is cut in the middle, so a guard run there may not reach it; the final messages report `guard: ok`. Left as a grader limit.
+- `debug-blank-name`: `repro-before-fix` passed 2 of 2 with the plugin and 0 of 2 without, after the wording that allows reading the code before the repro.
 
 ## Self-review log
 

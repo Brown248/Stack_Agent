@@ -375,6 +375,25 @@ export function importCaseGrade(dir) {
 	};
 }
 
+// For bugs that fail on some runs only: did the agent measure a red rate with `verify.mjs --repeat`? Every verify run
+// leaves its own evidence file, so a repeat run shows up even when later runs replaced latest.json.
+// - redRateMeasured: some run had a repeat step that went red at least once (a rate measured on the bug, not after it
+//   was fixed)
+export function repeatGrade(dir) {
+	const config = readJsonOr(path.join(dir, ".stack-agent/verify.json"), {});
+	const evidenceDir = path.join(dir, typeof config.evidenceDir === "string" && config.evidenceDir ? config.evidenceDir : ".stack-agent/evidence");
+	const steps = (fs.existsSync(evidenceDir) ? fs.readdirSync(evidenceDir) : [])
+		.filter((f) => /^verify-.*\.json$/.test(f))
+		.sort()
+		.flatMap((f) => readJsonOr(path.join(evidenceDir, f), null)?.steps ?? [])
+		.filter((s) => s?.step === "repeat");
+	const red = steps.filter((s) => s.red > 0);
+	return {
+		checks: { redRateMeasured: red.length > 0 },
+		details: { repeat: steps.length ? steps.map((s) => `${s.name} red ${s.red}/${s.runs}`).join(", ") : "no --repeat run" },
+	};
+}
+
 // names of verify.json checks added since the base commit
 export function addedChecks(dir) {
 	let base = [];

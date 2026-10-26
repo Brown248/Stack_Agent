@@ -4,9 +4,15 @@
 
 [English](CHANGELOG.md)
 
-## ยังไม่ออกรุ่น
+## 0.5.0 (2026-10-26)
 
-จากการติดตั้งครั้งแรกกับโปรเจคจริง (monorepo pnpm + Next.js บน PostgreSQL บน Windows) `verify.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/` (`--check` จะแสดงว่า outdated จนกว่าจะรัน)
+จากการติดตั้งครั้งแรกกับโปรเจคจริง (monorepo pnpm + Next.js บน PostgreSQL บน Windows) และงานค้างจากผลการวัดของ 0.4.0 `verify.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/` (`--check` จะแสดงว่า outdated จนกว่าจะรัน)
+
+### ผลการวัด
+
+- `add-migration-column` แขนละ 3 รอบ: `up-down-up` ผ่านเป็นครั้งแรก 2 ใน 3 เมื่อมี plugin และ 0 ใน 3 เมื่อไม่มี (ทุกรอบก่อนหน้านี้ไม่ผ่านทั้งสองแขน) เฉลี่ย 0.88 ต่อ 0.79 ส่วน `debug-blank-name` แขนละ 2 รอบ: 1.00 ต่อ 0.75 และ `repro-before-fix` 2 ใน 2 ต่อ 0 ใน 2
+- A/B แขนละ 3 รอบ: ทาง import ใหม่ถูกใช้กับ agent จริงเป็นครั้งแรก (`job-new-export`: เจอกรณีนี้ใน 2 รอบของแขน plugin และทั้งสองรอบจบด้วย verify check ที่จับการเปลี่ยนแปลงได้) ใน `bug-flaky-list` และ `bug-stale-list` agent ทุกตัวเขียน repro เป็นเทสต์ที่วนจน red ทุกครั้ง จึงไม่มีการวัดอัตรา red และก็ไม่จำเป็นต้องวัด guard หลังคำสั่ง shell ไม่รายงานผิดเลยใน 9 session ของแขน plugin
+- รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026
 
 ### เพิ่ม
 
@@ -17,7 +23,17 @@
 - workflow CI ที่ `init` เขียนใช้ Node ตามโปรเจคจาก `.nvmrc`, `.node-version` หรือขอบล่างของ `engines.node` เมื่อใหม่กว่า 22 และ `--check` เขียนโน้ตเมื่อ workflow ใช้เวอร์ชันเก่ากว่าที่โปรเจคต้องการ หรือเก่ากว่า 22
 - docs/adoption.md: วิธี verify โปรแกรมที่ต้องมีฐานข้อมูลหรือผู้ใช้ทดสอบ (สคริปต์ตัวเดียวสำหรับ `server`) และวิธีตรวจขั้นตอนที่ต้อง login (ใช้ command check)
 - A/B task `bug-flaky-list`: บั๊กที่สุ่มเกิดจริง (สำเนาสำหรับอ่านสองชุดที่สุ่มเลือก การสร้าง item รีเฟรชแค่ชุดเดียว) รวมเข้า commit แรกของโปรเจคด้วย `plantBug(..., { hidden: true })` ตัวใหม่ ประวัติ git จึงไม่ชี้ไปที่บั๊ก
-- `verify.mjs --check <name> --repeat N` รันเช็กที่ระบุ N รอบและรายงานอัตรา red (`red in 7 of 30 runs (23%)`) พร้อมความล้มเหลวแต่ละแบบและจำนวนครั้ง เซิร์ฟเวอร์เริ่มครั้งเดียวตลอดทุกรอบ ใน A/B `bug-stale-list` และ `bug-flaky-list` ไม่มี agent คนไหนวัดอัตรา red ได้ เพราะ loop ใน shell ถูก permission rules หยุดไว้ สกิล `debug` จึงชี้มาที่ flag นี้แทน
+- `verify.mjs --check <name> --repeat N` รันเช็กที่ระบุ N รอบและรายงานอัตรา red (`red in 7 of 30 runs (23%)`) พร้อมความล้มเหลวแต่ละแบบและจำนวนครั้ง เซิร์ฟเวอร์เริ่มครั้งเดียวตลอดทุกรอบ `--skip-checks --repeat N` ทำแบบเดียวกันกับชุดเทสต์ สำหรับ repro ที่เขียนเป็นเทสต์ (ซึ่ง agent ทุกตัวเขียนแบบนี้ใน A/B วันที่ 26 ต.ค. 2026) ใน A/B `bug-stale-list` และ `bug-flaky-list` ไม่มี agent คนไหนวัดอัตรา red ได้ เพราะ loop ใน shell ถูก permission rules หยุดไว้ สกิล `debug` จึงชี้มาที่ flag นี้แทน
+- hook PostToolUse หลัง Bash และ PowerShell รัน guard กับไฟล์ที่คำสั่งเปลี่ยนนอกเครื่องมือแก้ไฟล์ (`sed -i`, codemod, ตัว generate โค้ด) การแก้ผ่าน shell จึงได้ feedback ทันทีแบบเดียวกับ Edit ไฟล์ถูกเทียบด้วย git blob id กับที่ hook guard เห็นครั้งล่าสุด การผิดกฎแต่ละครั้งจึงถูกรายงานครั้งเดียว และไฟล์ที่แก้ค้างไว้ก่อนเริ่ม session จะไม่ถูกนับจนกว่าคำสั่งใดจะแก้มัน ใช้เวลาประมาณ 130 ms ต่อคำสั่งเมื่อมีไฟล์เปลี่ยน 5 ไฟล์ใน repository 20,000 ไฟล์ (`scripts/bench-hooks.mjs` จับเวลาส่วนนี้แล้ว)
+- ตัวรัน migration ของ sample backend มีคำสั่ง `redo [N]`: บนฐานข้อมูล in-memory ที่ทิ้งได้ จะ apply ทุก migration, rollback N ตัวล่าสุด, apply ใหม่ แสดง schema หลังแต่ละขั้น และ fail เมื่อ schema กลับมาไม่เหมือนเดิม ไม่เขียนไฟล์ใด sandbox ที่อ่านอย่างเดียวจึงยังพิสูจน์ migration ได้ทั้งสองทาง
+- A/B: `bug-flaky-list` และ `bug-stale-list` ให้คะแนน `redRateMeasured` (มีการรัน `verify.mjs --repeat` ที่ red) จากไฟล์ evidence ทุกไฟล์ที่ session ทิ้งไว้
+
+### เปลี่ยน
+
+- `add-migration`: ให้ใช้คำสั่ง round-trip ของตัวรันเองก่อน (task redo ของ Rails, `redo` ของ sample) และเมื่อเขียนไฟล์ไม่ได้ ให้ใช้ฐานข้อมูล in-memory หรือแบบทิ้งได้แทนการข้าม up-down-up ใน eval ทุกรอบที่ผ่านมา ทั้งสองแขนไม่ผ่าน `up-down-up` เพราะ sandbox ของ eval เขียนไฟล์ฐานข้อมูลชั่วคราวไม่ได้ grader `up-down-up` รับการรัน `redo` ที่แสดงครบทั้งสามขั้น
+- `debug`: อ่านโค้ดเพื่อเล็งว่าจะทำ repro ตรงไหนได้ และการเห็นสาเหตุในไฟล์สั้น ๆ ก็เป็นเรื่องปกติ แต่ห้ามแก้อะไรจนกว่า repro จะ red ใน A/B ทุก agent อ่าน service สั้น ๆ ก่อนทำ repro และแก้บั๊กถูกตัวทั้งหมด
+- `run-evals`: การรันแขนละรอบเดียวบอกทิศทาง ไม่ใช่คะแนน ให้ดู grader ที่การแก้ตั้งใจเปลี่ยน และรันใหม่ด้วย `--runs 3` เมื่อ grader อื่นขยับอยู่ตัวเดียว
+- ข้อความ guard ของ Stop hook ไม่บอกแล้วว่า hook หลังแก้ไฟล์มองไม่เห็นการแก้ผ่าน shell
 
 ### แก้ไข
 

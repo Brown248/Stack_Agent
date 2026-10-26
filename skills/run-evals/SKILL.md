@@ -54,6 +54,7 @@ The exit code is 0 only when every case reaches the threshold (default 1.0).
 
 - A case that passes with the plugin but also passes without it (Δ ≈ 0) means the skill is not what made it pass. The skill may be unnecessary, or the case is too easy.
 - A case that fails with the plugin: read `evals/results/<timestamp>/report.html` and the run's trace. Find the step the agent skipped or misread, fix that skill, and rerun only that case.
+- One run per arm gives a direction, not a score. On 2026-10-24, two cases whose files had not changed moved by a quarter and a third between back-to-back runs, each from one llm grader flipping. Before calling an edit a win or a loss, look at the graders the edit targets; if the only difference is one other grader, rerun that case with `--runs 3`.
 - Graders that score by script (`regex`, `tool_used`, `file_exists`) are facts. `llm` graders are judgment, so read the trace yourself when one disagrees with what you see.
 
 ## Hill-climb

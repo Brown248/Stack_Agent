@@ -37,7 +37,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 | Skill เล็ก ต่อกันได้ มี script และดีขึ้นทุกครั้ง | skill ใน `skills/` และ `reflect` สำหรับปรับปรุง | `claude plugin validate --strict` |
 | description บอกว่าใช้เมื่อไร และ skill อยู่รอดหลัง compaction (จาก obra/superpowers, MIT) | description ระบุแค่จังหวะที่ใช้ ไม่มีคำว่า "then" หรือ "step" และ SKILL.md แต่ละไฟล์ยาวไม่ถึง 20,000 ตัวอักษร | `tests/skills.test.mjs` |
 | คุมว่าใครเรียก skill ได้ | `disable-model-invocation: true` สำหรับ skill ที่เขียนไฟล์หลายจุดหรือใช้เงิน | frontmatter ของ skill |
-| ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse, Stop | `tests/hooks.test.mjs` |
+| ชั้นระหว่าง prompt กับ CI ตอนทำงาน | `hooks/hooks.json`: PreToolUse (คำสั่ง shell และการแก้ไฟล์ของ guard), PostToolUse (หลังแก้ไฟล์และหลังคำสั่ง shell), Stop | `tests/hooks.test.mjs` |
 
 ## ที่ตั้งใจไม่ทำ
 
@@ -50,7 +50,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 - กฎที่อ่าน import รองรับ JS/TS และ Python ภาษาอื่นใช้กฎแบบ `pattern` การหาโมดูล Python เป็นแบบ static ไม่ตามการแก้ `sys.path`, การเรียก `importlib` หรือ package ที่ติดตั้งไว้ โมดูลที่หาไม่เจอใน repo จึงถือเป็น third-party
 - hook ที่ดักคำสั่ง shell ใช้การจับ pattern ถ้าตั้งใจเลี่ยง (เช่นใช้ alias หรือ script ที่เขียนไฟล์โดยไม่ระบุชื่อไฟล์ในคำสั่ง) อาจหลุดได้ CI ที่มี `--compare-ref` และ CODEOWNERS คือด่านที่ไม่มีทางหลุด
-- guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write ส่วนการแก้ผ่าน shell จะถูกจับโดย Stop hook ซึ่งรัน guard กับไฟล์ที่ session แก้ (ตั้งแต่ 23 ต.ค. 2026) และโดย CI
+- guard ใน PostToolUse ตรวจการแก้ผ่าน Edit/Write และตั้งแต่ 26 ต.ค. 2026 ตรวจไฟล์ที่คำสั่ง shell เปลี่ยนด้วย (เทียบ git blob id กับที่ hook guard เห็นครั้งล่าสุด จึงรายงานการผิดกฎแต่ละครั้งเพียงครั้งเดียว) Stop hook ยังรัน guard กับทุกไฟล์ที่ session แก้ (ตั้งแต่ 23 ต.ค. 2026) และ CI ตรวจทั้งหมด
 - หลักฐานและไฟล์ skip เป็นไฟล์ธรรมดา การแก้ด้วย Edit/Write จะถามคนก่อน แต่ถ้าตั้งใจเขียนผ่าน shell ก็ยังปลอมได้ job `verify` ใน template ของ CI รัน verify ซ้ำทุก push และ pull request (ใน pull request ใช้ `--against origin/<base>`) ไฟล์ที่ปลอมจึงผ่าน CI ไม่ได้ แต่ใช้ได้จริงก็ต่อเมื่อ job นี้เป็น required check, workflow กับ `verify.json` อยู่ใต้ CODEOWNERS และกรอกขั้นติดตั้ง dependency แล้ว workflow นี้ยังไม่เคยรันบน GitHub Actions จริง ตอนนี้ตรวจได้เฉพาะด้วยเทสที่อ่านข้อความ
 - ขั้น `against` พิสูจน์ได้ว่ามี check ใหม่อย่างน้อยหนึ่งตัวที่แยกโค้ดเก่ากับโค้ดใหม่ออกจากกัน แต่บอกไม่ได้ว่า check ครอบคลุมทุกอย่างที่การแก้ควรทำ และผลที่เชื่อไม่ได้ (server ของโค้ดเก่าเปิดไม่ขึ้น) จะข้ามขั้นนี้แทนที่จะให้ผ่าน
 - ratchet นับต่อไฟล์ต่อกฎ กฎแบบ import นับทีละชื่อที่ import (baseline version 2) version 1 นับทีละบรรทัด การเพิ่มชื่อเข้าไปใน import ต้องห้ามที่มีอยู่แล้วจึงผ่านได้ ช่องโหว่นี้เจอระหว่างวางแผนงาน A/B และปิดแล้วพร้อมเทสกันถอยหลัง (`tests/guard-widening.test.mjs`)
@@ -61,7 +61,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 431 เทสบน Windows 11 กับ Node 26 (24 ต.ค. 2026) |
+| Unit และ integration test | ผ่าน 464 เทสบน Windows 11 กับ Node 26 (26 ต.ค. 2026) |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -392,6 +392,37 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 - **การซ่อน commit ไม่ได้ทำให้ลำดับเปลี่ยน** service สั้น ทั้งสามจึงอ่านแล้วบอกสาเหตุได้ก่อนเขียน repro ส่วน skill ขอให้สร้าง repro ก่อน แต่กับโค้ดที่เล็กขนาดนี้ลำดับนั้นไม่เกิดขึ้น
 - สองในสามตัวจบข้อความแรกโดยบอกตรงๆ ว่ายังไม่ได้รัน verify เต็ม Stop hook จึงส่งกลับไป และทั้งสองรอบผ่านต่อ โดยขั้น against แสดงว่า repro fail บนโค้ดเก่า
 - เมื่อไม่มี plugin agent ทุกตัวแก้บั๊กได้ แต่ไม่มีตัวไหน verify หรือเพิ่มเทส
+
+## การรันซ้ำ, guard หลังคำสั่ง shell และ migration ใน sandbox ที่อ่านอย่างเดียว (26 ต.ค. 2026)
+
+**A/B** `scripts/ab/run.mjs` บน working tree ต่อจาก `0fc645f` (`verify --repeat`, hook guard หลังคำสั่ง shell, การแก้ `debug` และ `add-migration`) Claude Code 2.1.310, Sonnet, ไม่เกิน $1 ต่อรอบ แขนที่มี plugin และไม่มี แขนละ 3 รอบ ใช้ได้ครบ 18 รอบ รวม $1.99
+
+| Task | แขน | แก้ถูก | verify แล้ว evidence ตรง | `checkDetects` | อื่น ๆ | ค่าใช้จ่ายเฉลี่ย |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-flaky-list` | plugin | 3/3 | 3/3 | 3/3 | `redRateMeasured` 0/3 | $0.122 |
+| | none | 3/3 | 0/3 | 0/3 | `redRateMeasured` 0/3 | $0.073 |
+| `bug-stale-list` | plugin | 3/3 | 3/3 | 3/3 | `redRateMeasured` 0/3 | $0.150 |
+| | none | 3/3 | 0/3 | 0/3 | `redRateMeasured` 0/3 | $0.055 |
+| `job-new-export` | plugin | 3/3 | 3/3 | 3/3 | `importCase` 2/3, `checkAfterImport` 2/2 | $0.155 |
+| | none | 3/3 | 1/3 | 0/3 | `importCase` 1/3, `checkAfterImport` 0/1 | $0.108 |
+
+- **ไม่มี agent ตัวไหนวัดอัตรา red และก็ไม่จำเป็นต้องวัด** agent ทุกตัวในแขน plugin เรียก `debug` และเขียน repro เป็นเทสต์ในชุดเทสต์ ไม่ใช่ verify check โดยวนสร้างและอ่าน 30 ถึง 40 รอบในเทสต์เดียว จึง red ทุกครั้งที่รัน ขั้น "ล้มเหลวเป็นบางรอบ" ของสกิลจึงไม่เกิดขึ้นเลย เพราะ agent เพิ่มอัตราก่อน ซึ่งเป็นสิ่งที่ขั้นนั้นต้องการ และตอนนั้น agent ก็ใช้ `--repeat` ไม่ได้อยู่ดี เพราะรองรับแค่เช็ก ตอนนี้ `--skip-checks --repeat N` รันชุดเทสต์ซ้ำได้แล้ว ไม่ได้รันกับ agent ซ้ำ เพราะเมื่อ agent ขยายอัตราในเทสต์เอง การรันซ้ำก็จะไม่ถึงขั้นนั้นเช่นกัน
+- **ทาง import ใหม่ถูกใช้กับ agent จริงเป็นครั้งแรก** ในสองรอบของแขน plugin การรัน verify เต็มเจอกรณี "เทสต์ที่แก้ import สิ่งที่โค้ดเก่าไม่มี" และทั้งสองครั้ง การรันที่ผ่านครั้งต่อมาจับการเปลี่ยนแปลงได้ด้วย verify check แขนที่ไม่มี plugin เจอกรณีนี้หนึ่งรอบและไม่ได้เพิ่มเช็ก
+- **guard หลังคำสั่ง shell เงียบตลอดทั้ง 9 session ของแขน plugin** รวมถึง 3 รอบของ `bug-stale-list` ที่แก้เทสต์ด้วย `sed -i` จึงไม่มีการรายงานผิด transcript จะแสดง hook เฉพาะตอนที่มันพูดอะไร ทางรายงานของมันจึงทดสอบโดย `tests/hooks.test.mjs` ไม่ใช่โดยการรันเหล่านี้
+- ถ้าไม่มี plugin agent ทุกตัวแก้บั๊กได้ แต่แทบไม่มีใคร verify (1 ใน 9)
+
+**ความเร็วของ hook** `bench-hooks.mjs` บน Windows 11, Node 26.8.1 ขนาดละหนึ่งรอบ: guard หลังคำสั่ง shell ใช้ 125 และ 133 ms เมื่อมีไฟล์เปลี่ยน 5 ไฟล์ และ 318 กับ 274 ms เมื่อเปลี่ยน 1,000 ไฟล์ ใน repository 2,000 และ 20,000 ไฟล์ (ในนั้นเป็นเวลาเปิด Node ประมาณ 60 ms)
+
+**Eval** `claude plugin eval` ใน WSL2 (Claude Code 2.1.304, model ค่าเริ่มต้นของ session) working tree เดียวกัน ย้าย `~/.docker` ออกระหว่างรัน `add-migration-column` แขนละ 3 รอบ ($3.25) `debug-blank-name` แขนละ 2 รอบ ($1.02)
+
+| Case | มี plugin | ไม่มี | Δ |
+| --- | --- | --- | --- |
+| `add-migration-column` | 1.00, 0.88, 0.75 (เฉลี่ย 0.88) | 0.88, 0.75, 0.75 (เฉลี่ย 0.79) | +0.08 |
+| `debug-blank-name` | 1.00, 1.00 | 0.75, 0.75 | +0.25 |
+
+- **`up-down-up` ผ่านเป็นครั้งแรก: 2 ใน 3 เมื่อมี plugin และ 0 ใน 3 เมื่อไม่มี** ทุกรอบก่อนหน้านี้ไม่ผ่านทั้งสองแขน เพราะ sandbox เขียนไฟล์ฐานข้อมูลชั่วคราวไม่ได้ เมื่อมี `redo` ใหม่ของ sample trace ของรอบที่ 1 แสดงว่า migration ใหม่ถูก apply, rollback แล้ว apply อีกครั้ง และ `migrate: redo ok` ในรอบที่ 3 judge แบ่งเสียง (PASS FAIL FAIL) และ evidence ไม่มี output ของตัวรันเลย แขนที่ไม่มี plugin อ่าน `migrate.mjs` รวมถึง `redo` แต่ไม่เคยรัน round trip
+- `guard-passed` แบ่งเสียงทั้งสองแขน (มี 1 ใน 3, ไม่มี 2 ใน 3) ในขั้นที่ไม่มีอะไรเปลี่ยนในรอบนี้ evidence ที่ judge เห็นสำหรับ trace ยาว (ที่นี่ 50 ถึง 80 KB) ถูกตัดตรงกลาง การรัน guard ช่วงนั้นจึงอาจไปไม่ถึง judge ข้อความสุดท้ายรายงาน `guard: ok` บันทึกไว้เป็นข้อจำกัดของ grader
+- `debug-blank-name`: `repro-before-fix` ผ่าน 2 ใน 2 เมื่อมี plugin และ 0 ใน 2 เมื่อไม่มี หลังจากเปลี่ยนถ้อยคำให้อ่านโค้ดก่อนทำ repro ได้
 
 ## บันทึกการตรวจงานตัวเอง
 

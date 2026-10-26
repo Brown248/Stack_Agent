@@ -17,6 +17,8 @@ const safeId = (sessionId) => String(sessionId ?? "default").replace(/[^\w-]/g, 
 export const sessionsDir = (root) => path.join(root, SESSIONS_DIR);
 export const startFile = (root, sessionId) => path.join(sessionsDir(root), `${safeId(sessionId)}.start.json`);
 export const stateFile = (root, sessionId) => path.join(sessionsDir(root), `${safeId(sessionId)}.json`);
+// blob ids of the files the guard hooks last checked, so a shell command is only blamed for what it changed
+export const seenFile = (root, sessionId) => path.join(sessionsDir(root), `${safeId(sessionId)}.seen.json`);
 
 // A note outside the repo that this session already had a baseline (or that taking one was skipped), so deleting
 // the in-repo record cannot make a later hook take a fresh baseline from an already-changed tree.
@@ -82,6 +84,29 @@ export function writeState(root, sessionId, state) {
 	}
 }
 
+// rel path -> git blob id; files that cannot be hashed are left out
+export function blobIds(root, rels) {
+	const ids = new Map();
+	if (!rels.length) return ids;
+	const r = spawnSync("git", ["hash-object", "--stdin-paths"], { cwd: root, input: rels.join("\n") + "\n", encoding: "utf8" });
+	if (r.status !== 0) return ids;
+	const out = r.stdout.trim().split("\n");
+	if (out.length === rels.length) rels.forEach((rel, i) => ids.set(rel, out[i]));
+	return ids;
+}
+
+// what the guard hooks last saw; before the first check, the files the human had left dirty when the session started
+export function readSeen(root, sessionId) {
+	return readJsonOr(seenFile(root, sessionId), null) ?? { ...(readStart(root, sessionId)?.dirty ?? {}) };
+}
+
+export function writeSeen(root, sessionId, seen) {
+	try {
+		fs.mkdirSync(sessionsDir(root), { recursive: true });
+		fs.writeFileSync(seenFile(root, sessionId), JSON.stringify(seen));
+	} catch {}
+}
+
 // last activity of a session: the newest of its start file (written once) and its state file (rewritten each stop)
 export function lastActivity(root, id) {
 	let newest = 0;
@@ -107,11 +132,11 @@ function pruneLedger() {
 function pruneOld(root) {
 	pruneLedger();
 	const dir = sessionsDir(root);
-	const ids = new Set((fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter((n) => n.endsWith(".json")).map((n) => n.replace(/(\.start)?\.json$/, "")));
+	const ids = new Set((fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter((n) => n.endsWith(".json")).map((n) => n.replace(/(\.start|\.seen)?\.json$/, "")));
 	for (const id of ids) {
 		if (Date.now() - lastActivity(root, id) <= SESSION_TTL_MS) continue;
 		// the notes go with the record, so a session resumed after pruning starts clean instead of looking tampered with
-		for (const file of [startFile(root, id), stateFile(root, id), ledgerFile(root, id, "taken"), ledgerFile(root, id, "skipped")]) {
+		for (const file of [startFile(root, id), stateFile(root, id), seenFile(root, id), ledgerFile(root, id, "taken"), ledgerFile(root, id, "skipped")]) {
 			try {
 				fs.unlinkSync(file);
 			} catch {}

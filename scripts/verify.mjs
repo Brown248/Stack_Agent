@@ -11,6 +11,7 @@ import { FINGERPRINT_VERSION, SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerp
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
                       [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
        node verify.mjs --check NAME... --repeat N   run each named check N times and report how many went red
+       node verify.mjs --skip-checks --repeat N     run the test suite N times and report how many went red
        node verify.mjs --skip "REASON"   record why verification cannot run for the current code
        node verify.mjs --evidence-status  say whether the latest evidence is a full pass for the code as it is now (runs nothing)
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
@@ -334,8 +335,33 @@ async function repeatCheck(root, baseUrl, check, times) {
 	return { step: "repeat", type: last.type, name: check.name, request: last.request, runs: times, red, inconclusive, ok: red === 0, problems, ...(first && { firstRed: first }), durationMs: Date.now() - started };
 }
 
+// The test suite N times, for a repro written as a test: same shape as a repeated check.
+async function repeatTests(root, test, times) {
+	const started = Date.now();
+	const counts = new Map();
+	let red = 0;
+	let inconclusive = 0;
+	let first;
+	for (let i = 0; i < times; i++) {
+		const r = await runTests(root, test);
+		if (r.ok) continue;
+		red++;
+		if (r.timedOut || r.exitCode === null) inconclusive++;
+		first ??= { run: i + 1, output: r.output };
+		const text = r.timedOut ? "timed out" : `exit ${r.exitCode}`;
+		counts.set(text, (counts.get(text) ?? 0) + 1);
+	}
+	const problems = [...counts].sort((a, b) => b[1] - a[1]).map(([text, count]) => ({ text, count }));
+	return { step: "repeat", type: "tests", name: "tests", request: shown(test), runs: times, red, inconclusive, ok: red === 0, problems, ...(first && { firstRed: first }), durationMs: Date.now() - started };
+}
+
 export async function runVerify({ root, config, skipTests, skipChecks, only, reuse, repeat }) {
 	const steps = [];
+	if (repeat && skipChecks) {
+		if (!runs(config.test)) throw new ConfigError("--skip-checks --repeat repeats the test suite, and verify.json has no test command");
+		steps.push(await repeatTests(root, config.test, repeat));
+		return steps;
+	}
 	if (runs(config.test) && !skipTests && !repeat) steps.push(await runTests(root, config.test));
 
 	const checks = (config.checks ?? []).filter((c) => !only?.length || only.includes(c.name));
@@ -746,7 +772,7 @@ function summarize(steps) {
 			const odd = s.inconclusive ? `, ${s.inconclusive} of them inconclusive (timed out, could not start, or no response)` : "";
 			const why = s.problems.map((p) => `\n  ${p.count}x ${p.text}`).join("");
 			const shownRed = s.firstRed?.output ?? s.firstRed?.body;
-			return `${s.red ? "RED" : "PASS"} check ${s.name} x${s.runs}: ${s.request} -> ${rate}${odd}${why}${shownRed ? `\n  first red (run ${s.firstRed.run}):\n${shownRed}` : ""}`;
+			return `${s.red ? "RED" : "PASS"} ${s.type === "tests" ? "tests" : `check ${s.name}`} x${s.runs}: ${s.request} -> ${rate}${odd}${why}${shownRed ? `\n  first red (run ${s.firstRed.run}):\n${shownRed}` : ""}`;
 		}
 		if (s.step === "tests") return `${mark} tests: ${s.command} (exit ${s.exitCode}${s.timedOut ? ", timed out" : ""})${s.ok ? "" : "\n" + s.output}`;
 		if (s.step === "server") return `${mark} server: ${s.ok ? "ready" : s.reason}${s.ok || !s.log ? "" : "\n" + s.log}`;
@@ -761,8 +787,8 @@ async function main(argv) {
 	const repeat = args.repeat === undefined ? undefined : Number(args.repeat);
 	if (repeat !== undefined) {
 		if (!/^\d+$/.test(args.repeat) || repeat < 2 || repeat > MAX_REPEAT) throw new ConfigError(`--repeat needs a whole number from 2 to ${MAX_REPEAT}`);
-		if (!args.check?.length) throw new ConfigError("--repeat needs --check NAME: it repeats checks, not the test suite (make the repro a command check to repeat a single test)");
-		if (args["skip-checks"]) throw new ConfigError("--repeat repeats checks, so it cannot be used with --skip-checks");
+		if (!args.check?.length && !args["skip-checks"]) throw new ConfigError("--repeat needs --check NAME (repeat those checks) or --skip-checks (repeat the test suite)");
+		if (args.check?.length && args["skip-checks"]) throw new ConfigError("--repeat takes --check NAME or --skip-checks, not both");
 		if (args.against !== undefined) throw new ConfigError("--repeat is a partial run, so it never runs the against step; drop --against");
 	}
 	const root = path.resolve(args.root ?? process.cwd());

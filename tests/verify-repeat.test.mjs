@@ -81,6 +81,18 @@ test("--repeat counts runs that could not start as red and inconclusive", async 
 	assert.equal(latest(dir).steps[0].inconclusive, 2);
 });
 
+test("--skip-checks --repeat runs the test suite N times, for a repro written as a test", async () => {
+	const dir = project({ test: { args: [node, "flaky.cjs"] }, checks: [{ name: "other", args: [node, "-e", 'require("fs").writeFileSync("check-ran", "")'] }] }, { "flaky.cjs": everySecond });
+	const r = await main(["--root", dir, "--skip-checks", "--repeat", "4"]);
+	assert.equal(r.code, 1, r.text);
+	assert.match(r.text, /^RED tests x4: .*flaky\.cjs -> red in 2 of 4 runs \(50%\)\n  2x exit 1\n  first red \(run 2\):\nstale list on run 2/);
+	assert.ok(!fs.existsSync(path.join(dir, "check-ran")), "checks do not run");
+	const [step] = latest(dir).steps;
+	assert.deepEqual({ step: step.step, type: step.type, runs: step.runs, red: step.red }, { step: "repeat", type: "tests", runs: 4, red: 2 });
+	assert.equal(latest(dir).full, false);
+	await assert.rejects(main(["--root", project({ checks: [{ name: "a", args: [node, "-v"] }] }), "--skip-checks", "--repeat", "2"]), /has no test command/);
+});
+
 test("--repeat refuses what it cannot do", async () => {
 	const dir = project({ test: { args: [node, "-v"] }, checks: [{ name: "a", args: [node, "-v"] }] });
 	for (const [args, expected] of [
@@ -88,7 +100,7 @@ test("--repeat refuses what it cannot do", async () => {
 		[["--check", "a", "--repeat", "1"], /whole number from 2 to 1000/],
 		[["--check", "a", "--repeat", "1001"], /whole number from 2 to 1000/],
 		[["--check", "a", "--repeat", "3x"], /whole number from 2 to 1000/],
-		[["--check", "a", "--repeat", "3", "--skip-checks"], /cannot be used with --skip-checks/],
+		[["--check", "a", "--repeat", "3", "--skip-checks"], /--check NAME or --skip-checks, not both/],
 		[["--check", "a", "--repeat", "3", "--against", "HEAD"], /never runs the against step/],
 		[["--check", "nope", "--repeat", "3"], /unknown check name/],
 	])

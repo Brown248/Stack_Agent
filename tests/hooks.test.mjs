@@ -293,3 +293,47 @@ test("the after-edit guard also runs for NotebookEdit, which names its file note
 	assert.equal(r.code, 2, r.stderr);
 	assert.match(r.stderr, /notes\/scratch\.ipynb:1 \[no-private-keys\]/);
 });
+
+test("post-bash guard reports a violation a shell command wrote, once, and leaves earlier dirt alone", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	// the human's own uncommitted violation, there before the session: recorded as the session's starting dirt
+	write(dir, "src/modules/orders/controller.js", 'export const q = "SELECT * FROM orders";\n');
+	assert.equal(runNode(hook("session-start.mjs"), [], { input: hookInput({ hook_event_name: "SessionStart", cwd: dir, session_id: "s1" }) }).code, 0);
+	const input = hookInput({ tool_name: "Bash", cwd: dir, session_id: "s1", tool_input: { command: "sed -i ..." } });
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input }).code, 0, "files dirty before the session are not the command's doing");
+
+	write(dir, "src/modules/items/controller.js", 'export const q = "SELECT * FROM items";\n');
+	const r = runNode(hook("post-bash-guard.mjs"), [], { input });
+	assert.equal(r.code, 2, r.stderr);
+	assert.match(r.stderr, /that command changed files that now break rules/);
+	assert.match(r.stderr, /src\/modules\/items\/controller\.js:1 \[no-sql-in-controller\][\s\S]*fix: move the query into/);
+	assert.doesNotMatch(r.stderr, /orders/);
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input }).code, 0, "an unchanged file is not reported again");
+
+	write(dir, "src/modules/orders/controller.js", 'export const q = "SELECT * FROM orders"; // touched\n');
+	const touched = runNode(hook("post-bash-guard.mjs"), [], { input });
+	assert.equal(touched.code, 2, "a pre-existing file the command changed is checked");
+	assert.match(touched.stderr, /orders\/controller\.js:1 \[no-sql-in-controller\]/);
+	assert.doesNotMatch(touched.stderr, /items\/controller/, "reported once already");
+});
+
+test("post-bash guard skips files the after-edit hook already checked, and projects without a guard", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	write(dir, "src/modules/items/controller.js", 'export const q = "SELECT * FROM items";\n');
+	const edit = runNode(hook("post-edit-guard.mjs"), [], { input: hookInput({ tool_name: "Edit", cwd: dir, session_id: "s2", tool_input: { file_path: "src/modules/items/controller.js" } }) });
+	assert.equal(edit.code, 2);
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: dir, session_id: "s2", tool_input: { command: "npm test" } }) }).code, 0, "reported by the edit hook already");
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: repoRoot, session_id: "s2", tool_input: { command: "ls" } }) }).code, 0);
+});
+
+test("hooks.json runs the post-bash guard after Bash and PowerShell", () => {
+	const post = JSON.parse(fs.readFileSync(path.join(repoRoot, "hooks/hooks.json"), "utf8")).hooks.PostToolUse;
+	const entry = post.find((e) => e.hooks.some((h) => h.command.includes("post-bash-guard.mjs")));
+	assert.deepEqual(entry?.matcher.split("|").sort(), ["Bash", "PowerShell"]);
+});

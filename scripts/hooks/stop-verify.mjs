@@ -140,8 +140,9 @@ export function reminderMessage({ why, files, verifyConfigChanged, mode = "remin
 
 export function guardMessage(violations, attempt = 1) {
 	return (
-		`stack-agent: the guard fails on files changed in this session (the after-edit hook only sees Edit and Write, so a ` +
-		`shell edit can get here). Fix the code, following each fix line; never raise the baseline to get past it:\n` +
+		`stack-agent: the guard fails on files changed in this session (the after-edit and after-shell hooks report a ` +
+		`violation once, so one left unfixed gets here). Fix the code, following each fix line; never raise the baseline ` +
+		`to get past it:\n` +
 		violations.slice(0, 10).map((v) => `  ${v}`).join("\n") +
 		(violations.length > 10 ? `\n  ... and ${violations.length - 10} more (run node .stack-agent/bin/guard.mjs)` : "") +
 		`\nThen run the full verification again. (Stop ${attempt} of ${MAX_BLOCKS}.)\n`

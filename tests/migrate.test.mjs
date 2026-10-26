@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import { copySample, sampleDir, tempDir, write } from "./helpers.mjs";
 
 const { openDb } = await import(pathToFileURL(path.join(sampleDir, "src/db.js")));
-const { MigrationError, create, down, loadMigrations, status, up } = await import(pathToFileURL(path.join(sampleDir, "scripts/migrate.mjs")));
+const { MigrationError, create, down, loadMigrations, redo, status, up } = await import(pathToFileURL(path.join(sampleDir, "scripts/migrate.mjs")));
 
 function migrationsDir(files) {
 	const dir = tempDir("stack-agent-migrations-");
@@ -136,4 +136,35 @@ test("the sample server refuses to start until its database is migrated", () => 
 	const r = spawnSync(process.execPath, ["src/server.js"], { cwd: dir, encoding: "utf8", timeout: 10_000, env: { ...process.env, DB_FILE: "data/fresh.db", PORT: "0" } });
 	assert.equal(r.status, 1);
 	assert.match(r.stderr, /refusing to start: the database is not at the latest migration \(0001_create_items\)/);
+});
+
+test("redo applies, rolls back, and applies again, and logs the schema after each step", () => {
+	const db = openDb(":memory:");
+	const log = redo(db, migrationsDir(twoSteps));
+	assert.deepEqual(log, [
+		"migrate: applied 0001_create_items",
+		"migrate: schema items(id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+		"migrate: applied 0002_add_price",
+		"migrate: schema items(id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER NOT NULL DEFAULT 0)",
+		"migrate: rolled back 0002_add_price",
+		"migrate: schema items(id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+		"migrate: applied 0002_add_price",
+		"migrate: schema items(id INTEGER PRIMARY KEY, name TEXT NOT NULL, price INTEGER NOT NULL DEFAULT 0)",
+	]);
+	assert.match(redo(openDb(":memory:"), migrationsDir(twoSteps), 2).join("\n"), /schema \(empty\)[\s\S]*rolled back 0002_add_price\nmigrate: rolled back 0001_create_items\nmigrate: schema \(empty\)/);
+});
+
+test("redo fails when the down part does not undo the up part", () => {
+	const leaky = { ...twoSteps, "0002_add_price.down.sql": "SELECT 1;", "0003_index_name.up.sql": "CREATE INDEX items_name ON items(name);", "0003_index_name.down.sql": "SELECT 1;" };
+	assert.throws(() => redo(openDb(":memory:"), migrationsDir(leaky)), (e) => e instanceof MigrationError && /rolling back did not restore the schema/.test(e.message) && /after down: .*index items_name ON items/.test(e.message));
+	assert.throws(() => redo(openDb(":memory:"), migrationsDir(twoSteps), 3), /redo 3 needs at least 3 migrations, found 2/);
+});
+
+test("the CLI redo works on the sample without writing a database file", () => {
+	const dir = copySample();
+	const r = runMigrate(dir, ["redo"], "data/should-not-exist.db");
+	assert.equal(r.code, 0, r.out);
+	assert.match(r.out, /applied 0001_create_items[\s\S]*rolled back 0001_create_items[\s\S]*applied 0001_create_items[\s\S]*migrate: redo ok/);
+	assert.ok(!fs.existsSync(path.join(dir, "data/should-not-exist.db")), "redo must not touch DB_FILE");
+	assert.equal(runMigrate(dir, ["redo", "0"], "x.db").code, 2);
 });

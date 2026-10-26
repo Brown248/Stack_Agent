@@ -4,7 +4,7 @@
 // time, so a one-shot repro can pass on the buggy code. The bug is folded into the project's first commit, so the
 // history does not point at it. It tests the debug skill's step for a bug that fails on some runs only: run the
 // repro many times, report how often it goes red, and raise that rate before working on the cause.
-import { call, commonGrade, harnessGrade, plantBug, withServer } from "../lib.mjs";
+import { call, commonGrade, harnessGrade, plantBug, repeatGrade, withServer } from "../lib.mjs";
 
 export const name = "bug-flaky-list";
 export const prompt = "Bug report: every now and then, right after I add an item with POST /items, GET /items does not list it; if I ask again it is usually there. It does not happen every time. Please find and fix it.";
@@ -47,5 +47,6 @@ export async function grade(dir) {
 	const h = harnessGrade(dir);
 	const { checks, details } = commonGrade(dir);
 	const behavior = await probe(dir);
-	return { checks: { behavior: behavior.ok, ...checks, ...h.checks }, details: { ...details, ...h.details, behavior: behavior.detail } };
+	const r = repeatGrade(dir);
+	return { checks: { behavior: behavior.ok, ...checks, ...h.checks, ...r.checks }, details: { ...details, ...h.details, ...r.details, behavior: behavior.detail } };
 }

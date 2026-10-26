@@ -14,6 +14,8 @@ const USAGE = `usage: node scripts/migrate.mjs <command>
   down [N]      roll back the last N applied migrations (default 1)
   status        list migrations and whether each is applied
   new <name>    create the next NNNN_<name>.up.sql and .down.sql pair
+  redo [N]      on a throwaway in-memory database: apply every migration, roll back the last N
+                (default 1), apply them again, and check the schema after each step; writes no file
 the database is DB_FILE (default ${defaultDbFile}, relative to the app root)
 exit codes: 0 ok, 1 migration error, 2 usage error`;
 
@@ -83,11 +85,11 @@ function inTransaction(db, id, fn) {
 	}
 }
 
-export function up(db, dir = migrationsDir) {
+export function up(db, dir = migrationsDir, limit = Infinity) {
 	const rows = status(db, dir);
 	assertUnchanged(rows);
 	const done = [];
-	for (const m of rows.filter((r) => !r.applied)) {
+	for (const m of rows.filter((r) => !r.applied).slice(0, limit)) {
 		inTransaction(db, `${m.id} up`, () => {
 			db.exec(fs.readFileSync(m.up, "utf8"));
 			db.prepare("INSERT INTO schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)").run(m.version, m.name, checksum(m.up), new Date().toISOString());
@@ -112,6 +114,48 @@ export function down(db, dir = migrationsDir, steps = 1) {
 	return done;
 }
 
+// Tables with their columns, and indexes, as data: SQLite rewrites a table's CREATE text on DROP COLUMN, so the text
+// itself cannot be compared.
+export function schema(db) {
+	const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations' ORDER BY name").all();
+	const indexes = db.prepare("SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY name").all();
+	return {
+		tables: Object.fromEntries(tables.map(({ name }) => [name, db.prepare(`PRAGMA table_info("${name}")`).all().map((c) => `${c.name} ${c.type}${c.notnull ? " NOT NULL" : ""}${c.dflt_value !== null ? ` DEFAULT ${c.dflt_value}` : ""}${c.pk ? " PRIMARY KEY" : ""}`)])),
+		indexes: indexes.map((i) => `${i.name} ON ${i.tbl_name}`),
+	};
+}
+
+export function describeSchema(s) {
+	const tables = Object.entries(s.tables).map(([name, cols]) => `${name}(${cols.join(", ")})`);
+	return [...tables, ...s.indexes.map((i) => `index ${i}`)].join("; ") || "(empty)";
+}
+
+// up, down N, up again on a database the caller throws away; returns the log lines and throws on a schema that does
+// not come back the same
+export function redo(db, dir = migrationsDir, steps = 1) {
+	const all = loadMigrations(dir);
+	if (all.length === 0) throw new MigrationError("no migrations to redo");
+	if (steps > all.length) throw new MigrationError(`redo ${steps} needs at least ${steps} migrations, found ${all.length}`);
+	const log = [];
+	const apply = (limit) => {
+		for (const id of up(db, dir, limit)) log.push(`migrate: applied ${id}`);
+		const s = schema(db);
+		log.push(`migrate: schema ${describeSchema(s)}`);
+		return s;
+	};
+	const before = apply(all.length - steps);
+	const first = apply(Infinity);
+	for (const id of down(db, dir, steps)) log.push(`migrate: rolled back ${id}`);
+	const back = schema(db);
+	log.push(`migrate: schema ${describeSchema(back)}`);
+	if (JSON.stringify(back) !== JSON.stringify(before))
+		throw new MigrationError(`rolling back did not restore the schema.\n  before: ${describeSchema(before)}\n  after down: ${describeSchema(back)}\n${log.join("\n")}`);
+	const again = apply(Infinity);
+	if (JSON.stringify(again) !== JSON.stringify(first))
+		throw new MigrationError(`applying again gave a different schema.\n  first up: ${describeSchema(first)}\n  second up: ${describeSchema(again)}\n${log.join("\n")}`);
+	return log;
+}
+
 export function create(name, dir = migrationsDir) {
 	if (!/^[a-z0-9_]+$/.test(name ?? "")) throw new MigrationError(`migration name must be lower_snake_case, got: ${name ?? "(none)"}`);
 	const last = loadMigrations(dir).at(-1);
@@ -129,14 +173,25 @@ function main(argv) {
 		for (const file of create(arg)) console.log(`migrate: created ${path.relative(appRoot, file)}`);
 		return 0;
 	}
-	if (!["up", "down", "status"].includes(cmd)) {
+	if (!["up", "down", "status", "redo"].includes(cmd)) {
 		console.error(USAGE);
 		return 2;
 	}
 	const steps = arg === undefined ? 1 : Number(arg);
-	if (cmd === "down" && !(Number.isInteger(steps) && steps > 0)) {
+	if ((cmd === "down" || cmd === "redo") && !(Number.isInteger(steps) && steps > 0)) {
 		console.error(USAGE);
 		return 2;
+	}
+	if (cmd === "redo") {
+		const scratch = openDb(":memory:");
+		try {
+			console.log("migrate: redo on a throwaway in-memory database (DB_FILE is not touched)");
+			for (const line of redo(scratch, migrationsDir, steps)) console.log(line);
+			console.log(`migrate: redo ok (up, down ${steps}, up; the schema came back the same)`);
+			return 0;
+		} finally {
+			scratch.close();
+		}
 	}
 	const db = openDb();
 	try {
