@@ -10,10 +10,12 @@ import { FINGERPRINT_VERSION, SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerp
 
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
                       [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
+       node verify.mjs --check NAME... --repeat N   run each named check N times and report how many went red
        node verify.mjs --skip "REASON"   record why verification cannot run for the current code
        node verify.mjs --evidence-status  say whether the latest evidence is a full pass for the code as it is now (runs nothing)
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
 const MIN_SKIP_REASON = 15;
+const MAX_REPEAT = 1000;
 
 const CHECK_TYPES = ["http", "command"];
 
@@ -310,9 +312,31 @@ function gitHead(root) {
 	return r.status === 0 ? { head: r.stdout.trim(), dirty: dirty.stdout.trim().length > 0 } : null;
 }
 
-export async function runVerify({ root, config, skipTests, skipChecks, only, reuse }) {
+// One step for N runs of a check: the red count, and each distinct problem with how often it came up.
+// The server (when there is one) stays up across the runs, so state left by one run can reach the next.
+async function repeatCheck(root, baseUrl, check, times) {
+	const started = Date.now();
+	const counts = new Map();
+	let red = 0;
+	let inconclusive = 0;
+	let first;
+	let last;
+	for (let i = 0; i < times; i++) {
+		last = checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(baseUrl, check);
+		if (last.ok) continue;
+		red++;
+		if (last.inconclusive) inconclusive++;
+		first ??= { run: i + 1, ...(last.output !== undefined && { output: last.output }), ...(last.body !== undefined && { body: last.body }) };
+		const text = last.problems.join("; ");
+		counts.set(text, (counts.get(text) ?? 0) + 1);
+	}
+	const problems = [...counts].sort((a, b) => b[1] - a[1]).map(([text, count]) => ({ text, count }));
+	return { step: "repeat", type: last.type, name: check.name, request: last.request, runs: times, red, inconclusive, ok: red === 0, problems, ...(first && { firstRed: first }), durationMs: Date.now() - started };
+}
+
+export async function runVerify({ root, config, skipTests, skipChecks, only, reuse, repeat }) {
 	const steps = [];
-	if (runs(config.test) && !skipTests) steps.push(await runTests(root, config.test));
+	if (runs(config.test) && !skipTests && !repeat) steps.push(await runTests(root, config.test));
 
 	const checks = (config.checks ?? []).filter((c) => !only?.length || only.includes(c.name));
 	if (only?.length) {
@@ -335,7 +359,10 @@ export async function runVerify({ root, config, skipTests, skipChecks, only, reu
 					if (!server.ok) return steps;
 				}
 			}
-			for (const check of checks) steps.push(checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(config.baseUrl, check));
+			for (const check of checks)
+				steps.push(
+					repeat ? await repeatCheck(root, config.baseUrl, check, repeat) : checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(config.baseUrl, check),
+				);
 		} finally {
 			await stopProcess(server?.child);
 		}
@@ -714,6 +741,13 @@ function summarize(steps) {
 			if (s.skipped) return `SKIP against: ${s.skipped}${removed}`;
 			return (s.ok ? `PASS against ${s.ref}: ${s.detecting.join(", ")} fail(s) on the code before the change` : `FAIL against ${s.ref}: ${s.problems.join("; ")}`) + removed;
 		}
+		if (s.step === "repeat") {
+			const rate = `red in ${s.red} of ${s.runs} runs (${Math.round((100 * s.red) / s.runs)}%)`;
+			const odd = s.inconclusive ? `, ${s.inconclusive} of them inconclusive (timed out, could not start, or no response)` : "";
+			const why = s.problems.map((p) => `\n  ${p.count}x ${p.text}`).join("");
+			const shownRed = s.firstRed?.output ?? s.firstRed?.body;
+			return `${s.red ? "RED" : "PASS"} check ${s.name} x${s.runs}: ${s.request} -> ${rate}${odd}${why}${shownRed ? `\n  first red (run ${s.firstRed.run}):\n${shownRed}` : ""}`;
+		}
 		if (s.step === "tests") return `${mark} tests: ${s.command} (exit ${s.exitCode}${s.timedOut ? ", timed out" : ""})${s.ok ? "" : "\n" + s.output}`;
 		if (s.step === "server") return `${mark} server: ${s.ok ? "ready" : s.reason}${s.ok || !s.log ? "" : "\n" + s.log}`;
 		if (s.type === "command") return `${mark} check ${s.name}: ${s.request} -> exit ${s.exitCode}${s.ok ? "" : " (" + s.problems.join("; ") + ")\n" + s.output}`;
@@ -722,18 +756,25 @@ function summarize(steps) {
 }
 
 async function main(argv) {
-	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status"], options: ["root", "config", "skip", "against"], multi: ["check"] });
+	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status"], options: ["root", "config", "skip", "against", "repeat"], multi: ["check"] });
 	if (args.help) return { code: 0, text: USAGE };
+	const repeat = args.repeat === undefined ? undefined : Number(args.repeat);
+	if (repeat !== undefined) {
+		if (!/^\d+$/.test(args.repeat) || repeat < 2 || repeat > MAX_REPEAT) throw new ConfigError(`--repeat needs a whole number from 2 to ${MAX_REPEAT}`);
+		if (!args.check?.length) throw new ConfigError("--repeat needs --check NAME: it repeats checks, not the test suite (make the repro a command check to repeat a single test)");
+		if (args["skip-checks"]) throw new ConfigError("--repeat repeats checks, so it cannot be used with --skip-checks");
+		if (args.against !== undefined) throw new ConfigError("--repeat is a partial run, so it never runs the against step; drop --against");
+	}
 	const root = path.resolve(args.root ?? process.cwd());
 	const configPath = path.resolve(root, args.config ?? ".stack-agent/verify.json");
 	const config = loadVerifyConfig(configPath);
 	if (args.skip !== undefined) return writeSkip(root, config, args.skip);
 	if (args["evidence-status"]) return evidenceStatus(root, config, args.json);
 	const before = codeFingerprint(root, fingerprintOptions(config));
-	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse });
+	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse, repeat });
 	if (steps.length === 0) throw new ConfigError("nothing ran: every step was skipped");
 	const flags = argv.filter((a) => a.startsWith("--") && !["--root", "--config", "--json", "--against"].includes(a));
-	const full = !args["skip-tests"] && !args["skip-checks"] && !args.check?.length && !args.reuse;
+	const full = !args["skip-tests"] && !args["skip-checks"] && !args.check?.length && !args.reuse && !repeat;
 	const wantAgainst = args.against !== undefined || (config.against !== false && !args["no-against"]);
 	if (full && wantAgainst && steps.every((s) => s.ok)) steps.push(await runAgainst({ root, config, configRel: toPosix(path.relative(root, configPath)), ref: args.against }));
 	// the Stop hook refuses evidence from a run with the against step off unless the session started that way

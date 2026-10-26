@@ -17,6 +17,7 @@ From the first install into a real project (a pnpm + Next.js monorepo on Postgre
 - The CI workflow `init` writes uses the project's Node version from `.nvmrc`, `.node-version`, or the lower bound of `engines.node` when it is newer than 22. `--check` notes a workflow that runs an older one, or one older than 22.
 - docs/adoption.md: how to verify a program that needs a database or a seeded user (one wrapper script for `server`), and how to check a signed-in flow (a command check).
 - A/B task `bug-flaky-list`: a bug that is really random (two read copies picked at random, a create refreshes one), folded into the project's first commit with the new `plantBug(..., { hidden: true })` so the history does not point at it.
+- `verify.mjs --check <name> --repeat N` runs the named checks N times and reports the red rate (`red in 7 of 30 runs (23%)`), each distinct failure with its count, and the first red output. The server starts once for all runs. In the `bug-stale-list` and `bug-flaky-list` A/B runs no agent measured a red rate, because permission rules stopped their shell loops; the `debug` skill now points at this flag.
 
 ### Fixed
 

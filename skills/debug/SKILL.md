@@ -22,7 +22,7 @@ Run it on the code as it is now: `node .stack-agent/bin/verify.mjs --skip-tests 
 
 The red must be the failure the user reported. A repro that fails some other way nearby (a 500 when they reported a 201, a crash when they reported a wrong count) finds a different bug, and fixing that one leaves theirs in place. Compare the output with the user's words before you go on.
 
-If it fails on some runs only, run it in a loop and report how many runs out of how many go red. Raise that rate before step 2: more runs, more load, a fixed seed or clock, a narrower timing window. A bug that fails half the time can be worked on; one that fails once in a hundred cannot.
+If it fails on some runs only, measure it with `node .stack-agent/bin/verify.mjs --check <name> --repeat 20` (a shell loop may be blocked by permission rules) and report how many runs out of how many go red. Raise that rate before step 2: more runs, more load, a fixed seed or clock, a narrower timing window. A bug that fails half the time can be worked on; one that fails once in a hundred cannot.
 
 If you cannot make it go red, stop and say so: list what you tried and ask the user for what would reproduce it (an environment, a captured request, a log). Theories without a red repro are guesses, so the next steps wait.
 
