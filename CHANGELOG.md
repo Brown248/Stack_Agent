@@ -8,6 +8,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 ### Fixed
 
+- Test runs could hand two test files the same port (this repo's tests only; nothing a project installs): the OS gives a port back the moment it is closed, so two files running at once could be given the same one and a server in one answered for the other, which made `a server that never becomes ready` pass verify (`0 !== 1`) on a Linux runner now and then. On Linux, two processes asking at once got a port in common in 4 of 30 rounds. Each port is claimed with an exclusive file create in a folder shared by one test run; the same experiment gave 0 of 90 rounds.
 - The A/B task `bug-stale-list` (this repo's tests only; nothing a project installs): its planted cache lasted 50 ms, and on a loaded Windows CI runner a read, a create, and a read took longer, so the bug never showed and `tests/ab-tasks.test.mjs` failed on three of six Windows jobs. The window is 300 ms now.
 
 ## 0.5.2 (2026-10-27)
