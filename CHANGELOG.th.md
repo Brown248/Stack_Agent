@@ -11,15 +11,12 @@
 ### เพิ่ม
 
 - `"against": { "requireNewCoverage": true }` ใน `verify.json` ทำให้การแก้โค้ดโดยไม่มี check หรือเทสที่ใหม่หรือเปลี่ยนทำให้ขั้น against fail ค่าเริ่มต้นกรณีนี้ยังข้ามพร้อมหมายเหตุ (CI ผ่าน และ Stop hook ขอหนึ่งครั้ง) CI จึงเป็นแค่คำเตือน ไม่ใช่ด่าน เจอตอนอ่านเทมเพลต CI ของ repo นี้เอง การเปลี่ยนที่ไม่เปลี่ยนพฤติกรรม (refactor, เปลี่ยนชื่อ) ผ่อนได้ด้วยบรรทัด `Stack-Agent-No-New-Test: <เหตุผล>` (อย่างน้อย 15 ตัวอักษร) ใน commit message หลัง base เหตุผลจะแสดงและอยู่ในประวัติ ตัวเลือกนี้แยกจาก `against.required` ซึ่งยังมีความหมายเดิม (ผลที่สรุปไม่ได้ให้ fail)
+- canary รายสัปดาห์ใน CI ของ repo นี้ (`.github/workflows/claude-code-canary.yml`, `scripts/canary.mjs`) ติดตั้ง Claude Code รุ่นล่าสุดแล้วตรวจว่าปลั๊กอินยังผ่าน `plugin validate --strict` (ไม่ต้องมี credential) และถ้ามี secret `ANTHROPIC_API_KEY` ตรวจว่า session แบบ headless ยังโหลดปลั๊กอิน บันทึก session และปฏิเสธ `git commit --no-verify` (ราว $0.003 ต่อรอบ) กับสำเนาที่ PreToolUse hook ตาย การตรวจ static ผ่านแต่การตรวจ live ล้ม สิ่งที่โปรเจกต์ติดตั้งไม่เปลี่ยน
 
 ### แก้ไข
 
 - การรันเทสอาจให้พอร์ตเดียวกันกับสองไฟล์เทส (เฉพาะเทสของ repo นี้ ไม่กระทบสิ่งที่โปรเจกต์ติดตั้ง): OS คืนพอร์ตทันทีที่ปิด ไฟล์เทสสองไฟล์ที่รันพร้อมกันจึงอาจได้พอร์ตเดียวกัน และ server ในไฟล์หนึ่งตอบแทนอีกไฟล์ ทำให้เทส `a server that never becomes ready` ผ่าน verify (`0 !== 1`) บนรันเนอร์ Linux เป็นบางครั้ง บน Linux สองโปรเซสที่ขอพร้อมกันได้พอร์ตซ้ำกัน 4 จาก 30 รอบ ตอนนี้แต่ละพอร์ตถูกจองด้วยการสร้างไฟล์แบบ exclusive ในโฟลเดอร์ที่ใช้ร่วมกันในหนึ่งรอบการรันเทส การทดลองเดียวกันได้ 0 จาก 90 รอบ
 - task A/B `bug-stale-list` (เฉพาะเทสของ repo นี้ ไม่กระทบสิ่งที่โปรเจกต์ติดตั้ง): cache ที่ฝังไว้อยู่ 50 ms และบน runner Windows ของ CI ที่โหลดหนัก การอ่าน สร้าง แล้วอ่านใช้เวลานานกว่านั้น บั๊กจึงไม่โผล่ และ `tests/ab-tasks.test.mjs` ล้มใน 3 จาก 6 job ของ Windows ตอนนี้หน้าต่างเป็น 300 ms
-
-### เพิ่ม
-
-- canary รายสัปดาห์ใน CI ของ repo นี้ (`.github/workflows/claude-code-canary.yml`, `scripts/canary.mjs`) ติดตั้ง Claude Code รุ่นล่าสุดแล้วตรวจว่าปลั๊กอินยังผ่าน `plugin validate --strict` (ไม่ต้องมี credential) และถ้ามี secret `ANTHROPIC_API_KEY` ตรวจว่า session แบบ headless ยังโหลดปลั๊กอิน บันทึก session และปฏิเสธ `git commit --no-verify` (ราว $0.003 ต่อรอบ) กับสำเนาที่ PreToolUse hook ตาย การตรวจ static ผ่านแต่การตรวจ live ล้ม สิ่งที่โปรเจกต์ติดตั้งไม่เปลี่ยน
 
 ## 0.5.2 (2026-10-27)
 

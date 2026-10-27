@@ -49,7 +49,7 @@ The ideas that make it work:
 
 - **Evidence, not claims.** `verify` runs your tests, starts your server if you have one, runs HTTP and command checks, and writes a record to `.stack-agent/evidence/`. The record carries a fingerprint of the code (by default Markdown files, `docs/`, and `.stack-agent/` are left out; `stopHookIgnore` changes that list). Edit the code after verifying and the old evidence no longer counts.
 - **A ratchet, not a clean slate.** `guard` checks rules you write: a regex for any language, plus import rules for JS/TS and Python. A baseline (`guard-baseline.json`) records the violations that exist today. Those pass; a new one fails, and raising the baseline needs a human's `--allow-increase`. In CI, `--compare-ref` fails a pull request that raises the baseline or loosens a rule.
-- **New checks must fail on the old code.** On a pull request, the `against` step runs your new checks and tests against the code before the change. A check that also passes there proves nothing, so the step fails it.
+- **New checks must fail on the old code.** On a pull request, the `against` step runs your new checks and tests against the code before the change. A check that also passes there proves nothing, so the step fails it. By default a code change with no new check or test only gets a note and CI passes; set `"against": { "requireNewCoverage": true }` in `verify.json` to make CI fail it. A change that alters no behavior (a refactor, a rename) is waived by a `Stack-Agent-No-New-Test: <reason>` line in a commit message.
 - **Hooks catch the common shortcut. CI catches the rest.** The hooks match command patterns: they deny `git commit --no-verify`, `HUSKY=0`, and `core.hooksPath` tricks, ask before a force push, `reset --hard`, or an edit to the guard's own config, and run the guard after every edit and on files a shell command changed. A determined workaround can slip past a hook; it cannot slip past a required CI check ([docs/adoption.md](docs/adoption.md) shows how to make it required).
 
 ## Install in your project
@@ -270,7 +270,7 @@ Every preset includes two universal guard rules: no merge-conflict markers and n
 - The hooks match command patterns. They catch common shortcuts, not every possible one. CI is the gate that always holds.
 - `claude plugin eval` needs Claude Code 2.1.269 or newer. Cases that let the agent use Bash need Linux, macOS, or WSL2, because native Windows has no sandbox for them.
 - Tested on Windows 11 with Node 26. CI runs the tests and all five examples on Linux and Windows with Node 22 and 24.
-- The hooks have been run for real against Claude Code 2.1.299 to 2.1.310. Claude Code changes often; if a hook stops firing after an update, [open an issue](https://github.com/Brown248/Stack_Agent/issues).
+- The hooks have been run for real against Claude Code 2.1.299 to 2.1.310. Claude Code changes often, so a weekly workflow in this repo (`scripts/canary.mjs`) runs the plugin against the latest release to catch a break early. If a hook stops firing after an update, [open an issue](https://github.com/Brown248/Stack_Agent/issues).
 
 ## Developing Stack Agent
 
