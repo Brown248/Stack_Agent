@@ -1,0 +1,15 @@
+{
+  "name": "sample-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "migrate": "node scripts/migrate.mjs",
+    "guard": "node .stack-agent/bin/guard.mjs",
+    "verify": "node .stack-agent/bin/verify.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

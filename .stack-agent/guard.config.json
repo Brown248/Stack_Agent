@@ -1,0 +1,60 @@
+{
+  "baseline": ".stack-agent/guard-baseline.json",
+  "ignore": ["test/fixtures"],
+  "rules": [
+    {
+      "id": "no-sql-in-controller",
+      "type": "pattern",
+      "files": ["src/modules/*/controller.js"],
+      "pattern": "\\b(SELECT\\s.+\\sFROM|INSERT\\s+INTO|UPDATE\\s+\\w+\\s+SET|DELETE\\s+FROM)\\b",
+      "flags": "i",
+      "message": "SQL belongs in the repository layer, not in a controller",
+      "fix": "move the query into src/modules/<module>/repository.js and call it through service.js"
+    },
+    {
+      "id": "controller-no-db",
+      "type": "forbidden-import",
+      "files": ["src/modules/*/controller.js", "src/modules/*/service.js"],
+      "to": ["src/db.js"],
+      "message": "only repositories may touch the database module",
+      "fix": "call src/modules/<module>/repository.js from service.js"
+    },
+    {
+      "id": "module-boundary",
+      "type": "module-boundary",
+      "modulesRoot": "src/modules",
+      "publicEntry": ["index.js"],
+      "message": "a module may use another module only through its public index.js",
+      "fix": "export what you need from src/modules/<other>/index.js and import that file"
+    },
+    {
+      "id": "no-merge-conflict-markers",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "^(<{7}|>{7})( .*)?$",
+      "flags": "m",
+      "message": "an unresolved merge conflict marker was committed",
+      "fix": "resolve the conflict and delete the <<<<<<< / >>>>>>> lines"
+    },
+    {
+      "id": "no-private-keys",
+      "type": "pattern",
+      "files": ["**"],
+      "exclude": [".stack-agent/**"],
+      "pattern": "-----BEGIN ((RSA|EC|DSA|OPENSSH|ENCRYPTED|PGP) )?PRIVATE KEY( BLOCK)?-----",
+      "message": "a private key is in the repository",
+      "fix": "remove it, rotate the key, and load it from a secret store or an untracked env file"
+    },
+    {
+      "id": "no-debug-tags",
+      "type": "pattern",
+      "onEdit": "skip",
+      "files": ["**"],
+      "exclude": [".stack-agent/**", "**/*.md", "**/*.log", "dist/**", "build/**", "out/**", ".next/**", "coverage/**"],
+      "pattern": "\\[DEBUG-[0-9A-Za-z]+\\]",
+      "message": "a tagged debug line from /stack-agent:debug is still in the code",
+      "fix": "delete every line tagged [DEBUG-...] (grep for the tag); keep the regression test instead"
+    }
+  ]
+}

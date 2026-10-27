@@ -1,0 +1,70 @@
+name: stack-agent
+
+on:
+  pull_request:
+  push:
+    branches: ["probe-base"]
+
+# Read-only token: these jobs write nothing back to GitHub, and the install step runs third-party package scripts.
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Guard (hard constraints, ratchet against the baseline)
+        run: node .stack-agent/bin/guard.mjs
+      - name: Guard config and baseline were not loosened in this PR
+        if: github.event_name == 'pull_request'
+        run: node .stack-agent/bin/guard.mjs --compare-ref "origin/${{ github.base_ref }}"
+      - name: API map drift (only when the project has an API map)
+        if: hashFiles('.stack-agent/api-map.json') != ''
+        run: node .stack-agent/bin/api-map.mjs
+      - name: Feature map drift (only when the project has a feature map)
+        if: hashFiles('.stack-agent/feature-map.md') != ''
+        run: node .stack-agent/bin/feature-map.mjs
+
+  # Runs the real verification in CI, so a hand-written .stack-agent/evidence/latest.json proves nothing.
+  # It fails until verify.json is filled in and the install step below is done. That is deliberate:
+  # skipping on a text marker would let a PR switch the gate off.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Python projects: add this step before the install step.
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.12"
+      # A database or other service: add a `services:` block to this job.
+      - name: Install your dependencies
+        run: |
+          #   npm ci
+          #   pip install -r requirements.txt
+          # Nothing to install? Replace the line below with a comment saying so.
+          echo "nothing to install"
+      - name: Verify (tests, server, checks)
+        if: github.event_name != 'pull_request'
+        run: node .stack-agent/bin/verify.mjs
+      - name: Verify, and new checks must fail on the base branch's code
+        if: github.event_name == 'pull_request'
+        run: node .stack-agent/bin/verify.mjs --against "origin/${{ github.base_ref }}"
+      - name: Upload verify evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stack-agent-evidence
+          path: .stack-agent/evidence/
+          include-hidden-files: true
+          if-no-files-found: ignore

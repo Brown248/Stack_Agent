@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "counts": {
+    "module-boundary": {
+      "src/modules/reports/controller.js": 1
+    }
+  }
+}

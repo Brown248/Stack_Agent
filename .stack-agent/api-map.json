@@ -1,0 +1,12 @@
+{
+  "map": ".stack-agent/api-map.md",
+  "verifyConfig": ".stack-agent/verify.json",
+  "sources": [
+    {
+      "files": ["src/routes.js"],
+      "pattern": "route\\(\"(GET|POST|PUT|PATCH|DELETE)\",\\s*\"([^\"]+)\"",
+      "methodGroup": 1,
+      "pathGroup": 2
+    }
+  ]
+}

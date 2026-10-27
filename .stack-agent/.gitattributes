@@ -1,0 +1,2 @@
+# Stack Agent: keep LF on every OS, so the vendored tools match the plugin's copy byte for byte
+* text eol=lf
