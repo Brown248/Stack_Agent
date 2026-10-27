@@ -15,7 +15,7 @@
 ### เพิ่ม
 
 - แขน A/B `full+superpowers` (`--superpowers DIR`): plugin คู่กับ superpowers ที่ติดตั้งไว้ นับว่าแยกถูกต้องเฉพาะเมื่อโหลดสอง plugin นี้เท่านั้น ทุกแขนตั้ง `SUPERPOWERS_DISABLE_TELEMETRY=1`
-- job `skill-scan` ใน CI ของ repo นี้รัน NVIDIA SkillSpector 2.12.0 (ตรึงที่ commit, static เท่านั้น, ไม่ใช้ credential) กับแต่ละ skill, agents, `hooks.json` และ hook script ไม่ใช่ด่านบังคับ finding ใหม่จะแสดงเป็นคำเตือน การสแกนครั้งแรกได้ 8 finding ที่เป็นผลบวกลวงทั้งหมด (flag `--skip-*` ของ verify เอง, คำสั่งที่ถูกบล็อกซึ่งปรากฏใน hook ที่บล็อกมัน, รูปแบบ output และคอมเมนต์เรื่องเพดานของ Stop hook) แต่ละข้ออยู่ใน `.github/skillspector/` พร้อมเหตุผล บรรทัดที่ลองใส่ให้ส่ง SSH key ไป URL ภายนอกยังถูกรายงาน `scripts/skill-scan.mjs` เก็บรายการเป้าหมาย โปรเจกต์ของผู้ใช้ไม่เปลี่ยน รายละเอียด: design notes วันที่ 27 ต.ค. 2026
+- job `skill-scan` ใน CI ของ repo นี้รัน NVIDIA SkillSpector 2.12.0 (ตรึงที่ commit, static เท่านั้น, ไม่ใช้ credential) กับแต่ละ skill, agents, `hooks.json` และ hook script ไม่ใช่ด่านบังคับ finding ใหม่จะแสดงเป็นคำเตือน การสแกนครั้งแรกได้ 8 finding ที่เป็นผลบวกลวงทั้งหมด (flag `--skip-*` ของ verify เอง, คำสั่งที่ถูกบล็อกซึ่งปรากฏใน hook ที่บล็อกมัน, รูปแบบ output และคอมเมนต์เรื่องเพดานของ Stop hook) แต่ละข้ออยู่ใน `.github/skillspector/` พร้อมเหตุผล การรันครั้งแรกบน runner Linux เจอเพิ่มอีก 4 ข้อ ซึ่งเป็นผลบวกลวงเหมือนกัน (คำว่า "find" และ "review" ใน description ของสอง skill และ path ใน repo ของผู้ใช้ที่สอง skill อ่านตอนทำงาน) และใส่ baseline แล้ว บรรทัดที่ลองใส่ให้ส่ง SSH key ไป URL ภายนอกยังถูกรายงาน `scripts/skill-scan.mjs` เก็บรายการเป้าหมาย โปรเจกต์ของผู้ใช้ไม่เปลี่ยน รายละเอียด: design notes วันที่ 27 ต.ค. 2026
 
 ## 0.5.1 (2026-10-27)
 

@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [],
+  "fingerprints": [
+    {
+      "hash": "sha256:bca5514deaca59342f32e9c114eb07e8f95af4e252d239cc7c2864272a67ee5f",
+      "rule_id": "AE1",
+      "file": "SKILL.md",
+      "reason": "false positive (2026-10-27): the paths it could not inspect (another skill's SKILL.md, feature-map.md, api-map.md) are files in the adopter's repo that the skill reads or edits at runtime, not files bundled with it. Reported on Linux only"
+    }
+  ]
+}
