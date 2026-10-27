@@ -1,4 +1,4 @@
-// Task: a bug report about a bug that shows up only sometimes. The items list is cached for 50 ms and creating an
+// Task: a bug report about a bug that shows up only sometimes. The items list is cached for 300 ms and creating an
 // item does not clear the cache, so a list read right after a create can miss the new item, depending on how soon
 // after the previous read it comes. It tests the debug skill's steps for a timing-dependent bug: measure how often
 // the repro goes red and raise that rate before working on the cause. The bug is committed before the session.
@@ -15,7 +15,7 @@ export function setup(dir) {
 			[
 				"src/modules/items/service.js",
 				"export function getItems() {\n\treturn listItems();\n}",
-				"// the list is read on every page load; keep it for a moment instead of querying each time\nconst CACHE_MS = 50;\nlet cached = null;\n\nexport function getItems() {\n\tif (cached && Date.now() - cached.at < CACHE_MS) return cached.items;\n\tcached = { at: Date.now(), items: listItems() };\n\treturn cached.items;\n}",
+				"// the list is read on every page load; keep it for a moment instead of querying each time\nconst CACHE_MS = 300;\nlet cached = null;\n\nexport function getItems() {\n\tif (cached && Date.now() - cached.at < CACHE_MS) return cached.items;\n\tcached = { at: Date.now(), items: listItems() };\n\treturn cached.items;\n}",
 			],
 		],
 		"items: cache the list briefly",

@@ -353,7 +353,7 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **The coverage request does not push work onto a refactor:** with and without it, every reply said nothing observable changed and stopped.
 - **The guard's own output already does the job:** with only the CLI line and its `fix:` text, all five control replies moved the query into the repository and none loosened the guard. The hook's framing adds the reason and "never raise the baseline", which this scenario could not tell apart.
 
-**A/B, `bug-stale-list`** (new: the list is cached for 50 ms and a create does not clear it). `scripts/ab/run.mjs` at `8f29d1c`, Claude Code 2.1.309, Sonnet, at most $1 per run, plugin and bare arm, 3 runs each, all 6 valid, $0.58.
+**A/B, `bug-stale-list`** (new: the list is cached for 50 ms and a create does not clear it). `scripts/ab/run.mjs` at `8f29d1c`, Claude Code 2.1.309, Sonnet, at most $1 per run, plugin and bare arm, 3 runs each, all 6 valid, $0.58. The window was 50 ms in these runs and is 300 ms since 2026-10-27: on a loaded Windows CI runner a read, a create, and a read took longer than 50 ms, so the planted bug never showed and the task's tests failed on three of six Windows jobs (never on Ubuntu). A person or an agent calling the API by hand, with seconds between calls, still sees the bug only sometimes.
 
 | Arm | `debug` invoked | Correct | Verified, evidence matches | `checkDetects` | Mean cost |
 | --- | --- | --- | --- | --- | --- |
