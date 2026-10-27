@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [],
+  "fingerprints": [
+    {
+      "hash": "sha256:662221a045807099ce25b93f231916d3091368ec1be93a3276ed5116ebc9af4d",
+      "rule_id": "TR2",
+      "file": "SKILL.md",
+      "reason": "false positive (2026-10-27): the description uses the plain word \"find\" (\"Use to find where an endpoint lives\"); it names no command and the skill is namespaced as stack-agent:api-map. Reported on Linux only"
+    }
+  ]
+}
