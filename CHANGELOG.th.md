@@ -10,6 +10,10 @@
 
 - task A/B `bug-stale-list` (เฉพาะเทสของ repo นี้ ไม่กระทบสิ่งที่โปรเจกต์ติดตั้ง): cache ที่ฝังไว้อยู่ 50 ms และบน runner Windows ของ CI ที่โหลดหนัก การอ่าน สร้าง แล้วอ่านใช้เวลานานกว่านั้น บั๊กจึงไม่โผล่ และ `tests/ab-tasks.test.mjs` ล้มใน 3 จาก 6 job ของ Windows ตอนนี้หน้าต่างเป็น 300 ms
 
+### เพิ่ม
+
+- canary รายสัปดาห์ใน CI ของ repo นี้ (`.github/workflows/claude-code-canary.yml`, `scripts/canary.mjs`) ติดตั้ง Claude Code รุ่นล่าสุดแล้วตรวจว่าปลั๊กอินยังผ่าน `plugin validate --strict` (ไม่ต้องมี credential) และถ้ามี secret `ANTHROPIC_API_KEY` ตรวจว่า session แบบ headless ยังโหลดปลั๊กอิน บันทึก session และปฏิเสธ `git commit --no-verify` (ราว $0.003 ต่อรอบ) กับสำเนาที่ PreToolUse hook ตาย การตรวจ static ผ่านแต่การตรวจ live ล้ม สิ่งที่โปรเจกต์ติดตั้งไม่เปลี่ยน
+
 ## 0.5.2 (2026-10-27)
 
 ไม่มีเครื่องมือที่ vendor เปลี่ยน โปรเจกต์จึงไม่ต้องรัน `init` ใหม่

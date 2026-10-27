@@ -32,6 +32,7 @@ skills/<name>/    one SKILL.md per skill, plus any scripts it calls
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
                   review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests),
                   skill-scan.mjs (SkillSpector over the skills and hooks; this repo's CI only, needs Python)
+                  canary.mjs (does the plugin still load and its hooks still fire under the current Claude Code; this repo's CI, weekly)
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),

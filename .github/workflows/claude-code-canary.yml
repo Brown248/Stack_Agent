@@ -1,0 +1,38 @@
+name: claude-code-canary
+
+# Claude Code changes often, and the hooks depend on what it sends them. This runs the plugin against the latest
+# Claude Code every Monday, so a break shows up here before it reaches a user. It also runs when its own files change.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/claude-code-canary.yml
+      - scripts/canary.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # optional: without it only the static check runs
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the latest Claude Code
+        run: npm install --global @anthropic-ai/claude-code
+      - name: Version and plugin validate --strict (no credentials)
+        run: node scripts/canary.mjs
+      - name: Headless hook check (only with ANTHROPIC_API_KEY)
+        if: env.ANTHROPIC_API_KEY != ''
+        run: node scripts/canary.mjs --live
+      - name: Say that the headless hook check was skipped
+        if: env.ANTHROPIC_API_KEY == ''
+        run: echo "::notice::headless hook check skipped; add the ANTHROPIC_API_KEY repository secret to run it (about a cent per run)"

@@ -501,6 +501,16 @@ Many people run Stack Agent next to superpowers, and every A/B run so far had re
 - **What it cost.** The bootstrap adds about 2,200 tokens to the context of every request (cache creation 8,030 against 10,222 tokens on the same task), about one more turn on the bug tasks, and 9% more spend over the 9 runs ($1.28 against $1.17).
 - **Not measured:** tasks where no Stack Agent skill fits (a refactor, a feature with no endpoint, planning), where superpowers' brainstorming and planning skills may start and compete for the budget before verification; other models; more than 3 runs per cell. These three tasks were written for Stack Agent's skills, which favors them.
 
+## A weekly canary against the current Claude Code (2026-10-27)
+
+**Why.** Everything the tests say about the hooks comes from input this repo made up, and the live runs in these notes were made with Claude Code 2.1.299 to 2.1.310. Claude Code changes often; if it renames a tool or reshapes the hook input, the hooks could stop firing, and the first sign would be a user's report. Nothing in CI would notice.
+
+**What was added.** `scripts/canary.mjs` and `.github/workflows/claude-code-canary.yml`, which installs the latest Claude Code every Monday (and on demand, and when its own files change) and runs two checks. The static one (`claude plugin validate --strict`) needs no credentials. The live one (`--live`) starts a headless session in a copy of the sample backend with the cheapest model and a $0.25 cap, and asks it to run `git commit --no-verify`: the plugin must load, SessionStart must record the session, PreToolUse must deny the command with the hook's own message, and no commit may exist afterwards. It runs only when the repository has an `ANTHROPIC_API_KEY` secret; without one the workflow says so and the static check alone runs. A login or key problem skips the live check, it does not fail it.
+
+**Checked.** Against Claude Code 2.1.311 on this machine, newer than any version in these notes: both checks passed in 9 seconds for $0.003. Against a copy of the plugin whose PreToolUse hook points at a script that does not exist, the static check still passed and the live check failed (`the --no-verify commit was not denied ... a commit was made (2 commits, expected 1)`), so the live part is what catches a dead hook. The tests use a fake `claude` (`tests/canary.test.mjs`), so `npm test` needs no credentials.
+
+**Not covered.** The Stop hook and PostToolUse hooks are not exercised; one denied command and one session record stand for the hook plumbing. Until the secret is added, CI runs only the static check, which would not have caught the broken hook above. GitHub tells the person who last edited the schedule when a scheduled run fails, and pauses schedules in a repository with no activity for 60 days.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:

@@ -10,6 +10,10 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 - The A/B task `bug-stale-list` (this repo's tests only; nothing a project installs): its planted cache lasted 50 ms, and on a loaded Windows CI runner a read, a create, and a read took longer, so the bug never showed and `tests/ab-tasks.test.mjs` failed on three of six Windows jobs. The window is 300 ms now.
 
+### Added
+
+- A weekly canary in this repo's CI (`.github/workflows/claude-code-canary.yml`, `scripts/canary.mjs`): it installs the latest Claude Code and checks that the plugin still validates (`plugin validate --strict`, no credentials) and, with an `ANTHROPIC_API_KEY` secret, that a headless session still loads it, records the session, and denies `git commit --no-verify` (about $0.003 per run). Against a copy with a dead PreToolUse hook the static check passed and the live one failed. Nothing a project installs changed.
+
 ## 0.5.2 (2026-10-27)
 
 Nothing vendored changed, so projects need no `init` rerun.
