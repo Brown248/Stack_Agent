@@ -61,7 +61,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 510 pass on Windows 11, Node 26, and on Linux (WSL2 Ubuntu), Node 22 (2026-10-26) |
+| Unit and integration tests | 513 pass on Windows 11, Node 26, and on Linux (WSL2 Ubuntu), Node 22 (2026-10-27) |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -439,6 +439,26 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 **A/B, `init-library`** (new: a library with Stack Agent taken out, the skill started by name; plugin arm, 2 runs, $0.45): verify and the guard passed in both and the workflow was written, but `init --check` passed in neither. Both agents were stopped by the protected-path hook: edits to `guard.config.json` and the workflow ask a human, and a headless session has none, so the edits were refused. One agent said exactly which edits waited for approval and why; the other finished the guard and left the workflow's install step with a note. **Settled the same day:** Edit/Write on a guard config or Stack Agent workflow that git has never seen and that still has `EDIT ME` no longer asks (a template init just wrote holds no rule to loosen; staged, committed, or filled in, it asks again). Rerun, 2 runs ($0.42): one finished (`init --check` passed, the first complete setup without a human), the other wrote its edits with `node -e` from the shell, which still asks, and stopped. The refusal for those two files now says to use Edit or Write for a template, and the skill says the same. Rerun, 3 runs ($0.68): `init --check`, verify, and the guard passed in all 3. One agent tried a shell write first, read the hint, and switched to Edit. Each kept the universal rules, added 3 or 4 rules of its own (examples import the package by name, `src/internal` stays behind the public entry, no runtime dependencies), and replaced the workflow's install step with a note that there is nothing to install.
 
 **Not done.** The eval reference says a `regex` grader can read the trace (`target: trace`) and `tool_used` takes an `input_match`; that would let `up-down-up` and `guard-passed` stop depending on a judge that sees a long trace cut in the middle. It is not confirmed by public docs and was not tried.
+
+## The after-shell guard in real sessions, a trace grader, and six more hook bypasses (2026-10-27)
+
+**Six more ways around the git hooks**, found by trying each against real git with a failing pre-commit hook: `GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_KEY_<n>` setting `core.hooksPath`, an alias that runs `commit --no-verify` (set with `-c` or `git config`), `export HUSKY=0`, and changing or moving `.git/hooks`. All six committed while the shell hook let them through. The alias form was hidden by the command tokenizer, which split `key="two words"` into three tokens where a shell sees one. The first four are denied, and a change to `.git/hooks` asks, from the shell and from Edit/Write, in Stack Agent projects only; `.husky/` is committed and reviewed, so it is left alone. 18 ordinary commands are tested not to ask.
+
+**A/B, `shell-sort`** (new: the user hands over a `sed -i` one-liner that sorts the list but puts a query and the `db` import in the controller). `scripts/ab/run.mjs`, Claude Code 2.1.310, Sonnet, at most $1 per run, both arms, 3 runs each, all 6 valid, $0.69.
+
+| Arm | Correct | Guard passes | Verified | `checkDetects` | After-shell report | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| plugin | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.131 |
+| none | 3/3 | 3/3 | 3/3 | 2/3 | - | $0.098 |
+
+- **The after-shell guard reported the violation in all 3 plugin runs**, the first time it has been seen catching one in a real session; each agent ran the one-liner, read the report, put the controller back, and sorted in the repository instead.
+- **It made no difference to the outcome here.** Every bare agent read `package.json`, ran `npm run guard` on its own after the `sed`, and fixed the same thing. A project that exposes its guard as a script gets this from Sonnet without the hook; the hook's value is that the report does not depend on the agent thinking to run it.
+- **The transcript does not carry a PostToolUse hook's output**, so the first grader (searching the transcript for the report) scored 0 while the agent's own message quoted the rules it was given. The hook now appends what it reports to `.stack-agent/evidence/sessions/<id>.reports.log`, and the task reads that.
+- **A fixture bug, found by this task:** the sample backend's `npm run guard` and `npm run verify` pointed at `../../scripts/`, which exists only inside this repo, so in every scaffolded copy they failed with `MODULE_NOT_FOUND`. They now run the vendored tools. Earlier A/B results in which an agent reached for `npm run guard` may show the bare arm worse than it was; the first, discarded run of this task did (guard 0/1 without the plugin, from that error).
+
+**A trace grader.** `claude plugin eval` accepts `type: regex` with `target: trace`. `add-migration-column`'s `up-down-up` is now that: the runner's own output for the new migration, applied, rolled back, and applied again, in order. Run beside the llm grader it replaced (plugin arm, 2 runs, $1.05), both passed both runs. The llm judge had seen long traces cut in the middle; the regex reads the whole trace and needs no judge.
+
+**Windows leftovers.** A process a command leaves behind is now stopped on Windows too: Windows has no process groups and `taskkill /T` cannot start from a parent that has exited, so verify walks down from the exited parent's id with `Get-CimInstance` and stops only processes started after the command, so a reused id cannot pull in an older one. The test that a leftover is gone now runs on every OS.
 
 ## Self-review log
 

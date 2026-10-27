@@ -4,15 +4,17 @@
 
 [English](CHANGELOG.md)
 
-## ยังไม่ออกรุ่น
+## 0.5.1 (2026-10-27)
 
-จากการตรวจ 0.5.0 อย่างละเอียด (agent สี่ตัวอ่านโค้ดแยกกัน และรันขั้นตอนของ CI บน Linux) `verify.mjs`, `guard.mjs` และ `lib/files.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/`
+ส่วนใหญ่คือการปิดช่องเลี่ยง guard จากการตรวจ 0.5.0 สองรอบ (agent อ่านโค้ดแยกกัน, ลองเลี่ยงกับ git จริง และรันขั้นตอนของ CI บน Linux) `verify.mjs`, `guard.mjs` และ `lib/files.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/`
 
 ### ผลการวัด
 
 - `feature-map-lookup` (ใหม่) แขนละ 2 รอบ: 1.00 เมื่อมี plugin เทียบกับเฉลี่ย 0.25 เมื่อไม่มี และมีแค่แขน plugin ที่อ่าน feature map ส่วน `verify-before-done` หลังแก้สกิล: 1.00 ทั้งสองแขน
 - A/B `init-library` (ใหม่) แขน plugin: ก่อนการเปลี่ยนเรื่องการติดตั้งด้านล่าง `init --check` ผ่าน 0 ใน 2 รอบ เพราะ session แบบ headless อนุมัติการแก้ guard config และ workflow ที่ป้องกันไว้ไม่ได้ หลังเปลี่ยนและเพิ่มคำแนะนำให้ใช้ Edit หรือ Write ผ่าน 3 ใน 3 รอบ แต่ละรอบมีกฎ guard ของตัวเองและเช็กจริง รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026 (รอบหลัง)
-- `npm test`: 510 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
+- A/B `shell-sort` (ใหม่) แขนละ 3 รอบ: guard หลังคำสั่ง shell รายงานการผิดกฎของ one-liner ในทั้ง 3 รอบของแขน plugin ซึ่งเป็นครั้งแรกที่เห็นมันจับได้ใน session จริง และ agent ทุกตัวย้ายการเรียงไปไว้ใน repository แขนที่ไม่มี plugin ก็ทำได้เช่นกัน โดยรัน `npm run guard` เอง task นี้จึงแสดงว่า hook ทำงานได้ ไม่ได้แสดงว่าจำเป็นเมื่อ guard เป็นสคริปต์ที่มองเห็น
+- `up-down-up` ของ `add-migration-column` ตอนนี้เป็น regex ที่อ่าน trace (`target: trace`) เมื่อรันคู่กับ llm grader ที่ถูกแทน ทั้งสองผ่าน 2 ใน 2
+- `npm test`: 513 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
 
 ### แก้ไข
 
@@ -20,7 +22,8 @@
 - ช่องเลี่ยง guard: hook ของ shell ปล่อย `git commit --no-verif` (git รับรูปย่อของ option ยาวที่ไม่กำกวม), `git --config-env=core.hooksPath=VAR commit` และ `git config core.hooksPath x` ผ่านไป ตอนนี้ปฏิเสธทั้งสามแบบ และด่าน git อื่นก็จับรูปย่อด้วย (`push --de`, `push --m`, `reset --k`, `clean --f`)
 - hook หลังแก้ไฟล์และหลังคำสั่ง shell, guard ของ Stop hook และ `guard.mjs --files` ไม่ใช้รายการ `ignore` ของ config และโฟลเดอร์ที่ข้ามเป็นค่าเริ่มต้น ซึ่งการสแกนทั้งโปรเจกต์ของ CI ใช้ ไฟล์ fixture หรือไฟล์ที่ generate จึงถูกโทษในเครื่องแต่ผ่านใน CI
 - guard หลังคำสั่ง shell (ใหม่ใน 0.5.0): โทษคำสั่งแรกสำหรับไฟล์ `.md` หรือ `docs/` ที่แก้ค้างไว้ก่อนเริ่ม session เพราะบันทึกของ session ตัดไฟล์พวกนี้ออก ไฟล์ที่เปลี่ยนแต่อ่านไม่ได้ไฟล์เดียวทำให้ไม่ตรวจอะไรเลยไปตลอด session hook แก้ไฟล์ที่รันพร้อมกันทำข้อมูลของกันและกันหาย การผิดกฎจึงอาจถูกรายงานซ้ำ และคำสั่งที่รันจากระดับบนสุดของ monorepo ไปไม่ถึงโปรเจกต์ใดเลย guard ของ Stop hook ก็มองไม่เห็นไฟล์ `.md` แบบเดียวกัน
-- verify: คำสั่งที่จบไปแล้วแต่ process ที่มันเปิดไว้ยังถือ output อยู่ (`start /b`, `&`) ถูกรอจนกว่า process นั้นจะจบ แล้วรายงานว่า timed out ตอนนี้ตัดสินจาก exit code เมื่อ output เงียบไป 1.5 วินาที (รอนานสุด 10 วินาที) และบน Linux กับ macOS จะหยุด process นั้น output ระหว่าง 8 ถึง 12 MB ผ่านเหมือนตรวจครบทั้งหมด ตอนนี้ขีดจำกัด 8 MB ใช้ได้จริง คำสั่งที่ถูก signal ฆ่าจะรายงานเป็น `killed by <signal>` และนับเป็น red จริงใน `--repeat` ไม่ใช่รอบที่สรุปไม่ได้ verify ที่ถูกหยุดด้วย Ctrl+C หรือ SIGTERM จะหยุดเซิร์ฟเวอร์และคำสั่งที่มันเปิดไว้ และปฏิเสธ `--skip-tests --skip-checks --repeat` แทนที่จะรันเทสต์ไปทั้งที่สั่งข้าม
+- verify: คำสั่งที่จบไปแล้วแต่ process ที่มันเปิดไว้ยังถือ output อยู่ (`start /b`, `&`) ถูกรอจนกว่า process นั้นจะจบ แล้วรายงานว่า timed out ตอนนี้ตัดสินจาก exit code เมื่อ output เงียบไป 1.5 วินาที (รอนานสุด 10 วินาที) และหยุด process นั้น (บน Windows หาจาก parent id เพราะ Windows ไม่มี process group) output ระหว่าง 8 ถึง 12 MB ผ่านเหมือนตรวจครบทั้งหมด ตอนนี้ขีดจำกัด 8 MB ใช้ได้จริง คำสั่งที่ถูก signal ฆ่าจะรายงานเป็น `killed by <signal>` และนับเป็น red จริงใน `--repeat` ไม่ใช่รอบที่สรุปไม่ได้ verify ที่ถูกหยุดด้วย Ctrl+C หรือ SIGTERM จะหยุดเซิร์ฟเวอร์และคำสั่งที่มันเปิดไว้ และปฏิเสธ `--skip-tests --skip-checks --repeat` แทนที่จะรันเทสต์ไปทั้งที่สั่งข้าม
+- `npm run guard` และ `npm run verify` ของ sample backend ชี้ไปที่ `../../scripts/` ซึ่งมีแค่ใน repo นี้ จึงล้มในทุกสำเนาที่ติดตั้ง (รวมโปรเจกต์ของ A/B และ eval) ตอนนี้รันเครื่องมือที่ vendor ไว้ ผล A/B ก่อนหน้าที่ agent ใช้ `npm run guard` อาจทำให้แขนที่ไม่มี plugin ดูแย่กว่าความจริง
 - เทสต์ A/B `cli-minlen` fail บนเครื่องที่มีแค่ `python3` ตอนนี้ข้ามไปเหมือนเทสต์ Python ตัวอื่น
 - เอกสารที่คลาดจากโค้ด: README (EN/TH) บอกว่า guard รันหลังแก้ไฟล์เท่านั้น และ CI ไม่รัน verify สกิล init บอกชื่อไฟล์ที่คัดลอกแค่สามในหกไฟล์ สกิล verify ขาด `expectHeaders`, `followRedirects` และ `timeoutSec` และ changelog ภาษาไทยข้อ `--repeat` ขาดเรื่อง output ของรอบแรกที่ red
 
@@ -28,7 +31,9 @@
 
 - บันทึกในเอกสารสิ่งที่โค้ดรองรับอยู่แล้ว: `--config` และ `--json` ของ verify, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, `timeoutSec` ของ HTTP check, `type` และค่าเริ่มต้นของ `evidenceDir`, ส่วนของ guard คือ `baseline`, `--files`, `--strict`, `--json`, `--config` และ `pythonRoots`, ของ api-map คือ `--config`, `--json` และ `verifyConfig`, ของ feature-map คือ `--map` และ `--json`, ของ review-findings คือ `--stage` และ `rows --date` และ `--disallowed-tools` ของ A/B harness
 - eval case `feature-map-lookup` (บนตัวอย่าง library) และ A/B task `init-library` (ติดตั้ง Stack Agent จากศูนย์ผ่านสกิล) `evals/scaffold.mjs` รับชื่อตัวอย่างที่จะคัดลอก และ `run-evals` บอกว่าแต่ละสกิลวัดผลอย่างไร และทำไม `mine-corrections` จึงไม่ได้วัด
-- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 510 เทสต์)
+- guard หลังคำสั่ง shell ต่อท้ายสิ่งที่รายงานลงใน `.stack-agent/evidence/sessions/<id>.reports.log` เพราะ transcript ของ session ไม่มี output ของ hook ไฟล์นี้จึงเป็นหลักฐานว่ามีการรายงาน
+- A/B task `shell-sort` (one-liner `sed -i` ที่ผิดกฎ guard สองข้อ) และ `grade` ของ task ได้รับ transcript กับชื่อแขนด้วย
+- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 513 เทสต์)
 
 ### เปลี่ยน
 

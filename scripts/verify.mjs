@@ -121,6 +121,19 @@ function spawnTree(spec, cwd, env) {
 	return child;
 }
 
+// Windows has no process groups, and taskkill /T cannot start from a parent that has exited. A child keeps its
+// parent's id as ParentProcessId after the parent is gone, so the leftover tree is found by walking down from it.
+// Only processes started after the command did are taken, so a reused id cannot pull in an unrelated older process.
+function stopOrphansOnWindows(pid, sinceMs) {
+	const script = `$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CreationDate
+$root = [DateTimeOffset]::FromUnixTimeMilliseconds(${Math.floor(sinceMs) - 2000}).LocalDateTime
+$todo = @(${Number(pid)}); $kill = @()
+while ($todo.Count) { $p = $todo[0]; $todo = @($todo | Select-Object -Skip 1)
+  foreach ($c in $all) { if ($c.ParentProcessId -eq $p -and $c.CreationDate -gt $root -and $kill -notcontains $c.ProcessId) { $kill += $c.ProcessId; $todo += $c.ProcessId } } }
+foreach ($k in $kill) { Stop-Process -Id $k -Force -ErrorAction SilentlyContinue }`;
+	spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: "ignore", windowsHide: true, timeout: 15000 });
+}
+
 // how long to wait for the output after the command exits; a process it left running in the background can hold the
 // output open forever. LINGER_MS is the quiet time that ends the wait, LINGER_MAX_MS the longest it can last.
 const LINGER_MS = 1500;
@@ -195,6 +208,7 @@ async function runCommand(root, spec, defaultTimeoutSec) {
 				lingering = true;
 				// the command is done; what still holds its output is a process it left behind (POSIX: its process group)
 				if (process.platform !== "win32") signalTree(child, "SIGKILL");
+				else stopOrphansOnWindows(child.pid, started);
 				child.stdout.destroy();
 				child.stderr.destroy();
 				finish({ exitCode: code, signal: sig });
@@ -221,7 +235,7 @@ async function runCommand(root, spec, defaultTimeoutSec) {
 	});
 	const { text, truncated } = output();
 	const note = lingering
-		? `\n[verify: the command exited but a process it started kept running and holding its output; verify stopped waiting once its output went quiet${process.platform === "win32" ? " (on Windows that process is not stopped; end it yourself)" : " and stopped it"}]`
+		? `\n[verify: the command exited but a process it started kept running and holding its output; verify stopped waiting once its output went quiet and stopped it]`
 		: "";
 	return { exitCode, signal, timedOut, startError, lingering, output: (startError ? [startError, text].filter(Boolean).join("\n") : text) + note, truncated, durationMs: Date.now() - started };
 }

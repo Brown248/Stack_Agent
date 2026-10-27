@@ -168,6 +168,17 @@ export function writeSeen(root, sessionId, ids, logOffset) {
 
 export const seenLogOffset = logSize;
 
+// What the after-shell guard reported, one JSON line per report. A session transcript does not carry a hook's
+// output, so this is the record that a report was made (for a person checking afterwards, and for A/B grading).
+export const reportsLog = (root, sessionId) => seenFile(root, sessionId).replace(/\.seen\.json$/, ".reports.log");
+
+export function noteReport(root, sessionId, violations) {
+	try {
+		fs.mkdirSync(sessionsDir(root), { recursive: true });
+		fs.appendFileSync(reportsLog(root, sessionId), JSON.stringify({ at: new Date().toISOString(), hook: "post-bash", violations }) + "\n");
+	} catch {}
+}
+
 // the after-edit hook: one line per checked file
 export function noteSeen(root, sessionId, rel, id) {
 	try {
@@ -205,7 +216,7 @@ function pruneOld(root) {
 	for (const id of ids) {
 		if (Date.now() - lastActivity(root, id) <= SESSION_TTL_MS) continue;
 		// the notes go with the record, so a session resumed after pruning starts clean instead of looking tampered with
-		for (const file of [startFile(root, id), stateFile(root, id), seenFile(root, id), seenLog(root, id), ledgerFile(root, id, "taken"), ledgerFile(root, id, "skipped")]) {
+		for (const file of [startFile(root, id), stateFile(root, id), seenFile(root, id), seenLog(root, id), reportsLog(root, id), ledgerFile(root, id, "taken"), ledgerFile(root, id, "skipped")]) {
 			try {
 				fs.unlinkSync(file);
 			} catch {}

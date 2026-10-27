@@ -14,7 +14,7 @@ import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../gua
 import { ConfigError, readJson, toPosix } from "../lib/files.mjs";
 import { changedFiles, gitTop } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
-import { blobIds, readSeen, seenLogOffset, writeSeen } from "./session-record.mjs";
+import { blobIds, noteReport, readSeen, seenLogOffset, writeSeen } from "./session-record.mjs";
 
 const CONFIG = ".stack-agent/guard.config.json";
 // past this many changed files (a checkout, an install into a tracked folder) the check is left to the Stop hook
@@ -70,7 +70,9 @@ function check(root, fresh) {
 		const violations = runGuard({ root, config, files: fresh });
 		const { failing } = compareToBaseline(violations, baseline.counts ?? {}, fresh, fs.existsSync(baselinePath) ? baselineVersion(baseline) : undefined);
 		const keys = new Set(failing.map((f) => `${f.rule}|${f.file}`));
-		for (const v of violations.filter((v) => keys.has(`${v.rule}|${v.file}`))) failures.push(`${shown(v.file)}:${v.line} [${v.rule}] ${v.message}\n  found: ${v.detail}\n  fix: ${v.fix}`);
+		const reported = violations.filter((v) => keys.has(`${v.rule}|${v.file}`));
+		if (reported.length) noteReport(root, input.session_id, reported.map((v) => ({ file: v.file, line: v.line, rule: v.rule })));
+		for (const v of reported) failures.push(`${shown(v.file)}:${v.line} [${v.rule}] ${v.message}\n  found: ${v.detail}\n  fix: ${v.fix}`);
 	} catch (err) {
 		if (!(err instanceof ConfigError)) throw err;
 		process.stderr.write(`stack-agent guard: config error in ${shown(CONFIG)}: ${err.message}\n`);

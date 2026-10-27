@@ -4,15 +4,17 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.5.1 (2026-10-27)
 
-From a detailed review of 0.5.0 (four agents reading the code independently, and the CI steps run on Linux). `verify.mjs`, `guard.mjs`, and `lib/files.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/`.
+Mostly closing ways around the guard, from two reviews of 0.5.0 (agents reading the code independently, attempts against real git, and the CI steps run on Linux). `verify.mjs`, `guard.mjs`, and `lib/files.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/`.
 
 ### Measured
 
 - `feature-map-lookup` (new), 2 runs per arm: 1.00 with the plugin against a mean of 0.25 without; only the plugin arm read the feature map. `verify-before-done` after its skill edit: 1.00 in both arms.
 - A/B `init-library` (new), plugin arm: before the setup change below, `init --check` passed in 0 of 2 runs, because a headless session cannot approve edits to the protected guard config and workflow; after it, and the hint to use Edit or Write, in 3 of 3, each with its own guard rules and real checks. Details and caveats: design notes, 2026-10-26 (later).
-- `npm test`: 510 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
+- A/B `shell-sort` (new), 3 runs per arm: the after-shell guard reported the one-liner's violations in all 3 plugin runs, the first time it was seen catching one in a real session, and each agent moved the sorting to the repository. The bare arm did as well, by running `npm run guard` on its own, so this task shows the hook works, not that it is needed when the guard is a visible script.
+- `add-migration-column`'s `up-down-up` is now a regex over the trace (`target: trace`); beside the llm grader it replaced, both passed 2 of 2.
+- `npm test`: 513 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
 
 ### Fixed
 
@@ -20,7 +22,8 @@ From a detailed review of 0.5.0 (four agents reading the code independently, and
 - Ways around the guard: the shell hook let through `git commit --no-verif` (git takes any unambiguous prefix of a long option), `git --config-env=core.hooksPath=VAR commit`, and `git config core.hooksPath x`. All three are denied now, and the other git gates match abbreviations too (`push --de`, `push --m`, `reset --k`, `clean --f`).
 - The after-edit and after-shell hooks, the Stop hook's guard, and `guard.mjs --files` did not apply the config's `ignore` list or the default skipped folders, which CI's full scan does, so a fixture or generated file was blamed locally and passed in CI.
 - The after-shell guard (new in 0.5.0): it blamed the first command for a `.md` or `docs/` file left dirty before the session, because the session record left those out; one unreadable changed file made it check nothing for the rest of the session; edit hooks running at the same time lost each other's entries, so a violation could be reported twice; and a command run from the top of a monorepo reached no project. The Stop hook's guard had the same blind spot for `.md` files.
-- verify: a command that exits while a process it started still holds its output (`start /b`, `&`) was waited on until that process ended, then reported as timed out; it is now judged on its exit code once the output has been quiet for 1.5 s (10 s at most), and on Linux and macOS that process is stopped. Output between 8 and 12 MB passed as if all of it had been matched; the 8 MB limit now holds. A command killed by a signal is reported as `killed by <signal>` and is a real red in `--repeat`, not an inconclusive run. A verify stopped with Ctrl+C or SIGTERM stops the server and the commands it started. `--skip-tests --skip-checks --repeat` is refused instead of running the tests anyway.
+- verify: a command that exits while a process it started still holds its output (`start /b`, `&`) was waited on until that process ended, then reported as timed out; it is now judged on its exit code once the output has been quiet for 1.5 s (10 s at most), and that process is stopped (on Windows, found through its parent id, since Windows has no process groups). Output between 8 and 12 MB passed as if all of it had been matched; the 8 MB limit now holds. A command killed by a signal is reported as `killed by <signal>` and is a real red in `--repeat`, not an inconclusive run. A verify stopped with Ctrl+C or SIGTERM stops the server and the commands it started. `--skip-tests --skip-checks --repeat` is refused instead of running the tests anyway.
+- The sample backend's `npm run guard` and `npm run verify` pointed at `../../scripts/`, which exists only inside this repo, so they failed in every installed copy (the A/B and eval projects included). They run the vendored tools now. Earlier A/B results in which an agent used `npm run guard` may show the bare arm worse than it was.
 - The `cli-minlen` A/B test failed on machines that have only `python3`; it now skips like the other Python tests.
 - Docs that had drifted: the README (EN/TH) said the guard runs only after edits and that CI does not run verify; the init skill named three of the six files it copies; the verify skill left out `expectHeaders`, `followRedirects`, and `timeoutSec`; the Thai changelog's `--repeat` entry left out the first red output.
 
@@ -28,7 +31,9 @@ From a detailed review of 0.5.0 (four agents reading the code independently, and
 
 - Documented what the code already accepted: verify's `--config` and `--json`, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, the HTTP check `timeoutSec`, `type`, and the `evidenceDir` default; the guard's `baseline`, `--files`, `--strict`, `--json`, `--config`, and `pythonRoots`; api-map's `--config`, `--json`, and `verifyConfig`; feature-map's `--map` and `--json`; review-findings' `--stage` and `rows --date`; and the A/B harness's `--disallowed-tools`.
 - Eval case `feature-map-lookup` (on the library example) and A/B task `init-library` (Stack Agent set up from scratch through the skill). `evals/scaffold.mjs` takes the example to copy. `run-evals` says how each skill is measured, and why `mine-corrections` is not.
-- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 510 tests).
+- The after-shell guard appends what it reports to `.stack-agent/evidence/sessions/<id>.reports.log`: a session transcript does not carry a hook's output, so this is the record that a report was made.
+- A/B task `shell-sort` (a `sed -i` one-liner that breaks two guard rules). A task's `grade` now also receives the transcript and the arm.
+- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 513 tests).
 
 ### Changed
 

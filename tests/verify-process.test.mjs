@@ -51,7 +51,8 @@ test("a command that leaves a process holding its output passes on its exit code
 		const step = JSON.parse(fs.readFileSync(path.join(dir, ".stack-agent/evidence/latest.json"), "utf8")).steps[0];
 		assert.equal(step.timedOut, false);
 		assert.match(step.output, /verify: the command exited but a process it started kept running/);
-		if (process.platform !== "win32") assert.ok(await processGone(path.join(dir, "left.pid")), "on POSIX the leftover is stopped");
+		assert.match(step.output, /and stopped it]/);
+		assert.ok(await processGone(path.join(dir, "left.pid")), "the leftover is stopped, on Windows too");
 	} finally {
 		killPid(path.join(dir, "left.pid"));
 	}

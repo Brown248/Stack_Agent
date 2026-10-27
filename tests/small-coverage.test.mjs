@@ -118,3 +118,14 @@ test("review-findings refuses a findings file over 5 MB; sample-commits says whe
 	const r = sample(["--root", dir, "--since", "2099-01-01", "--no-ledger"]);
 	assert.match(r.text, /no commits matched; widen --since or pass --range/);
 });
+
+test("an installed example's npm scripts run the vendored tools, not files from the Stack Agent repo", async () => {
+	const { scaffold } = await import("../evals/scaffold.mjs");
+	const dir = tempDir("stack-agent-npm-");
+	scaffold(dir, repoRoot, "sample-backend");
+	const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
+	for (const [name, script] of Object.entries(pkg.scripts)) assert.doesNotMatch(script, /\.\.\//, `${name} reaches outside the project: ${script}`);
+	const r = runNode(path.join(dir, ".stack-agent/bin/guard.mjs"), [], { cwd: dir });
+	assert.equal(r.code, 0, r.stdout + r.stderr);
+	assert.match(pkg.scripts.guard, /\.stack-agent\/bin\/guard\.mjs/);
+});

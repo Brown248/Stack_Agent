@@ -61,7 +61,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 510 เทสบน Windows 11 กับ Node 26 และบน Linux (WSL2 Ubuntu) กับ Node 22 (26 ต.ค. 2026) |
+| Unit และ integration test | ผ่าน 513 เทสบน Windows 11 กับ Node 26 และบน Linux (WSL2 Ubuntu) กับ Node 22 (27 ต.ค. 2026) |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |
@@ -439,6 +439,26 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 **A/B `init-library`** (ใหม่: library ที่เอา Stack Agent ออก แล้วเรียกสกิลด้วยชื่อ แขน plugin 2 รอบ $0.45): verify และ guard ผ่านทั้งสองรอบ และเขียน workflow แล้ว แต่ `init --check` ไม่ผ่านเลย agent ทั้งสองถูก hook ของ path ที่ป้องกันไว้หยุด: การแก้ `guard.config.json` และ workflow ต้องถามคน และ session แบบ headless ไม่มีคนตอบ การแก้จึงถูกปฏิเสธ agent ตัวหนึ่งบอกตรงๆ ว่าการแก้ไหนรอการอนุมัติและเพราะอะไร อีกตัวทำ guard เสร็จแล้วทิ้งขั้นติดตั้งของ workflow ไว้พร้อมโน้ต ใน headless task นี้จึงวัดว่าการติดตั้งไปได้แค่ไหนเมื่อไม่มีการอนุมัติ **ตัดสินในวันเดียวกัน:** Edit/Write บน guard config หรือ workflow ของ Stack Agent ที่ git ยังไม่เคยเห็นและยังมี `EDIT ME` ไม่ต้องถามแล้ว (template ที่ init เพิ่งเขียนยังไม่มีกฎให้ผ่อน เมื่อ stage, commit หรือกรอกครบแล้วจะถามอีกครั้ง) รันซ้ำ 2 รอบ ($0.42): รอบหนึ่งทำจนจบ (`init --check` ผ่าน เป็นการติดตั้งครบครั้งแรกโดยไม่มีคน) อีกรอบเขียนไฟล์ด้วย `node -e` ผ่าน shell ซึ่งยังต้องถาม จึงหยุด ข้อความปฏิเสธของสองไฟล์นี้จึงบอกให้ใช้ Edit หรือ Write กับ template และสกิลก็บอกแบบเดียวกัน รันซ้ำ 3 รอบ ($0.68): `init --check`, verify และ guard ผ่านทั้ง 3 รอบ agent ตัวหนึ่งลองเขียนผ่าน shell ก่อน อ่านคำแนะนำ แล้วเปลี่ยนไปใช้ Edit ทุกรอบคงกฎสากลไว้ เพิ่มกฎของตัวเอง 3 หรือ 4 ข้อ (ตัวอย่างต้อง import package ด้วยชื่อ, `src/internal` อยู่หลัง public entry, ไม่มี runtime dependency) และเปลี่ยนขั้นติดตั้งของ workflow เป็นโน้ตว่าไม่มีอะไรต้องติดตั้ง
 
 **ที่ยังไม่ได้ทำ** reference ของ eval บอกว่า grader แบบ `regex` อ่าน trace ได้ (`target: trace`) และ `tool_used` รับ `input_match` ซึ่งจะทำให้ `up-down-up` และ `guard-passed` ไม่ต้องพึ่ง judge ที่เห็น trace ยาวถูกตัดตรงกลาง แต่ยังไม่มีเอกสารสาธารณะยืนยันและยังไม่ได้ลอง
+
+## guard หลังคำสั่ง shell ใน session จริง, grader ที่อ่าน trace และช่องเลี่ยง hook เพิ่มอีกหกทาง (27 ต.ค. 2026)
+
+**ช่องเลี่ยง git hook เพิ่มอีกหกทาง** ที่หาเจอโดยลองแต่ละแบบกับ git จริงที่มี pre-commit hook ที่ fail: `GIT_CONFIG_PARAMETERS` และ `GIT_CONFIG_KEY_<n>` ที่ตั้ง `core.hooksPath`, alias ที่รัน `commit --no-verify` (ตั้งด้วย `-c` หรือ `git config`), `export HUSKY=0` และการแก้หรือย้าย `.git/hooks` ทั้งหกแบบ commit ได้ขณะที่ hook ของ shell ปล่อยผ่าน รูปแบบ alias หลุดเพราะ tokenizer ของคำสั่งแยก `key="two words"` เป็นสาม token ในขณะที่ shell เห็นเป็นหนึ่ง สี่แบบแรกถูกปฏิเสธ และการแก้ `.git/hooks` จะถาม ทั้งจาก shell และจาก Edit/Write เฉพาะในโปรเจกต์ที่ติดตั้ง Stack Agent ส่วน `.husky/` ถูก commit และรีวิวอยู่แล้วจึงไม่แตะ มีเทสต์ว่าคำสั่งธรรมดา 18 แบบไม่ถูกถาม
+
+**A/B `shell-sort`** (ใหม่: ผู้ใช้ส่ง one-liner `sed -i` ที่ทำให้รายการเรียงได้ แต่ใส่ query และ import ของ `db` ไว้ใน controller) `scripts/ab/run.mjs`, Claude Code 2.1.310, Sonnet, ไม่เกิน $1 ต่อรอบ ทั้งสองแขน แขนละ 3 รอบ ใช้ได้ครบ 6 รอบ $0.69
+
+| แขน | แก้ถูก | guard ผ่าน | verify แล้ว | `checkDetects` | รายงานหลังคำสั่ง shell | ค่าใช้จ่ายเฉลี่ย |
+| --- | --- | --- | --- | --- | --- | --- |
+| plugin | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.131 |
+| none | 3/3 | 3/3 | 3/3 | 2/3 | - | $0.098 |
+
+- **guard หลังคำสั่ง shell รายงานการผิดกฎในทั้ง 3 รอบของแขน plugin** เป็นครั้งแรกที่เห็นมันจับได้ใน session จริง agent ทุกตัวรัน one-liner อ่านรายงาน คืน controller กลับ แล้วเรียงใน repository แทน
+- **ในงานนี้มันไม่ได้ทำให้ผลต่างกัน** agent ทุกตัวในแขนที่ไม่มี plugin อ่าน `package.json` แล้วรัน `npm run guard` เองหลัง `sed` และแก้แบบเดียวกัน โปรเจกต์ที่มี guard เป็นสคริปต์ให้เห็นได้ผลนี้จาก Sonnet โดยไม่ต้องมี hook คุณค่าของ hook คือรายงานไม่ขึ้นกับว่า agent จะนึกรันเองหรือไม่
+- **transcript ไม่มี output ของ PostToolUse hook** grader ตัวแรก (ค้นรายงานใน transcript) จึงให้ 0 ทั้งที่ข้อความของ agent เองอ้างชื่อกฎที่ได้รับ ตอนนี้ hook ต่อท้ายสิ่งที่รายงานลงใน `.stack-agent/evidence/sessions/<id>.reports.log` และ task อ่านจากไฟล์นั้น
+- **บั๊กใน fixture ที่ task นี้เจอ:** `npm run guard` และ `npm run verify` ของ sample backend ชี้ไปที่ `../../scripts/` ซึ่งมีแค่ใน repo นี้ ในทุกสำเนาที่ scaffold ออกไปจึงล้มด้วย `MODULE_NOT_FOUND` ตอนนี้รันเครื่องมือที่ vendor ไว้ ผล A/B ก่อนหน้าที่ agent พยายามใช้ `npm run guard` อาจทำให้แขนที่ไม่มี plugin ดูแย่กว่าความจริง รอบแรกที่ถูกทิ้งของ task นี้เป็นแบบนั้น (guard 0/1 เมื่อไม่มี plugin จาก error นั้น)
+
+**grader ที่อ่าน trace** `claude plugin eval` รับ `type: regex` กับ `target: trace` ตอนนี้ `up-down-up` ของ `add-migration-column` ใช้แบบนั้น: output ของตัวรันสำหรับ migration ใหม่ apply, rollback แล้ว apply อีกครั้งตามลำดับ เมื่อรันคู่กับ llm grader ที่ถูกแทน (แขน plugin 2 รอบ $1.05) ทั้งสองผ่านทั้งสองรอบ judge แบบ llm เคยเห็น trace ยาวถูกตัดตรงกลาง ส่วน regex อ่าน trace ทั้งหมดและไม่ต้องมี judge
+
+**process ค้างบน Windows** process ที่คำสั่งทิ้งไว้ถูกหยุดบน Windows ด้วยแล้ว Windows ไม่มี process group และ `taskkill /T` เริ่มจาก parent ที่จบไปแล้วไม่ได้ verify จึงไล่ลงจาก id ของ parent ที่จบแล้วด้วย `Get-CimInstance` และหยุดเฉพาะ process ที่เริ่มหลังคำสั่ง id ที่ถูกนำกลับมาใช้จึงดึง process เก่าเข้ามาไม่ได้ เทสต์ว่า process ค้างหายไปแล้วตอนนี้รันบนทุก OS
 
 ## บันทึกการตรวจงานตัวเอง
 
