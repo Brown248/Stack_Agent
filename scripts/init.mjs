@@ -54,12 +54,15 @@ export function vendoredFiles() {
 const sameTool = (a, b) => Buffer.compare(a, b) === 0 || a.toString("utf8").replace(/\r\n/g, "\n") === b.toString("utf8").replace(/\r\n/g, "\n");
 
 export function outdatedTools(target) {
-	return vendoredFiles()
+	const differing = vendoredFiles()
 		.filter(([rel, src]) => {
 			const dest = path.join(target, BIN, rel);
 			return !fs.existsSync(dest) || !sameTool(fs.readFileSync(dest), src);
 		})
 		.map(([rel]) => rel);
+	// The stamp moves with every release, so by itself it is not a stale tool: a release that changed no tool must not
+	// ask every project to rerun init. When a tool differs, the stamp is listed with it because init rewrites both.
+	return differing.length === 1 && differing[0] === "VERSION" ? [] : differing;
 }
 
 const STACK_AGENT_ATTRIBUTES = ".stack-agent/.gitattributes";

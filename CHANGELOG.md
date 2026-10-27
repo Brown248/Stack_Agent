@@ -4,13 +4,17 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.5.2 (2026-10-27)
 
 Nothing vendored changed, so projects need no `init` rerun.
 
 ### Measured
 
 - Stack Agent beside obra/superpowers 7.0.0, 3 runs per task and arm (two bug reports and an endpoint): every run in both arms correct, guard passing, and verified with fresh evidence. superpowers was never invoked: the agent took `stack-agent:debug` and `stack-agent:add-endpoint` every time. Its bootstrap added about 2,200 tokens of context per request and 9% to the spend. Tasks with no matching Stack Agent skill were not measured. Details: design notes, 2026-10-27.
+
+### Fixed
+
+- A release that changed no vendored tool still asked every project to rerun `init`: the `.stack-agent/bin/VERSION` stamp moves with each release and was compared like a tool, so SessionStart said the tools differed and `init --check` reported `outdated: .stack-agent/bin/VERSION` and exited 1. A stamp that differs on its own is no longer reported; when a tool differs, the stamp is listed with it as before. Found while preparing this release, which would have triggered it in every project.
 
 ### Added
 
