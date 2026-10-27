@@ -38,3 +38,27 @@ jobs:
           node scripts/guard.mjs --root examples/sample-generic
           node scripts/feature-map.mjs --root examples/sample-generic
           node scripts/verify.mjs --root examples/sample-generic
+
+  # NVIDIA SkillSpector over what the plugin ships into a user's session (each skill, the agents, hooks.json, and
+  # the hook scripts), static only, so no file leaves the runner. Not a gate: its findings are keyword-level, and on
+  # 2026-10-27 all 8 it raised were false positives (in .github/skillspector/, each with its reason). It is here to
+  # surface a NEW finding, which shows as a warning on the run; the check stays green either way.
+  skill-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install SkillSpector 2.12.0 (pinned to the v2.12.0 commit)
+        run: pip install "git+https://github.com/NVIDIA/skillspector@c7958a3268d9498644b22edb75d0f051bbc8cbfc"
+      - name: Scan skills, agents, and hooks
+        id: scan
+        continue-on-error: true
+        run: node scripts/skill-scan.mjs
+      - name: Warn on a new finding
+        if: steps.scan.outcome == 'failure'
+        run: echo "::warning title=SkillSpector::new finding or scan error; triage it (fix it, or add it to its baseline in .github/skillspector/ with the reason)"

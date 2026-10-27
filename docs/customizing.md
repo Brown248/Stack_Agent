@@ -30,7 +30,8 @@ agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (wires scripts/hooks/*.mjs into Claude Code)
 skills/<name>/    one SKILL.md per skill, plus any scripts it calls
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
-                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests)
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests),
+                  skill-scan.mjs (SkillSpector over the skills and hooks; this repo's CI only, needs Python)
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),

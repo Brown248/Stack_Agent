@@ -460,6 +460,25 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 
 **Windows leftovers.** A process a command leaves behind is now stopped on Windows too: Windows has no process groups and `taskkill /T` cannot start from a parent that has exited, so verify walks down from the exited parent's id with `Get-CimInstance` and stops only processes started after the command, so a reused id cannot pull in an older one. The test that a leftover is gone now runs on every OS.
 
+## SkillSpector in this repo's CI, not in adopters' projects (2026-10-27)
+
+**What it is.** NVIDIA SkillSpector is a static security scanner for agent skills: 71 patterns in 17 categories (prompt injection, exfiltration, privilege escalation, supply chain, MCP tool poisoning) through regex, YARA, and taint tracking, with an optional LLM review. Apache-2.0, Python 3.12+.
+
+**Tried first.** Version 2.12.0, installed from NVIDIA's GitHub repository into a throwaway virtual environment (not from PyPI, where the package name could not be tied to NVIDIA), run with `--no-llm` over `skills/`, `agents/`, `hooks/`, and `scripts/hooks/` (`hooks/` holds only `hooks.json`; the code that runs on a user's machine is in `scripts/hooks/`). 8 findings, each checked against the line it points at, all false positives:
+
+| Finding | Where | What is really there |
+| --- | --- | --- |
+| TM1 tool parameter abuse, 3 | `debug` and `verify` skills | `--skip-tests`, `--skip-checks`: verify's own flags for iterating, which the Stop hook does not accept as evidence |
+| TM1, 3 | `scripts/hooks/pre-bash.mjs` | `--no-verify`, `reset --hard`, `--force` in the messages of the hook that blocks or asks before them |
+| AR2 anti-refusal | `agents/finding-verifier.md` | an output format (an empty JSON array when the diff cannot be read); the scanner itself tagged it likely benign |
+| EA4 unbounded consumption | `scripts/hooks/stop-verify.mjs` | the comment explaining `MAX_BLOCKS`, the cap on the Stop hook's loop |
+
+The static mode also inspected the skills only partly (0% fully) and the hook scripts 45%, so no finding is not proof of safety.
+
+**What was adopted.** A `skill-scan` job in this repo's CI: SkillSpector pinned to the v2.12.0 commit, `--no-llm` (no file leaves the runner, no credentials), each target scanned on its own with its baseline in `.github/skillspector/`, where every one of the 8 carries the reason above. The scan step has `continue-on-error`, so a new finding shows as a warning and the check stays green. A planted line telling the agent to send `~/.ssh/id_rsa` and AWS credentials to an outside URL, added to a skill that has a baseline, was reported as a new finding: the baseline hides the known lines, not the file. `scripts/skill-scan.mjs` holds the target list, so CI and a local run agree; its tests use a fake scanner, so `npm test` needs no Python.
+
+**What was not.** Not a gate: the findings are keyword-level and cannot tell a hook that blocks `--no-verify` from a skill that runs it, so in a repository built to stop bypasses most findings will be false. Not in adopters' projects: the vendored tools are zero-dependency Node, and Stack Agent's job is the project's own code, not vetting other people's skills (`out-of-scope.md`, tools that need an install). Not the LLM review: it sends file contents to a provider, costs money, and is not repeatable enough for CI.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:

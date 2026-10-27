@@ -4,6 +4,14 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
+## Unreleased
+
+Nothing vendored changed, so projects need no `init` rerun.
+
+### Added
+
+- A `skill-scan` job in this repo's CI runs NVIDIA SkillSpector 2.12.0 (pinned to its commit, static only, no credentials) over each skill, the agents, `hooks.json`, and the hook scripts. It is not a gate: a new finding shows as a warning. The first scan's 8 findings were all false positives (verify's own `--skip-*` flags, the blocked commands named in the hook that blocks them, an output format, and the comment on the Stop hook's cap); each is in `.github/skillspector/` with its reason. A planted line sending SSH keys to an outside URL was still reported. `scripts/skill-scan.mjs` holds the target list. Adopters' projects are unchanged. Details: design notes, 2026-10-27.
+
 ## 0.5.1 (2026-10-27)
 
 Mostly closing ways around the guard, from two reviews of 0.5.0 (agents reading the code independently, attempts against real git, and the CI steps run on Linux). `verify.mjs`, `guard.mjs`, and `lib/files.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/`.

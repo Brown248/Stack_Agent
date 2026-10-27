@@ -30,7 +30,8 @@ agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (ผูก scripts/hooks/*.mjs เข้ากับ Claude Code)
 skills/<name>/    SKILL.md หนึ่งไฟล์ต่อ skill และ script ที่ skill เรียกใช้
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
-                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test)
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test),
+                  skill-scan.mjs (SkillSpector สแกน skill และ hook ใช้เฉพาะใน CI ของ repo นี้ ต้องมี Python)
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),

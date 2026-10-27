@@ -4,6 +4,14 @@
 
 [English](CHANGELOG.md)
 
+## ยังไม่ออกรุ่น
+
+ไม่มีเครื่องมือที่ vendor เปลี่ยน โปรเจกต์จึงไม่ต้องรัน `init` ใหม่
+
+### เพิ่ม
+
+- job `skill-scan` ใน CI ของ repo นี้รัน NVIDIA SkillSpector 2.12.0 (ตรึงที่ commit, static เท่านั้น, ไม่ใช้ credential) กับแต่ละ skill, agents, `hooks.json` และ hook script ไม่ใช่ด่านบังคับ finding ใหม่จะแสดงเป็นคำเตือน การสแกนครั้งแรกได้ 8 finding ที่เป็นผลบวกลวงทั้งหมด (flag `--skip-*` ของ verify เอง, คำสั่งที่ถูกบล็อกซึ่งปรากฏใน hook ที่บล็อกมัน, รูปแบบ output และคอมเมนต์เรื่องเพดานของ Stop hook) แต่ละข้ออยู่ใน `.github/skillspector/` พร้อมเหตุผล บรรทัดที่ลองใส่ให้ส่ง SSH key ไป URL ภายนอกยังถูกรายงาน `scripts/skill-scan.mjs` เก็บรายการเป้าหมาย โปรเจกต์ของผู้ใช้ไม่เปลี่ยน รายละเอียด: design notes วันที่ 27 ต.ค. 2026
+
 ## 0.5.1 (2026-10-27)
 
 ส่วนใหญ่คือการปิดช่องเลี่ยง guard จากการตรวจ 0.5.0 สองรอบ (agent อ่านโค้ดแยกกัน, ลองเลี่ยงกับ git จริง และรันขั้นตอนของ CI บน Linux) `verify.mjs`, `guard.mjs` และ `lib/files.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/`
