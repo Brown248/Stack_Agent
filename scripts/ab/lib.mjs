@@ -10,7 +10,9 @@ import { matchesAny } from "../lib/files.mjs";
 import { SKIP_FILE, changedFiles, codeFingerprint, ignoreList } from "../lib/fingerprint.mjs";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-export const ARMS = ["full", "none", "hooks-only", "skills-only"];
+// full+superpowers: the plugin beside obra/superpowers, the way many people run it (--superpowers names its folder)
+export const ARMS = ["full", "none", "hooks-only", "skills-only", "full+superpowers"];
+export const SUPERPOWERS = "superpowers";
 export const PLUGIN_NAME = "stack-agent";
 
 export function harnessVersion() {
@@ -49,7 +51,8 @@ export function claudeArgs({ prompt, model, budget, pluginDir, isolate, disallow
 	for (const d of addDirs) args.push("--add-dir", d);
 	// user settings carry plugins and user MCP servers; both arms must start from the same bare session
 	if (isolate) args.push("--setting-sources", "project,local", "--strict-mcp-config");
-	if (pluginDir) args.push("--plugin-dir", pluginDir);
+	// one plugin folder, or several for an arm that loads another plugin beside this one
+	for (const dir of [pluginDir].flat().filter(Boolean)) args.push("--plugin-dir", dir);
 	if (disallowedTools.length) args.push("--disallowedTools", disallowedTools.join(","));
 	return args;
 }
@@ -59,7 +62,8 @@ export function claudeArgs({ prompt, model, budget, pluginDir, isolate, disallow
 export const PLUGIN_ENV = ["CLAUDE_CODE_PLUGIN_DIRS"];
 
 export function claudeEnv(isolate, env = process.env) {
-	const out = { ...env };
+	// superpowers' brainstorming companion can load a remote logo that carries its version; an A/B run sends nothing out
+	const out = { ...env, SUPERPOWERS_DISABLE_TELEMETRY: "1" };
 	const removed = [];
 	if (isolate) for (const key of PLUGIN_ENV) if (key in out) delete out[key], removed.push(key);
 	return { env: out, removed };
@@ -156,7 +160,9 @@ export function checkIsolation({ arm, parsed, isolate }) {
 	const plugins = (Array.isArray(init.plugins) ? init.plugins : []).filter((p) => !isBuiltin(p));
 	const names = plugins.map((p) => p.name);
 	const skills = (Array.isArray(init.skills) ? init.skills : []).filter((s) => s.startsWith(`${PLUGIN_NAME}:`));
-	const others = names.filter((n) => n !== PLUGIN_NAME);
+	const withSuperpowers = arm === "full+superpowers";
+	const others = names.filter((n) => n !== PLUGIN_NAME && !(withSuperpowers && n === SUPERPOWERS));
+	if (withSuperpowers && !names.includes(SUPERPOWERS)) reasons.push("superpowers did not load");
 	if (arm === "none") {
 		if (isolate && names.length) reasons.push(`none arm loaded plugins: ${names.join(", ")}`);
 		else if (names.includes(PLUGIN_NAME)) reasons.push("none arm loaded stack-agent");
@@ -177,8 +183,12 @@ export function checkIsolation({ arm, parsed, isolate }) {
 
 const EXCLUDED = ["examples", "tests", ".git", "evals/results"];
 
-export function makeArmPlugin(arm, pluginDir, outDir) {
+export function makeArmPlugin(arm, pluginDir, outDir, { superpowers } = {}) {
 	if (arm === "full") return pluginDir;
+	if (arm === "full+superpowers") {
+		if (!superpowers) throw new ConfigError("the full+superpowers arm needs --superpowers DIR (an installed superpowers plugin folder)");
+		return [pluginDir, superpowers];
+	}
 	if (arm === "none") return null;
 	if (arm !== "hooks-only" && arm !== "skills-only") throw new ConfigError(`unknown arm ${arm}`);
 	const src = path.resolve(pluginDir);

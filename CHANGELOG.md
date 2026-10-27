@@ -8,8 +8,13 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 Nothing vendored changed, so projects need no `init` rerun.
 
+### Measured
+
+- Stack Agent beside obra/superpowers 7.0.0, 3 runs per task and arm (two bug reports and an endpoint): every run in both arms correct, guard passing, and verified with fresh evidence. superpowers was never invoked: the agent took `stack-agent:debug` and `stack-agent:add-endpoint` every time. Its bootstrap added about 2,200 tokens of context per request and 9% to the spend. Tasks with no matching Stack Agent skill were not measured. Details: design notes, 2026-10-27.
+
 ### Added
 
+- A/B arm `full+superpowers` (`--superpowers DIR`): the plugin beside an installed superpowers, isolated only with exactly those two plugins. Every arm sets `SUPERPOWERS_DISABLE_TELEMETRY=1`.
 - A `skill-scan` job in this repo's CI runs NVIDIA SkillSpector 2.12.0 (pinned to its commit, static only, no credentials) over each skill, the agents, `hooks.json`, and the hook scripts. It is not a gate: a new finding shows as a warning. The first scan's 8 findings were all false positives (verify's own `--skip-*` flags, the blocked commands named in the hook that blocks them, an output format, and the comment on the Stop hook's cap); each is in `.github/skillspector/` with its reason. A planted line sending SSH keys to an outside URL was still reported. `scripts/skill-scan.mjs` holds the target list. Adopters' projects are unchanged. Details: design notes, 2026-10-27.
 
 ## 0.5.1 (2026-10-27)

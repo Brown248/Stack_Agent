@@ -351,7 +351,7 @@ test("end to end with a fake claude: a run that loaded an extra plugin is invali
 });
 
 test("the arm list is the documented one", () => {
-	assert.deepEqual(ARMS, ["full", "none", "hooks-only", "skills-only"]);
+	assert.deepEqual(ARMS, ["full", "none", "hooks-only", "skills-only", "full+superpowers"]);
 });
 
 test("an isolated run drops plugin variables a parent Claude Code set; a non-isolated run keeps them", async () => {

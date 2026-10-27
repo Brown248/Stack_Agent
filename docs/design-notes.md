@@ -479,6 +479,26 @@ The static mode also inspected the skills only partly (0% fully) and the hook sc
 
 **What was not.** Not a gate: the findings are keyword-level and cannot tell a hook that blocks `--no-verify` from a skill that runs it, so in a repository built to stop bypasses most findings will be false. Not in adopters' projects: the vendored tools are zero-dependency Node, and Stack Agent's job is the project's own code, not vetting other people's skills (`out-of-scope.md`, tools that need an install). Not the LLM review: it sends file contents to a provider, costs money, and is not repeatable enough for CI.
 
+## Beside obra/superpowers (2026-10-27)
+
+Many people run Stack Agent next to superpowers, and every A/B run so far had removed other plugins. The harness has a `full+superpowers` arm now: both plugin folders passed to `claude`, superpowers named with `--superpowers DIR` (its version goes into the results), isolation passing only with exactly those two plugins loaded, and `SUPERPOWERS_DISABLE_TELEMETRY=1` in every arm.
+
+**A/B.** Plugin at `f0b3d8e` plus the uncommitted SkillSpector job and this arm (no skill or hook changed), superpowers 7.0.0, Claude Code 2.1.310, Sonnet, at most $1 per run, 3 runs per task and arm, all 18 valid (every transcript shows both plugins and superpowers' SessionStart bootstrap), $2.45.
+
+| Task | Arm | Correct | Verified, evidence matches | `checkDetects` | Mean turns | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-blank-name` | Stack Agent | 3/3 | 3/3 | 3/3 | 11.0 | $0.113 |
+| | + superpowers | 3/3 | 3/3 | 3/3 | 12.7 | $0.124 |
+| `bug-dup-count` | Stack Agent | 3/3 | 3/3 | 3/3 | 10.0 | $0.100 |
+| | + superpowers | 3/3 | 3/3 | 3/3 | 11.3 | $0.115 |
+| `endpoint` | Stack Agent | 3/3 (map, thin controller, test added) | 3/3 | - | 21.3 | $0.176 |
+| | + superpowers | 3/3 (same) | 3/3 | - | 21.3 | $0.187 |
+
+- **No conflict and no gain on these tasks.** Every run in both arms fixed or built the right thing, passed the guard, and verified with fresh evidence; the Stop hook never had to send one back.
+- **superpowers was never used.** In all 9 runs with it, the agent invoked `stack-agent:debug` for the bug reports and `stack-agent:add-endpoint` for the endpoint, read no superpowers file, and named none of its skills, although its bootstrap says to invoke a skill on "even a 1% chance". When a Stack Agent skill fits the task, the agent takes it.
+- **What it cost.** The bootstrap adds about 2,200 tokens to the context of every request (cache creation 8,030 against 10,222 tokens on the same task), about one more turn on the bug tasks, and 9% more spend over the 9 runs ($1.28 against $1.17).
+- **Not measured:** tasks where no Stack Agent skill fits (a refactor, a feature with no endpoint, planning), where superpowers' brainstorming and planning skills may start and compete for the budget before verification; other models; more than 3 runs per cell. These three tasks were written for Stack Agent's skills, which favors them.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:

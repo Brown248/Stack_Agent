@@ -147,7 +147,7 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | ตัวเลือก | ความหมาย |
 | --- | --- |
 | `--task NAME` | task ใน `scripts/ab/tasks/` ตั้งชื่อตามไฟล์ (`endpoint`, `validate`, `bug-blank-name`, ...) ถ้าใส่ชื่อที่ไม่มีจะพิมพ์รายชื่อทั้งหมดออกมา ใส่ซ้ำได้หลายตัว จำเป็นต้องมี |
-| `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`) ค่าเริ่มต้น `full,none` |
+| `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`), `full+superpowers` (plugin คู่กับ obra/superpowers ต้องระบุ `--superpowers DIR` ซึ่งเป็นโฟลเดอร์ superpowers ที่ติดตั้งไว้ และนับว่าแยกถูกต้องเฉพาะเมื่อโหลดสอง plugin นี้เท่านั้น) ค่าเริ่มต้น `full,none` ทุกแขนตั้ง `SUPERPOWERS_DISABLE_TELEMETRY=1` |
 | `--runs N` | จำนวนรอบต่อ task และ arm ค่าเริ่มต้น 1 |
 | `--model`, `--budget USD` | ต้องระบุทั้งคู่ งบเป็นเพดานต่อรอบ ส่งเป็น `--max-budget-usd` และไม่มีค่าเริ่มต้นโดยตั้งใจ |
 | `--plugin DIR`, `--out DIR` | plugin ที่จะทดสอบ (ค่าเริ่มต้นคือ repo นี้) และที่เก็บผล (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |
