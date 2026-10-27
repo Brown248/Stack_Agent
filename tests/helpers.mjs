@@ -49,8 +49,8 @@ export function write(dir, rel, text) {
 	fs.writeFileSync(abs, text);
 }
 
-export function freePort() {
-	return new Promise((resolve, reject) => {
+const ephemeralPort = () =>
+	new Promise((resolve, reject) => {
 		const srv = net.createServer();
 		srv.once("error", reject);
 		srv.listen(0, "127.0.0.1", () => {
@@ -58,6 +58,33 @@ export function freePort() {
 			srv.close(() => resolve(port));
 		});
 	});
+
+// The OS gives a port back the moment it is closed, so two test files running side by side (each in its own process)
+// could be handed the same one, and a server started in one would answer for the other. Every port handed out is
+// claimed with a file created by the "wx" flag, which only one process can do, in a folder all the test processes of
+// one run share (not a tempDir: that one is per process). The folder is named for the run: the runner's pid, which
+// every child inherits through the environment. A claim from an earlier run is in another folder, so no claim is ever
+// taken over from a process that is gone, and nothing needs cleaning up.
+process.env.STACK_AGENT_PORT_SCOPE ??= String(process.ppid);
+export const portClaims = () => path.join(os.tmpdir(), `stack-agent-test-ports-${process.env.STACK_AGENT_PORT_SCOPE}`);
+
+export function claimPort(port) {
+	const dir = portClaims();
+	fs.mkdirSync(dir, { recursive: true });
+	try {
+		fs.writeFileSync(path.join(dir, String(port)), String(process.pid), { flag: "wx" });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export async function freePort() {
+	for (let i = 0; i < 50; i++) {
+		const port = await ephemeralPort();
+		if (claimPort(port)) return port;
+	}
+	throw new Error("no unclaimed free port after 50 tries");
 }
 
 export function usePort(dir, port) {
