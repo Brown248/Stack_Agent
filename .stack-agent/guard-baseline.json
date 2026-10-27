@@ -2,7 +2,8 @@
   "version": 2,
   "counts": {
     "module-boundary": {
-      "src/modules/reports/controller.js": 1
+      "src/modules/reports/controller.js": 1,
+      "src/modules/reports/extra.js": 1
     }
   }
 }
