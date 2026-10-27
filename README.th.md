@@ -48,7 +48,7 @@ you open a pull request ──► CI reruns the guard (ratchet and --compare-ref
 
 - **หลักฐาน ไม่ใช่คำบอกเล่า** `verify` รันเทสของคุณ เปิด server (ถ้ามี) รัน HTTP check และ command check แล้วเขียนบันทึกลง `.stack-agent/evidence/` บันทึกมี fingerprint ของโค้ด (ค่าเริ่มต้นไม่นับไฟล์ Markdown, `docs/` และ `.stack-agent/` ปรับรายการนี้ได้ด้วย `stopHookIgnore`) ถ้าแก้โค้ดหลัง verify หลักฐานเก่าจะไม่นับ
 - **ratchet ไม่ใช่เริ่มจากศูนย์** `guard` ตรวจกฎที่คุณเขียน เป็น regex สำหรับทุกภาษา และกฎ import สำหรับ JS/TS และ Python baseline (`guard-baseline.json`) บันทึกการละเมิดที่มีอยู่ตอนนี้ ของเดิมผ่าน ของใหม่ fail และการเพิ่ม baseline ต้องให้คนใส่ `--allow-increase` ใน CI ตัว `--compare-ref` ทำให้ pull request ที่เพิ่ม baseline หรือผ่อนกฎ fail
-- **check ใหม่ต้อง fail บนโค้ดเก่า** บน pull request ขั้น `against` รัน check และเทสใหม่ของคุณกับโค้ดก่อนการเปลี่ยน check ที่ผ่านบนโค้ดเก่าด้วยพิสูจน์อะไรไม่ได้ ขั้นนี้จึงให้ fail
+- **check ใหม่ต้อง fail บนโค้ดเก่า** บน pull request ขั้น `against` รัน check และเทสใหม่ของคุณกับโค้ดก่อนการเปลี่ยน check ที่ผ่านบนโค้ดเก่าด้วยพิสูจน์อะไรไม่ได้ ขั้นนี้จึงให้ fail ค่าเริ่มต้น ถ้าแก้โค้ดโดยไม่มี check หรือเทสใหม่ จะได้แค่หมายเหตุและ CI ผ่าน ตั้ง `"against": { "requireNewCoverage": true }` ใน `verify.json` เพื่อให้ CI fail การเปลี่ยนที่ไม่เปลี่ยนพฤติกรรม (refactor, เปลี่ยนชื่อ) ผ่อนได้ด้วยบรรทัด `Stack-Agent-No-New-Test: <เหตุผล>` ใน commit message
 - **hook ดักทางลัดที่พบบ่อย ส่วน CI ดักที่เหลือ** hook จับ pattern ของคำสั่ง ปฏิเสธ `git commit --no-verify`, `HUSKY=0` และเล่ห์เรื่อง `core.hooksPath` ถามก่อน force push, `reset --hard` หรือการแก้ config ของ guard เอง และรัน guard หลังแก้ไฟล์ทุกครั้งและกับไฟล์ที่คำสั่ง shell เปลี่ยน คนที่ตั้งใจเลี่ยงอาจหลุด hook ได้ แต่หลุด CI check ที่บังคับไม่ได้ ([docs/th/adoption.md](docs/th/adoption.md) บอกวิธีทำให้มันบังคับ)
 
 ## ติดตั้งในโปรเจกต์ของคุณ
@@ -269,7 +269,7 @@ Fork หรือ clone repo แล้วแก้ได้ทุกอย่า
 - hook จับ pattern ของคำสั่ง ดักทางลัดที่พบบ่อยได้ ไม่ใช่ทุกทางที่เป็นไปได้ CI คือด่านที่กันได้เสมอ
 - `claude plugin eval` ต้องใช้ Claude Code 2.1.269 ขึ้นไป case ที่ให้ agent ใช้ Bash ต้องใช้ Linux, macOS หรือ WSL2 เพราะ Windows แบบ native ไม่มี sandbox ให้
 - ทดสอบบน Windows 11 กับ Node 26 CI รันเทสและตัวอย่างทั้งห้าบน Linux และ Windows กับ Node 22 และ 24
-- hook ถูกรันจริงกับ Claude Code 2.1.299 ถึง 2.1.310 Claude Code เปลี่ยนบ่อย ถ้า hook เลิกทำงานหลังอัปเดต [เปิด issue](https://github.com/Brown248/Stack_Agent/issues)
+- hook ถูกรันจริงกับ Claude Code 2.1.299 ถึง 2.1.310 Claude Code เปลี่ยนบ่อย จึงมี workflow รายสัปดาห์ใน repo นี้ (`scripts/canary.mjs`) ที่รันปลั๊กอินกับรุ่นล่าสุดเพื่อจับความเสียหายแต่เนิ่นๆ ถ้า hook เลิกทำงานหลังอัปเดต [เปิด issue](https://github.com/Brown248/Stack_Agent/issues)
 
 ## พัฒนา Stack Agent
 

@@ -11,15 +11,12 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 ### Added
 
 - `"against": { "requireNewCoverage": true }` in `verify.json` makes a change to the code with no new or changed check or test fail the against step. By default that case still skips with a note (CI passes, and the Stop hook asks once), so CI was a reminder, not a gate; found in a read of this repo's own CI template. A change that alters no behavior (a refactor, a rename) is waived by a `Stack-Agent-No-New-Test: <reason>` line (at least 15 characters) in a commit message since the base; the reason is shown and stays in the history. It is separate from `against.required`, which keeps its meaning (inconclusive results fail).
+- A weekly canary in this repo's CI (`.github/workflows/claude-code-canary.yml`, `scripts/canary.mjs`): it installs the latest Claude Code and checks that the plugin still validates (`plugin validate --strict`, no credentials) and, with an `ANTHROPIC_API_KEY` secret, that a headless session still loads it, records the session, and denies `git commit --no-verify` (about $0.003 per run). Against a copy with a dead PreToolUse hook the static check passed and the live one failed. Nothing a project installs changed.
 
 ### Fixed
 
 - Test runs could hand two test files the same port (this repo's tests only; nothing a project installs): the OS gives a port back the moment it is closed, so two files running at once could be given the same one and a server in one answered for the other, which made `a server that never becomes ready` pass verify (`0 !== 1`) on a Linux runner now and then. On Linux, two processes asking at once got a port in common in 4 of 30 rounds. Each port is claimed with an exclusive file create in a folder shared by one test run; the same experiment gave 0 of 90 rounds.
 - The A/B task `bug-stale-list` (this repo's tests only; nothing a project installs): its planted cache lasted 50 ms, and on a loaded Windows CI runner a read, a create, and a read took longer, so the bug never showed and `tests/ab-tasks.test.mjs` failed on three of six Windows jobs. The window is 300 ms now.
-
-### Added
-
-- A weekly canary in this repo's CI (`.github/workflows/claude-code-canary.yml`, `scripts/canary.mjs`): it installs the latest Claude Code and checks that the plugin still validates (`plugin validate --strict`, no credentials) and, with an `ANTHROPIC_API_KEY` secret, that a headless session still loads it, records the session, and denies `git commit --no-verify` (about $0.003 per run). Against a copy with a dead PreToolUse hook the static check passed and the live one failed. Nothing a project installs changed.
 
 ## 0.5.2 (2026-10-27)
 
