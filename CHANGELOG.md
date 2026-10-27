@@ -4,6 +4,12 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
+## Unreleased
+
+### Fixed
+
+- The A/B task `bug-stale-list` (this repo's tests only; nothing a project installs): its planted cache lasted 50 ms, and on a loaded Windows CI runner a read, a create, and a read took longer, so the bug never showed and `tests/ab-tasks.test.mjs` failed on three of six Windows jobs. The window is 300 ms now.
+
 ## 0.5.2 (2026-10-27)
 
 Nothing vendored changed, so projects need no `init` rerun.
