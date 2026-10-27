@@ -22,7 +22,7 @@ Stack Agent moves rules out of prompts and into things that fail loudly: a verif
 | --- | --- | --- |
 | Verification | `scripts/verify.mjs`, skill `verify` | Runs your tests, starts your server if you have one, runs HTTP checks and command checks, and writes evidence to `.stack-agent/evidence/`. |
 | Hard constraints (CI) | `scripts/guard.mjs` | Regex rules for any language, plus import rules for JS/TS and Python. A baseline ratchets: existing violations pass, new ones fail. `--compare-ref` fails a PR that loosens the rules. |
-| Hard constraints (live) | `hooks/hooks.json` | In projects set up with Stack Agent, blocks hook bypasses (`--no-verify`, `HUSKY=0`, `core.hooksPath`), asks before force-push, deleting or force-moving a branch, `reset --hard`, or edits to the guard's own files. Runs the guard after every edit. Keeps the agent from stopping until verify evidence matches the code it changed, or it records why it cannot verify. |
+| Hard constraints (live) | `hooks/hooks.json` | In projects set up with Stack Agent, blocks hook bypasses (`--no-verify`, `HUSKY=0`, `core.hooksPath`), asks before force-push, deleting or force-moving a branch, `reset --hard`, or edits to the guard's own files. Runs the guard after every edit and on the files each shell command changed. Keeps the agent from stopping until verify evidence matches the code it changed, or it records why it cannot verify. |
 | Soft constraints | `.stack-agent/rules.md` | Team preferences loaded into every session. |
 | Feature map (backends) | `scripts/api-map.mjs`, skill `api-map` | Drafts an endpoint map from code and fails when the map drifts. |
 | Feature map (other presets) | `scripts/feature-map.mjs`, skill `feature-map` | A table of what a user does and where it lives (`path`, `path:line`, or `path#text`); fails when a file, a line, an anchor text, or a named verify check is gone. |
@@ -70,9 +70,9 @@ Fork or clone the repo, then change anything: add a preset, a guard rule, a skil
 
 ## Daily use
 
-1. The agent changes code. The hook runs the guard on each edit and reports violations with the fix.
+1. The agent changes code. The hooks run the guard on each edit, and on the files a shell command changed, and report violations with the fix.
 2. Before it finishes, it runs `node .stack-agent/bin/verify.mjs` and reports the evidence file. If it tries to stop without evidence that matches the code, the Stop hook blocks it, up to 3 times in a row, then lets it stop and tells you the change is unverified.
-3. CI runs the guard and `--compare-ref` on every pull request, plus the API map check in projects that have one.
+3. CI runs the guard (with `--compare-ref` on pull requests), the API map or feature map check where the project has one, and verify on every push and pull request (with the against step on pull requests).
 4. When you correct the agent twice for the same thing, run `/stack-agent:correct` to turn it into a rule.
 5. Spot-check recent commits with `/stack-agent:sample-review` instead of reviewing every PR first.
 

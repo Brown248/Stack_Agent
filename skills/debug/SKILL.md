@@ -5,7 +5,7 @@ description: Use this first for any bug report or "find and fix it" request, bef
 
 # Debug with a repro that goes red
 
-A bug you cannot make fail on demand is a bug you are guessing about. Everything here hangs on one **repro**: a single command that goes **red** on this bug, the exact symptom the user reported, and green once it is fixed. Build it first; theories come after. Adapted from `diagnosing-bugs` in mattpocock/skills (MIT).
+A bug you cannot make fail on demand is a bug you are guessing about. Everything here hangs on one **repro**: a single command that goes **red** on this bug, the exact symptom the user reported, and green once it is fixed. Build it first; theories come after. Reading the code to see where to aim the repro is fine, and on a short file you may spot the cause while you do; still change nothing until the repro has gone red on the user's symptom, because a cause you spotted is a theory until then. Adapted from `diagnosing-bugs` in mattpocock/skills (MIT).
 
 Throughout, redact secrets in anything you show: write `<REDACTED>` in their place.
 
@@ -22,7 +22,7 @@ Run it on the code as it is now: `node .stack-agent/bin/verify.mjs --skip-tests 
 
 The red must be the failure the user reported. A repro that fails some other way nearby (a 500 when they reported a 201, a crash when they reported a wrong count) finds a different bug, and fixing that one leaves theirs in place. Compare the output with the user's words before you go on.
 
-If it fails on some runs only, run it in a loop and report how many runs out of how many go red. Raise that rate before step 2: more runs, more load, a fixed seed or clock, a narrower timing window. A bug that fails half the time can be worked on; one that fails once in a hundred cannot.
+If it fails on some runs only, measure it with `node .stack-agent/bin/verify.mjs --check <name> --repeat 20`, or `--skip-checks --repeat 20` for a repro written as a test (a shell loop may be blocked by permission rules), and report how many runs out of how many go red. Raise that rate before step 2: more runs, more load, a fixed seed or clock, a narrower timing window. A bug that fails half the time can be worked on; one that fails once in a hundred cannot.
 
 If you cannot make it go red, stop and say so: list what you tried and ask the user for what would reproduce it (an environment, a captured request, a log). Theories without a red repro are guesses, so the next steps wait.
 

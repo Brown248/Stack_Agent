@@ -37,7 +37,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 | Skills: small, composable, with scripts, getting better each use | the skills in `skills/`, `reflect` for improving them | `claude plugin validate --strict` |
 | A description says when, and a skill survives a compaction (from obra/superpowers, MIT) | descriptions name triggers only, without "then" or "step"; each SKILL.md under 20,000 characters | `tests/skills.test.mjs` |
 | Who may invoke a skill | `disable-model-invocation: true` on skills that write many files or cost money | skill frontmatter |
-| A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse, Stop | `tests/hooks.test.mjs` |
+| A live layer between prompt and CI | `hooks/hooks.json`: PreToolUse (shell and edits to guard files), PostToolUse (after edits and after shell commands), Stop | `tests/hooks.test.mjs` |
 
 ## Left out on purpose
 
@@ -50,7 +50,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 - Import-based rules read JS/TS and Python. Other languages use `pattern` rules. Python resolution is static: it does not follow `sys.path` changes, `importlib` calls, or installed packages, so a module not found in the repo is treated as third-party.
 - The shell hooks match patterns, so a determined workaround (an alias, or a script that writes a file without naming it) can slip past. CI with `--compare-ref` and CODEOWNERS is the gate that always holds.
-- The PostToolUse guard covers Edit/Write. Shell edits are caught by the Stop hook, which runs the guard on the files the session changed (since 2026-10-23), and by CI.
+- The PostToolUse guard covers Edit/Write, and since 2026-10-26 the files a shell command changed (compared by git blob id with what the guard hooks last saw, so each violation is reported once). The Stop hook still runs the guard on every file the session changed (since 2026-10-23), and CI on everything.
 - Evidence and the skip record are plain files. Edit/Write on them asks a human, but a determined shell write can still forge them. The `verify` job in the CI template reruns verify on every push and pull request (with `--against origin/<base>` on pull requests), so a forged file does not pass CI. That holds only while the job is a required check and the workflow and `verify.json` are under CODEOWNERS, and while the install step is filled in. The workflow has not been run on GitHub Actions yet; for now it is checked only by text tests.
 - The `against` step proves that at least one new check tells the old code from the new. It cannot judge whether the checks cover everything the change should do, and results it cannot trust (the old server does not start) skip it instead of passing it.
 - The ratchet counts per file per rule. Import rules count each imported name (baseline version 2). Version 1 counted statements, so adding a name to an existing forbidden import passed; that gap was found while planning the A/B work and closed with a regression test (`tests/guard-widening.test.mjs`).
@@ -61,7 +61,7 @@ The shared thesis: move knowledge out of people's heads and prompts into structu
 
 | What | Status |
 | --- | --- |
-| Unit and integration tests | 431 pass on Windows 11, Node 26 (2026-10-24) |
+| Unit and integration tests | 514 pass on Windows 11, Node 26, and on Linux (WSL2 Ubuntu), Node 22 (2026-10-27) |
 | All five examples, one per preset (Node API, Python CLI, library, frontend, generic data script) | pass guard and full verify, and fail verify when a behavior is deliberately broken (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (14 deliberate bugs) | all caught by the tests |
 | `claude plugin validate --strict` | passes |
@@ -392,6 +392,73 @@ Measured with `scripts/bench-hooks.mjs` on Windows 11, Node 26.8.1: synthetic gi
 - **Hiding the commit did not change the order.** The service is short, so all three read it and named the cause before writing the repro. The skill asks for the repro first; on code this small that order does not hold.
 - Two of the three ended their first message saying plainly that the full verify had not run; the Stop hook sent them back, and both runs then passed with the against step showing the repro fails on the old code.
 - Without the plugin, every agent fixed the bug and none verified or added a test.
+
+## Repeat runs, a guard after shell commands, and migrations in a read-only sandbox (2026-10-26)
+
+**A/B.** `scripts/ab/run.mjs` on the working tree over `0fc645f` (`verify --repeat`, the after-shell guard hook, the `debug` and `add-migration` edits), Claude Code 2.1.310, Sonnet, at most $1 per run, plugin and bare arm, 3 runs each, all 18 valid, $1.99.
+
+| Task | Arm | Correct | Verified, evidence matches | `checkDetects` | Other | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-flaky-list` | plugin | 3/3 | 3/3 | 3/3 | `redRateMeasured` 0/3 | $0.122 |
+| | none | 3/3 | 0/3 | 0/3 | `redRateMeasured` 0/3 | $0.073 |
+| `bug-stale-list` | plugin | 3/3 | 3/3 | 3/3 | `redRateMeasured` 0/3 | $0.150 |
+| | none | 3/3 | 0/3 | 0/3 | `redRateMeasured` 0/3 | $0.055 |
+| `job-new-export` | plugin | 3/3 | 3/3 | 3/3 | `importCase` 2/3, `checkAfterImport` 2/2 | $0.155 |
+| | none | 3/3 | 1/3 | 0/3 | `importCase` 1/3, `checkAfterImport` 0/1 | $0.108 |
+
+- **No agent measured a red rate, and none needed to.** Every plugin agent invoked `debug` and wrote the repro as a test in the suite, not a verify check, with 30 to 40 create-and-read rounds inside it, so it went red on every run. The skill's "fails on some runs only" step never applied: the agents raised the rate first, which is what the step asks for. They also could not have used `--repeat`, which only took checks then; `--skip-checks --repeat N` now repeats the test suite. Not rerun with agents: since they amplify inside the test, a rerun would not reach that step either.
+- **The new-import path ran for the first time with agents.** In two plugin runs a full verify hit the "changed tests import what the old code lacks" case, and both times a later passing run detected the change with a verify check. One bare run hit the case and never added a check.
+- **The after-shell guard stayed silent in all 9 plugin sessions**, including the 3 `bug-stale-list` runs that edited a test with `sed -i`: no false report. The transcript shows a hook only when it says something, so its reporting path is covered by `tests/hooks.test.mjs`, not by these runs.
+- Without the plugin, every agent fixed the bug and almost none verified (1 of 9).
+
+**Hook speed.** `bench-hooks.mjs`, Windows 11, Node 26.8.1, one run per size: the after-shell guard took 125 and 133 ms with 5 changed files, and 318 and 274 ms with 1,000, on repositories of 2,000 and 20,000 files (a Node start is about 60 ms of that).
+
+**Evals.** `claude plugin eval` in WSL2 (Claude Code 2.1.304, the session's default model), the same working tree, `~/.docker` moved aside for the run. `add-migration-column` 3 runs per arm ($3.25), `debug-blank-name` 2 runs per arm ($1.02).
+
+| Case | With | Without | Δ |
+| --- | --- | --- | --- |
+| `add-migration-column` | 1.00, 0.88, 0.75 (mean 0.88) | 0.88, 0.75, 0.75 (mean 0.79) | +0.08 |
+| `debug-blank-name` | 1.00, 1.00 | 0.75, 0.75 | +0.25 |
+
+- **`up-down-up` passed for the first time: 2 of 3 with the plugin, 0 of 3 without.** Every earlier run failed it in both arms, because the sandbox cannot write a scratch database file. With the sample's new `redo`, run 1's trace shows the new migration applied, rolled back, and applied again, and `migrate: redo ok`. Run 3's judges split (PASS FAIL FAIL) and its evidence held no runner output. The bare arm read `migrate.mjs`, `redo` included, and never ran a round trip.
+- `guard-passed` split in both arms (1 of 3 with, 2 of 3 without), on a step nothing here changed. The judge's evidence for a long trace (50 to 80 KB here) is cut in the middle, so a guard run there may not reach it; the final messages report `guard: ok`. Left as a grader limit.
+- `debug-blank-name`: `repro-before-fix` passed 2 of 2 with the plugin and 0 of 2 without, after the wording that allows reading the code before the repro.
+
+## A detailed review of 0.5.0 (2026-10-26, later)
+
+**Method.** Four agents read the code independently (a bug hunt with reproductions, docs against code in both languages, behavior with no test, and the eval grader reference), and the CI steps ran on Linux (WSL2 Ubuntu, Node 22) against the release commit. Every finding below was reproduced again or read in the code before it was fixed; each fix has a test.
+
+- **Two ways around the guard.** git takes any unambiguous prefix of a long option, so `git commit --no-verif` committed past a failing pre-commit hook while the shell hook let it through; so did `git --config-env=core.hooksPath=VAR commit` and a persistent `git config core.hooksPath`. Both are denied now, and the other git gates match prefixes down to the shortest form git accepts.
+- **The hooks judged files CI does not.** Given a list of files, the guard applied only `.gitignore`, not the config's `ignore` list or the default skipped folders, so a fixture with a key was blamed by the after-edit hook, the after-shell hook, and the Stop hook while CI's full scan passed it.
+- **Three faults in 0.5.0's after-shell guard.** It blamed the first command for a `.md` file left dirty before the session (the session record leaves `stopHookIgnore` files out, the guard does not); one unreadable changed file emptied the batch hash, which turned the hook off for the session; and edit hooks running at the same time overwrote each other's record. The session record now keeps every dirty file's blob id, hashing falls back to one file at a time, and the edit hook only appends to a log the shell hook reads past its own snapshot. It also groups changed files by their nearest project, so a command at the top of a monorepo reaches the projects inside it.
+- **Found while writing tests.** Output between 8 and 12 MB passed as if all of it had been matched: the truncation flag was raised only when the buffer past the 4 MB head passed 8 MB. A command that leaves a process holding its output (`start /b`) kept verify waiting until that process ended and was then reported as timed out; verify now waits for the output to go quiet (1.5 s, 10 s at most). The first version waited a fixed 1.5 s, and one full Linux run under load failed a test whose command's output arrived late; the quiet-time rule replaced it, and the same suite passed on the next loaded run.
+- **Linux.** Apart from that, the only failure was `cli-minlen` on a machine with `python3` and no `python`; it now skips like the other Python tests.
+
+**Measured.** `feature-map-lookup` (new, 2 runs per arm, $0.57): 1.00 with the plugin against 0.00 and 0.50 without; with the plugin the agent read the feature map both times, without it never. `verify-before-done` after the skill's field list changed (2 runs per arm, $0.91): 1.00 in both arms; the bare arm had scored 0.67 in the last run, so this is the run-to-run spread the `run-evals` note describes.
+
+**A/B, `init-library`** (new: a library with Stack Agent taken out, the skill started by name; plugin arm, 2 runs, $0.45): verify and the guard passed in both and the workflow was written, but `init --check` passed in neither. Both agents were stopped by the protected-path hook: edits to `guard.config.json` and the workflow ask a human, and a headless session has none, so the edits were refused. One agent said exactly which edits waited for approval and why; the other finished the guard and left the workflow's install step with a note. **Settled the same day:** Edit/Write on a guard config or Stack Agent workflow that git has never seen and that still has `EDIT ME` no longer asks (a template init just wrote holds no rule to loosen; staged, committed, or filled in, it asks again). Rerun, 2 runs ($0.42): one finished (`init --check` passed, the first complete setup without a human), the other wrote its edits with `node -e` from the shell, which still asks, and stopped. The refusal for those two files now says to use Edit or Write for a template, and the skill says the same. Rerun, 3 runs ($0.68): `init --check`, verify, and the guard passed in all 3. One agent tried a shell write first, read the hint, and switched to Edit. Each kept the universal rules, added 3 or 4 rules of its own (examples import the package by name, `src/internal` stays behind the public entry, no runtime dependencies), and replaced the workflow's install step with a note that there is nothing to install.
+
+**Not done.** The eval reference says a `regex` grader can read the trace (`target: trace`) and `tool_used` takes an `input_match`; that would let `up-down-up` and `guard-passed` stop depending on a judge that sees a long trace cut in the middle. It is not confirmed by public docs and was not tried.
+
+## The after-shell guard in real sessions, a trace grader, and six more hook bypasses (2026-10-27)
+
+**Six more ways around the git hooks**, found by trying each against real git with a failing pre-commit hook: `GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_KEY_<n>` setting `core.hooksPath`, an alias that runs `commit --no-verify` (set with `-c` or `git config`), `export HUSKY=0`, and changing or moving `.git/hooks`. All six committed while the shell hook let them through. The alias form was hidden by the command tokenizer, which split `key="two words"` into three tokens where a shell sees one. The first four are denied, and a change to `.git/hooks` asks, from the shell and from Edit/Write, in Stack Agent projects only; `.husky/` is committed and reviewed, so it is left alone. 18 ordinary commands are tested not to ask.
+
+**A/B, `shell-sort`** (new: the user hands over a `sed -i` one-liner that sorts the list but puts a query and the `db` import in the controller). `scripts/ab/run.mjs`, Claude Code 2.1.310, Sonnet, at most $1 per run, both arms, 3 runs each, all 6 valid, $0.69.
+
+| Arm | Correct | Guard passes | Verified | `checkDetects` | After-shell report | Mean cost |
+| --- | --- | --- | --- | --- | --- | --- |
+| plugin | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | $0.131 |
+| none | 3/3 | 3/3 | 3/3 | 2/3 | - | $0.098 |
+
+- **The after-shell guard reported the violation in all 3 plugin runs**, the first time it has been seen catching one in a real session; each agent ran the one-liner, read the report, put the controller back, and sorted in the repository instead.
+- **It made no difference to the outcome here.** Every bare agent read `package.json`, ran `npm run guard` on its own after the `sed`, and fixed the same thing. A project that exposes its guard as a script gets this from Sonnet without the hook; the hook's value is that the report does not depend on the agent thinking to run it.
+- **The transcript does not carry a PostToolUse hook's output**, so the first grader (searching the transcript for the report) scored 0 while the agent's own message quoted the rules it was given. The hook now appends what it reports to `.stack-agent/evidence/sessions/<id>.reports.log`, and the task reads that.
+- **A fixture bug, found by this task:** the sample backend's `npm run guard` and `npm run verify` pointed at `../../scripts/`, which exists only inside this repo, so in every scaffolded copy they failed with `MODULE_NOT_FOUND`. They now run the vendored tools. Earlier A/B results in which an agent reached for `npm run guard` may show the bare arm worse than it was; the first, discarded run of this task did (guard 0/1 without the plugin, from that error).
+
+**A trace grader.** `claude plugin eval` accepts `type: regex` with `target: trace`. `add-migration-column`'s `up-down-up` is now that: the runner's own output for the new migration, applied, rolled back, and applied again, in order. Run beside the llm grader it replaced (plugin arm, 2 runs, $1.05), both passed both runs. The llm judge had seen long traces cut in the middle; the regex reads the whole trace and needs no judge.
+
+**Windows leftovers.** A process a command leaves behind is now stopped on Windows too: Windows has no process groups and `taskkill /T` cannot start from a parent that has exited, so verify walks down from the exited parent's id with `Get-CimInstance` and stops only processes started after the command, so a reused id cannot pull in an older one. The test that a leftover is gone now runs on every OS.
 
 ## Self-review log
 

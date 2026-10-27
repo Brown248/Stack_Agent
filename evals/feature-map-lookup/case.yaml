@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: feature-map-lookup
+description: Answering "where does this user-facing behavior live" in a library should start from the feature map and give the real place and the checks that cover it.
+tags: [skills, read-only]
+context:
+  scaffold_script: scaffold.sh

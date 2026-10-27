@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+# Read-only token: these jobs write nothing back to GitHub, and the install step runs third-party package scripts.
+permissions:
+  contents: read
+
 jobs:
   guard:
     runs-on: ubuntu-latest

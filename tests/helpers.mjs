@@ -96,3 +96,6 @@ export async function processGone(pidFile, { timeoutMs = 10000 } = {}) {
 	// never wrote its pid: it was killed before it got that far
 	return !fs.existsSync(pidFile);
 }
+
+// the Python examples run `python`; a machine with only `python3` (many Linux installs) skips those tests instead of failing
+export const pythonSkip = spawnSync("python", ["--version"], { encoding: "utf8" }).status === 0 ? false : "python is not on PATH";

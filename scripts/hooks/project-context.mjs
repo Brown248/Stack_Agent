@@ -28,7 +28,9 @@ export function projectContext(input, startDir) {
 		const start = readStart(root, input.session_id);
 		const evidence = evidenceGuard(root, cwd, [start?.evidenceDir, readConfig(root).evidenceDir]);
 		const shared = sharedRulesGuard(cwd, sharedRuleFiles(root));
-		const guard = Object.assign((p) => evidence(p) ?? shared(p), { mentions: (t) => evidence.mentions(t) ?? shared.mentions(t) });
+		// the repo's local git hooks are in no diff; changing one turns the gate off without a trace (.husky is committed and reviewed)
+		const gitHooks = (p) => (/(^|[\\/])\.git[\\/]hooks([\\/]|$)/.test(String(p ?? "")) ? "the repo's local git hooks (.git/hooks)" : null);
+		const guard = Object.assign((p) => evidence(p) ?? shared(p) ?? gitHooks(p), { mentions: (t) => evidence.mentions(t) ?? shared.mentions(t) });
 		const record = () => {
 			try {
 				return ensureSessionRecord(root, input.session_id);

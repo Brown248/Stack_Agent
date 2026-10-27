@@ -4,6 +4,7 @@ import path from "node:path";
 import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../guard.mjs";
 import { ConfigError, readJson, toPosix } from "../lib/files.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
+import { blobIds, noteSeen } from "./session-record.mjs";
 
 const CONFIG = ".stack-agent/guard.config.json";
 
@@ -20,6 +21,9 @@ if (filePath) {
 			const baseline = fs.existsSync(baselinePath) ? readJson(baselinePath, "guard baseline") : {};
 			const rel = toPosix(path.relative(root, absFile));
 			const violations = runGuard({ root, config, files: [rel] });
+			// checked here, so the after-shell hook does not report this file again until something else changes it
+			const id = blobIds(root, [rel]).get(rel);
+			if (id) noteSeen(root, input.session_id, rel, id);
 			const { failing } = compareToBaseline(violations, baseline.counts ?? {}, [rel], fs.existsSync(baselinePath) ? baselineVersion(baseline) : undefined);
 			if (failing.length) {
 				const keys = new Set(failing.map((f) => `${f.rule}|${f.file}`));

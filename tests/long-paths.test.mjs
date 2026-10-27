@@ -9,7 +9,8 @@ import { runAgainst } from "../scripts/verify.mjs";
 import { git, tempDir, write } from "./helpers.mjs";
 
 test("the against step reads the old verify.json at a full hash from a project with a long path", { skip: process.platform !== "win32" && "the 260-character path limit is Windows only" }, async () => {
-	let dir = tempDir("stack-agent-long-");
+	// measured on the real path: git writes through it, and an 8.3 short temp folder would make the real one longer
+	let dir = fs.realpathSync.native(tempDir("stack-agent-long-"));
 	// 200 characters: cwd plus "<40-character hash>:.stack-agent/verify.json" is over 260, while git's own object
 	// files (.git/objects/xx/<38 characters>) still fit under it
 	while (dir.length < 200) dir = path.join(dir, "d".repeat(Math.min(40, 200 - dir.length - 1)));

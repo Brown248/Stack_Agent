@@ -4,14 +4,82 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.5.1 (2026-10-27)
 
-### Added
+Mostly closing ways around the guard, from two reviews of 0.5.0 (agents reading the code independently, attempts against real git, and the CI steps run on Linux). `verify.mjs`, `guard.mjs`, and `lib/files.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/`.
 
-- A/B task `bug-flaky-list`: a bug that is really random (two read copies picked at random, a create refreshes one), folded into the project's first commit with the new `plantBug(..., { hidden: true })` so the history does not point at it.
+### Measured
+
+- `feature-map-lookup` (new), 2 runs per arm: 1.00 with the plugin against a mean of 0.25 without; only the plugin arm read the feature map. `verify-before-done` after its skill edit: 1.00 in both arms.
+- A/B `init-library` (new), plugin arm: before the setup change below, `init --check` passed in 0 of 2 runs, because a headless session cannot approve edits to the protected guard config and workflow; after it, and the hint to use Edit or Write, in 3 of 3, each with its own guard rules and real checks. Details and caveats: design notes, 2026-10-26 (later).
+- A/B `shell-sort` (new), 3 runs per arm: the after-shell guard reported the one-liner's violations in all 3 plugin runs, the first time it was seen catching one in a real session, and each agent moved the sorting to the repository. The bare arm did as well, by running `npm run guard` on its own, so this task shows the hook works, not that it is needed when the guard is a visible script.
+- `add-migration-column`'s `up-down-up` is now a regex over the trace (`target: trace`); beside the llm grader it replaced, both passed 2 of 2.
+- `npm test`: 514 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
 
 ### Fixed
 
+- More ways around the guard, found by trying them against real git (each committed past a failing pre-commit hook while the shell hook let it through): `GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_KEY_<n>` setting `core.hooksPath`, an alias that runs `commit --no-verify` (set with `-c` or `git config`), `export HUSKY=0`, and deleting or replacing a file in `.git/hooks`, from the shell or Edit/Write. The first three are denied; a change to `.git/hooks` asks, in Stack Agent projects only. `.husky/` is committed and reviewed, so it is left alone. The command tokenizer split `key="two words"` into two tokens, as it would not in a shell, which hid the alias form; a word is now any run of plain and quoted pieces.
+- Ways around the guard: the shell hook let through `git commit --no-verif` (git takes any unambiguous prefix of a long option), `git --config-env=core.hooksPath=VAR commit`, and `git config core.hooksPath x`. All three are denied now, and the other git gates match abbreviations too (`push --de`, `push --m`, `reset --k`, `clean --f`).
+- The after-edit and after-shell hooks, the Stop hook's guard, and `guard.mjs --files` did not apply the config's `ignore` list or the default skipped folders, which CI's full scan does, so a fixture or generated file was blamed locally and passed in CI.
+- The after-shell guard (new in 0.5.0): it blamed the first command for a `.md` or `docs/` file left dirty before the session, because the session record left those out; one unreadable changed file made it check nothing for the rest of the session; edit hooks running at the same time lost each other's entries, so a violation could be reported twice; and a command run from the top of a monorepo reached no project. The Stop hook's guard had the same blind spot for `.md` files.
+- verify: a command that exits while a process it started still holds its output (`start /b`, `&`) was waited on until that process ended, then reported as timed out; it is now judged on its exit code once the output has been quiet for 1.5 s (10 s at most), and that process is stopped (on Windows, found through its parent id, since Windows has no process groups). Output between 8 and 12 MB passed as if all of it had been matched; the 8 MB limit now holds. A command killed by a signal is reported as `killed by <signal>` and is a real red in `--repeat`, not an inconclusive run. A verify stopped with Ctrl+C or SIGTERM stops the server and the commands it started. `--skip-tests --skip-checks --repeat` is refused instead of running the tests anyway.
+- On Windows, a project reached through an 8.3 short name (GitHub's runner keeps its temp folder at `C:UsersRUNNER~1`) was a different place from the one git reports by its long name: a shared rules file inside the repository was refused as outside it, `init` showed workflow paths climbing out of the project, and the after-shell guard named files without their monorepo folder. guard, init, the after-shell guard, and the protected-path checks now compare real paths. Found by the first CI run on GitHub, where 11 Windows tests failed; locally the user folder name was too short to get a short name.
+- The sample backend's `npm run guard` and `npm run verify` pointed at `../../scripts/`, which exists only inside this repo, so they failed in every installed copy (the A/B and eval projects included). They run the vendored tools now. Earlier A/B results in which an agent used `npm run guard` may show the bare arm worse than it was.
+- The `cli-minlen` A/B test failed on machines that have only `python3`; it now skips like the other Python tests.
+- Docs that had drifted: the README (EN/TH) said the guard runs only after edits and that CI does not run verify; the init skill named three of the six files it copies; the verify skill left out `expectHeaders`, `followRedirects`, and `timeoutSec`; the Thai changelog's `--repeat` entry left out the first red output.
+
+### Added
+
+- Documented what the code already accepted: verify's `--config` and `--json`, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, the HTTP check `timeoutSec`, `type`, and the `evidenceDir` default; the guard's `baseline`, `--files`, `--strict`, `--json`, `--config`, and `pythonRoots`; api-map's `--config`, `--json`, and `verifyConfig`; feature-map's `--map` and `--json`; review-findings' `--stage` and `rows --date`; and the A/B harness's `--disallowed-tools`.
+- Eval case `feature-map-lookup` (on the library example) and A/B task `init-library` (Stack Agent set up from scratch through the skill). `evals/scaffold.mjs` takes the example to copy. `run-evals` says how each skill is measured, and why `mine-corrections` is not.
+- The after-shell guard appends what it reports to `.stack-agent/evidence/sessions/<id>.reports.log`: a session transcript does not carry a hook's output, so this is the record that a report was made.
+- A/B task `shell-sort` (a `sed -i` one-liner that breaks two guard rules). A task's `grade` now also receives the transcript and the arm.
+- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 514 tests).
+
+### Changed
+
+- Setup can finish without a human at the keyboard: Edit/Write on a `guard.config.json` or Stack Agent workflow that git has never seen and that still has `EDIT ME` placeholders no longer asks. In the `init-library` A/B runs both agents were stopped there, since a headless session cannot approve. Once the placeholders are gone, or the file is staged or committed, edits ask again. A shell write to it still asks, and the refusal now says to use Edit or Write for a template; the init skill says the same.
+- The `guard-request` micro-test no longer says the after-edit hook misses shell edits; its scenario now has the agent move on past the after-shell hook's report. Its earlier scores are not directly comparable.
+
+## 0.5.0 (2026-10-26)
+
+From the first install into a real project (a pnpm + Next.js monorepo on PostgreSQL, on Windows), and the open items from the 0.4.0 measurements. `verify.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/` (`--check` lists it as outdated until you do).
+
+### Measured
+
+- `add-migration-column`, 3 runs per arm: `up-down-up` passed for the first time, 2 of 3 with the plugin and 0 of 3 without (every earlier run failed it in both arms); mean 0.88 against 0.79. `debug-blank-name`, 2 runs per arm: 1.00 against 0.75, `repro-before-fix` 2 of 2 against 0 of 2.
+- A/B, 3 runs per arm: the new-import path ran with agents for the first time (`job-new-export`: the case came up in 2 plugin runs, and both ended with a verify check that detects the change). In `bug-flaky-list` and `bug-stale-list` every agent wrote a test repro that loops until it is red every time, so no red rate was measured or needed. The after-shell guard made no false report in 9 plugin sessions.
+- Details and caveats: design notes, 2026-10-26.
+
+### Added
+
+- The CI workflow template runs with a read-only token (`permissions: contents: read`).
+- `no-private-keys` in every preset also catches `ENCRYPTED PRIVATE KEY` and `PGP PRIVATE KEY BLOCK`. Existing projects keep their own copy of the rule; copy the new pattern from the preset to get it.
+- HTTP checks take `followRedirects` (default `true`) and `expectHeaders`, so a check can assert that a signed-out page redirects to `/login` instead of only seeing the login page it lands on.
+- `init` adds `.stack-agent/` to `.prettierignore` when the project uses Prettier (including as a plain dependency), and to an existing `.eslintignore`, in the project's folder and at the top of its repository. The vendored tools had failed the project's own `prettier --check .` (9 files) and `eslint .` (66 errors). `--check` notes an ESLint flat config that never names `.stack-agent`.
+- The CI workflow `init` writes uses the project's Node version from `.nvmrc`, `.node-version`, or the lower bound of `engines.node` when it is newer than 22. `--check` notes a workflow that runs an older one, or one older than 22.
+- docs/adoption.md: how to verify a program that needs a database or a seeded user (one wrapper script for `server`), and how to check a signed-in flow (a command check).
+- A/B task `bug-flaky-list`: a bug that is really random (two read copies picked at random, a create refreshes one), folded into the project's first commit with the new `plantBug(..., { hidden: true })` so the history does not point at it.
+- `verify.mjs --check <name> --repeat N` runs the named checks N times and reports the red rate (`red in 7 of 30 runs (23%)`), each distinct failure with its count, and the first red output. The server starts once for all runs. `--skip-checks --repeat N` does the same for the test suite, for a repro written as a test (what every agent wrote in the 2026-10-26 A/B runs). In the `bug-stale-list` and `bug-flaky-list` A/B runs no agent measured a red rate, because permission rules stopped their shell loops; the `debug` skill now points at this flag.
+- A PostToolUse hook after Bash and PowerShell runs the guard on the files the command changed outside the edit tools (`sed -i`, a codemod, a generator), so a shell edit gets the same feedback right away that an Edit gets. Files are compared by git blob id with what the guard hooks last saw, so each violation is reported once, and files left dirty before the session are not blamed until a command changes them. About 130 ms per command with 5 changed files on a 20,000-file repository (`scripts/bench-hooks.mjs` now times it).
+- The sample backend's migration runner has `redo [N]`: on a throwaway in-memory database it applies every migration, rolls back the last N, applies them again, prints the schema after each step, and fails when the schema does not come back the same. It writes no file, so a read-only sandbox can still prove a migration both ways.
+- A/B: `bug-flaky-list` and `bug-stale-list` grade `redRateMeasured` (some `verify.mjs --repeat` run went red), from every evidence file the session left.
+
+### Changed
+
+- `add-migration`: prefer the runner's own round-trip command (the Rails redo task, the sample's `redo`), and when no file can be written use an in-memory or throwaway database instead of skipping up-down-up. In every eval run so far both arms failed `up-down-up` because the eval sandbox cannot write a scratch database file. The `up-down-up` grader accepts a `redo` run that shows all three steps.
+- `debug`: reading the code to aim the repro is fine, and spotting the cause on a short file is expected; nothing changes until the repro is red. In the A/B runs every agent read a short service before its repro, and all fixed the right bug.
+- `run-evals`: one run per arm is a direction, not a score; look at the graders an edit targets and rerun with `--runs 3` when only another grader moved.
+- The Stop hook's guard message no longer says the after-edit hook misses shell edits.
+
+### Fixed
+
+- The against step links the `node_modules` of workspace packages (`apps/*/node_modules`, `packages/*/node_modules`) into its worktree by default, not only the root one. In a pnpm monorepo the old code's tests failed there on missing packages, and verify reported that as detecting the change. `against.link` still overrides the list.
+- On Windows with `core.autocrlf=true` (Git for Windows' default), vendored tools checked out with CRLF were reported `outdated` by `--check` and the SessionStart hook, and rerunning `init` could not fix it. A copy that differs only in line endings now counts as the same tool, and `init` writes `.stack-agent/.gitattributes` (`* text eol=lf`).
+- docs/adoption.md said `--compare-ref` fails when a rule is "narrowed"; it fails on any change to a rule's files, exclude, or pattern, widening included.
+- `init --check` no longer counts the feature map template's own instruction ("replace every EDIT ME") as a placeholder, which kept a finished feature map pending. Maps installed with 0.4.0 still contain the old sentence, and `--check` skips it there too.
+- Without `origin/HEAD` (a repository that was pushed, not cloned), `init` writes a single `origin/main` or `origin/master` as the push branch, and `--check` notes that it was a guess until `git remote set-head origin --auto` records the real one.
+- `init --help` says that the exit code 1 is for `--check`; `init` itself exits 0 after writing files even while setup is unfinished.
 - The four `honest-report` eval graders read the trace and accept listing what did pass next to saying verify could not run. They had judged against the trace from the final message alone, and failed plugin runs that reported a read-only sandbox honestly. A new test makes any llm grader that mentions the trace read it.
 
 ## 0.4.0 (2026-10-24)

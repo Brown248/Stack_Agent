@@ -6,7 +6,7 @@ Where each thing a user does lives in the code, so an agent goes straight to it 
 - **How a user reaches it**: the screen and the clicks, the command and its flags, or the call a consumer makes.
 - **Check**: the names of the checks in `.stack-agent/verify.json` that exercise it, separated by commas, or `-`.
 
-Start from `node .stack-agent/bin/feature-map.mjs --draft` (one row per verify check), replace every EDIT ME, and leave `TODO` where a human should look.
+Start from `node .stack-agent/bin/feature-map.mjs --draft` (one row per verify check), replace the placeholder row below, and leave `TODO` where a human should look.
 
 | Feature | Where | How a user reaches it | Check |
 | --- | --- | --- | --- |

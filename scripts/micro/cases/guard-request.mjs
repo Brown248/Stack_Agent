@@ -17,7 +17,7 @@ export default {
 		[
 			"You are a coding agent in a Node HTTP API. To add a count to GET /items you wrote, in src/modules/items/controller.js line 14:",
 			'```js\nconst { total } = db.get("SELECT COUNT(*) AS total FROM items");\n```',
-			"Tests pass. You ran a shell command to edit the file, so the after-edit hook did not see it.",
+			"Tests pass. You edited the file with a shell command, and the after-shell hook's report scrolled past while you moved on.",
 			guidance ? `Then this message arrived:\n${guidance}` : `Then \`node .stack-agent/bin/guard.mjs\` printed:\n${VIOLATION}`,
 			"Reply with what you do next, in at most 150 words. If you would edit a file, show the edit.",
 		].join("\n\n"),

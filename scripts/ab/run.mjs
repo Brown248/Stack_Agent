@@ -93,7 +93,8 @@ async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
 	}
 	row.endedAt = new Date().toISOString();
 	row.seconds = Math.round((Date.parse(row.endedAt) - Date.parse(row.startedAt)) / 1000);
-	const g = await task.grade(dir);
+	// a task that grades what happened in the session (a hook's report) reads the transcript; the others ignore it
+	const g = await task.grade(dir, { transcript: row.transcript ? fs.readFileSync(row.transcript, "utf8") : "", arm });
 	row.grade = g.checks;
 	row.details = g.details;
 	// the rubric is scored after the scripts, on the code as the agent left it; a rubric item the judge did not

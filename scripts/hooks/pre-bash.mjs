@@ -45,7 +45,10 @@ export function splitSegments(command) {
 
 function tokenize(segment) {
 	const tokens = [];
-	for (const m of segment.matchAll(/"((?:\\.|[^"\\])*)"|'([^']*)'|(\S+)/g)) tokens.push(m[1] !== undefined ? m[1].replace(/\\(.)/g, "$1") : (m[2] ?? m[3]));
+	// a word is any run of plain characters and quoted pieces, as in a shell: key="two words" is one token, key=two words.
+	// An unterminated quote falls back to the rest of the word as written.
+	for (const m of segment.matchAll(/(?:"(?:\\.|[^"\\])*"|'[^']*'|[^\s"'])+|\S+/g))
+		tokens.push(m[0].replace(/"((?:\\.|[^"\\])*)"|'([^']*)'/g, (_, dq, sq) => (dq !== undefined ? dq.replace(/\\(.)/g, "$1") : sq)));
 	return tokens;
 }
 
@@ -74,30 +77,38 @@ function shortFlags(rest) {
 }
 
 function classifyGit({ env, globals, sub, rest }) {
-	if (globals.some((g) => /^-c=?core\.hookspath=/i.test(g)))
+	// git accepts any unambiguous prefix of a long option (--no-verif for --no-verify, --del for --delete), so long
+	// options are matched by prefix down to the shortest form git takes for that subcommand
+	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t.split("=")[0]));
+	if (globals.some((g) => /^(-c|--config-env)=?core\.hookspath=/i.test(g)))
 		return { decision: "deny", reason: "blocked: overriding core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead." };
+	// an alias that skips the hooks, set for one command (-c alias.ci=...) or for good (git config alias.ci ...)
+	if (globals.some((g) => /^-c=?alias\./i.test(g) && ALIAS_SKIPS_HOOKS.test(g)) || (sub === "config" && rest.some((t) => /^alias\./i.test(t)) && rest.some((t) => ALIAS_SKIPS_HOOKS.test(t))))
+		return { decision: "deny", reason: "blocked: this git alias commits or pushes without the repo's git hooks, which skips the guard and checks. Fix what the hook reports instead." };
+	// `git config core.hooksPath x` (or `git config set ...`) turns the hooks off for every later command; reading or
+	// unsetting it does not
+	if (sub === "config" && rest.some((t) => /^core\.hookspath$/i.test(t)) && !rest.some((t) => /^(--get|--get-all|--get-regexp|--unset|--unset-all|--list|-l|get|unset|list)$/.test(t)))
+		return { decision: "deny", reason: "blocked: setting core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead." };
 	if ((sub === "commit" || sub === "push" || sub === "merge") && env.some((e) => HOOK_DISABLING_ENV.test(e)))
 		return { decision: "deny", reason: `blocked: \`${env.join(" ")}\` turns off the repo's git hooks for this \`git ${sub}\`. Fix what the hook reports instead.` };
-	if ((sub === "commit" || sub === "push" || sub === "merge" || sub === "am" || sub === "rebase") && rest.includes("--no-verify"))
+	if ((sub === "commit" || sub === "push" || sub === "merge" || sub === "am" || sub === "rebase") && long("--no-verify", 8))
 		return { decision: "deny", reason: `blocked: \`git ${sub} --no-verify\` skips the repo's guard and checks. Fix what the hook reports instead.` };
 	if (sub === "commit" && shortFlags(rest).includes("n"))
 		return { decision: "deny", reason: "blocked: `git commit -n` is --no-verify and skips the repo's guard and checks. Fix what the hook reports instead." };
 	if (sub === "push") {
-		const forced = shortFlags(rest).includes("f") || rest.some((t) => t === "--force" || t.startsWith("--force-with-lease") || t.startsWith("--force-if-includes") || t === "--mirror" || /^\+/.test(t) || /^[^-][^:]*:\+/.test(t));
+		const forced = shortFlags(rest).includes("f") || rest.some((t) => t === "--force" || t.startsWith("--force-") || /^\+/.test(t) || /^[^-][^:]*:\+/.test(t)) || long("--mirror", 3);
 		if (forced) return { decision: "ask", reason: "force-push rewrites shared history and cannot be undone for others. A human must approve it." };
-		const deletes = shortFlags(rest).includes("d") || rest.includes("--delete") || rest.includes("--prune") || rest.some((t) => /^:[^:]+$/.test(t));
+		const deletes = shortFlags(rest).includes("d") || long("--delete", 4) || long("--prune", 5) || rest.some((t) => /^:[^:]+$/.test(t));
 		if (deletes) return { decision: "ask", reason: "this push deletes a remote branch or tag. A human must approve it." };
 	}
-	if (sub === "reset" && (rest.includes("--hard") || rest.includes("--merge") || rest.includes("--keep")))
+	if (sub === "reset" && (long("--hard", 3) || long("--merge", 4) || long("--keep", 3)))
 		return { decision: "ask", reason: "`git reset --hard` discards uncommitted work permanently. A human must approve it." };
-	if (sub === "clean" && (shortFlags(rest).includes("f") || rest.includes("--force")))
+	if (sub === "clean" && (shortFlags(rest).includes("f") || long("--force", 3)))
 		return { decision: "ask", reason: "`git clean -f` deletes untracked files permanently. A human must approve it." };
 	const onlyUnstages = sub === "restore" && (rest.includes("--staged") || rest.includes("-S")) && !rest.includes("--worktree") && !rest.includes("-W");
 	if ((sub === "checkout" || sub === "restore") && !onlyUnstages && rest.some((t) => t === "." || t === ":/" || t === "*"))
 		return { decision: "ask", reason: "this discards local changes to every file permanently. A human must approve it." };
 	// -d alone refuses to delete a branch whose commits are not merged anywhere; -D or --delete --force deletes them
-	// git accepts any unambiguous prefix of a long option: --del for --delete, --forc for --force
-	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t));
 	if (sub === "branch" && (shortFlags(rest).includes("D") || ((shortFlags(rest).includes("d") || long("--delete", 5)) && (shortFlags(rest).includes("f") || long("--force", 6)))))
 		return { decision: "ask", reason: "`git branch -D` deletes a branch even when its commits are not merged anywhere, which can lose work. A human must approve it." };
 	// these point an existing branch somewhere else; its old commits survive only in the reflog. -M (force rename)
@@ -132,6 +143,15 @@ function hasInlineScript(tokens) {
 		return false;
 	});
 }
+// git reads config from the environment too: GIT_CONFIG_PARAMETERS carries "key=value" pairs and GIT_CONFIG_KEY_<n> names
+// a key, so either one can set core.hooksPath without a -c on the command line
+const GIT_CONFIG_HOOKSPATH = /^(?:export\s+)?GIT_CONFIG_(?:KEY_\d+|PARAMETERS)=.*core\.hookspath/i;
+// an alias that runs a commit or push without its hooks: `git ci` then needs no flag at all
+const ALIAS_SKIPS_HOOKS = /--no-verif|\b(?:commit|push|merge|am|rebase)\b(?:\s+\S+)*?\s+-[a-zA-Z]*n[a-zA-Z]*(?:\s|$)/;
+// the repo's local git hooks are in no diff, so changing one turns the gate off without a trace (.husky is committed,
+// so it is reviewed like any other file and is left alone)
+const GIT_HOOKS = /(?:^|[^\w.-])\.git[\\/]hooks(?:[\\/]|[^\w.-]|$)/;
+const HOOK_CHANGERS = /^(chmod|chown|ln|install|touch|rename|ren|move|mv|cp|rm|del|erase|unlink|rmdir|rd|ri|shred|truncate|sed|perl|ruby|tee|dd|find|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|Clear-Content|Rename-Item|sc|ac)(\.exe)?$/i;
 const DELETERS = /^(rm|rmdir|rd|del|erase|Remove-Item|ri)(\.exe)?$/i;
 const DELETE_CALL = /\b(rmSync|rmdirSync|rmdir|rm|rmtree|removedirs|unlinkSync|unlink|remove|Remove-Item)\s*\(/;
 
@@ -154,6 +174,15 @@ export function classify(command, depth = 0, extra = () => null, { inProject = t
 		});
 		const redirectHit = redirected.find((t) => protectedAt(t));
 		if (redirectHit) return askForProtected(protectedAt(redirectHit));
+		if (inProject) {
+			if (tokens.some((t) => GIT_CONFIG_HOOKSPATH.test(t)))
+				return { decision: "deny", reason: "blocked: setting core.hooksPath through GIT_CONFIG_* turns off the repo's git hooks and guard. Fix what the hook reports instead." };
+			if (tokens[0] === "export" && tokens.slice(1).some((t) => HOOK_DISABLING_ENV.test(t)))
+				return { decision: "deny", reason: `blocked: \`${tokens.join(" ")}\` turns off the repo's git hooks for every later command. Fix what the hook reports instead.` };
+			const hooksTouched = redirected.some((t) => GIT_HOOKS.test(t)) || (tokens.some((t) => GIT_HOOKS.test(t)) && tokens.some((t) => HOOK_CHANGERS.test(t))) || (hasInlineScript(tokens) && GIT_HOOKS.test(segment));
+			if (hooksTouched)
+				return { decision: "ask", reason: "this changes the repo's local git hooks (.git/hooks). They are the gate that runs the guard before a commit, and a change there is in no diff. A human must approve it." };
+		}
 		const target = tokens.find((t) => protectedAt(t));
 		// an interpreter given its program as an argument: node -e / -pe / --eval=..., python -c / -Ic, py -3 -c, deno eval
 		const inlineScript = hasInlineScript(tokens);

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { classify } from "../scripts/hooks/pre-bash.mjs";
-import { copySample, git, repoRoot, runNode, write } from "./helpers.mjs";
+import { copySample, git, repoRoot, runNode, tempDir, write } from "./helpers.mjs";
 
 const hook = (name) => path.join(repoRoot, "scripts", "hooks", name);
 const hookInput = (obj) => JSON.stringify(obj);
@@ -27,6 +27,56 @@ test("pre-bash denies guard bypasses, including global git options and hook-disa
 	]) {
 		assert.equal(classify(cmd)?.decision, "deny", cmd);
 	}
+});
+
+test("pre-bash denies the forms git also accepts: abbreviated options, --config-env, git config, and hook env on push and merge", () => {
+	for (const cmd of [
+		// git takes any unambiguous prefix of a long option
+		"git commit --no-verif -m x",
+		"git commit --no-veri -m x",
+		"git push --no-verif",
+		"git merge --no-verify feat",
+		"git am --no-verify x.patch",
+		"git rebase --no-verify main",
+		// --config-env reads the value from an environment variable
+		"X=/dev/null git --config-env=core.hooksPath=X commit -m y",
+		"git --config-env core.hooksPath=X commit -m y",
+		"git -c core.hookspath= commit -m x",
+		// a persistent setting turns the hooks off for every later command
+		"git config core.hooksPath /dev/null",
+		"git config --local core.hooksPath .nohooks",
+		"git config set core.hooksPath x",
+		"SKIP=guard git push",
+		"LEFTHOOK=0 git merge feat",
+	]) {
+		assert.equal(classify(cmd)?.decision, "deny", cmd);
+	}
+	for (const cmd of ["git config --get core.hooksPath", "git config --unset core.hooksPath", "git config core.autocrlf false", "git config get core.hooksPath", "git commit --verbose -m x", "git push --verbose"])
+		assert.equal(classify(cmd), null, cmd);
+});
+
+test("pre-bash asks for every other destructive form git accepts", () => {
+	for (const cmd of [
+		"git push --force-if-includes",
+		"git push --force-w",
+		"git push origin main:+main",
+		"git push --m",
+		"git push -d origin old",
+		"git push --de origin old",
+		"git push --prune origin",
+		"git push --pru origin",
+		"git reset --merge",
+		"git reset --keep HEAD~1",
+		"git reset --k HEAD~1",
+		"git reset --ha HEAD~1",
+		"git clean --f -d",
+		"git checkout :/",
+		"git restore *",
+		"git stash drop",
+	]) {
+		assert.equal(classify(cmd)?.decision, "ask", cmd);
+	}
+	for (const cmd of ["git reset --soft HEAD~1", "git reset HEAD file.js", "git push --progress", "git push origin main", "git clean -n", "git restore --staged ."]) assert.equal(classify(cmd), null, cmd);
 });
 
 test("pre-bash asks before destructive, baseline-raising, or guard-loosening commands", () => {
@@ -292,4 +342,242 @@ test("the after-edit guard also runs for NotebookEdit, which names its file note
 	const r = runNode(hook("post-edit-guard.mjs"), [], { input: hookInput({ tool_name: "NotebookEdit", tool_input: { notebook_path: path.join(dir, "notes/scratch.ipynb") } }) });
 	assert.equal(r.code, 2, r.stderr);
 	assert.match(r.stderr, /notes\/scratch\.ipynb:1 \[no-private-keys\]/);
+});
+
+test("post-bash guard reports a violation a shell command wrote, once, and leaves earlier dirt alone", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	// the human's own uncommitted violation, there before the session: recorded as the session's starting dirt
+	write(dir, "src/modules/orders/controller.js", 'export const q = "SELECT * FROM orders";\n');
+	assert.equal(runNode(hook("session-start.mjs"), [], { input: hookInput({ hook_event_name: "SessionStart", cwd: dir, session_id: "s1" }) }).code, 0);
+	const input = hookInput({ tool_name: "Bash", cwd: dir, session_id: "s1", tool_input: { command: "sed -i ..." } });
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input }).code, 0, "files dirty before the session are not the command's doing");
+
+	write(dir, "src/modules/items/controller.js", 'export const q = "SELECT * FROM items";\n');
+	const r = runNode(hook("post-bash-guard.mjs"), [], { input });
+	assert.equal(r.code, 2, r.stderr);
+	assert.match(r.stderr, /that command changed files that now break rules/);
+	assert.match(r.stderr, /src\/modules\/items\/controller\.js:1 \[no-sql-in-controller\][\s\S]*fix: move the query into/);
+	assert.doesNotMatch(r.stderr, /orders/);
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input }).code, 0, "an unchanged file is not reported again");
+
+	write(dir, "src/modules/orders/controller.js", 'export const q = "SELECT * FROM orders"; // touched\n');
+	const touched = runNode(hook("post-bash-guard.mjs"), [], { input });
+	assert.equal(touched.code, 2, "a pre-existing file the command changed is checked");
+	assert.match(touched.stderr, /orders\/controller\.js:1 \[no-sql-in-controller\]/);
+	assert.doesNotMatch(touched.stderr, /items\/controller/, "reported once already");
+});
+
+test("post-bash guard skips files the after-edit hook already checked, and projects without a guard", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	write(dir, "src/modules/items/controller.js", 'export const q = "SELECT * FROM items";\n');
+	const edit = runNode(hook("post-edit-guard.mjs"), [], { input: hookInput({ tool_name: "Edit", cwd: dir, session_id: "s2", tool_input: { file_path: "src/modules/items/controller.js" } }) });
+	assert.equal(edit.code, 2);
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: dir, session_id: "s2", tool_input: { command: "npm test" } }) }).code, 0, "reported by the edit hook already");
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: repoRoot, session_id: "s2", tool_input: { command: "ls" } }) }).code, 0);
+});
+
+test("hooks.json runs the post-bash guard after Bash and PowerShell", () => {
+	const post = JSON.parse(fs.readFileSync(path.join(repoRoot, "hooks/hooks.json"), "utf8")).hooks.PostToolUse;
+	const entry = post.find((e) => e.hooks.some((h) => h.command.includes("post-bash-guard.mjs")));
+	assert.deepEqual(entry?.matcher.split("|").sort(), ["Bash", "PowerShell"]);
+});
+
+test("the after-edit and after-shell guards leave out what the guard config ignores, as CI does", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	write(dir, "test/fixtures/key.pem", "-----BEGIN PRIVATE KEY-----\n");
+	assert.equal(runNode(hook("post-edit-guard.mjs"), [], { input: hookInput({ tool_name: "Write", cwd: dir, session_id: "ig", tool_input: { file_path: "test/fixtures/key.pem" } }) }).code, 0);
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: dir, session_id: "ig2", tool_input: { command: "cp a b" } }) }).code, 0);
+});
+
+test("files left dirty before the session are not blamed on a command or on the session, docs included", () => {
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	// a conflict marker in a doc the human left half-merged; the Stop hook's fingerprint leaves *.md out, the guard does not
+	write(dir, "docs/notes.md", "intro\n<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> other\n");
+	assert.equal(runNode(hook("session-start.mjs"), [], { input: hookInput({ hook_event_name: "SessionStart", cwd: dir, session_id: "md" }) }).code, 0);
+	const bash = hookInput({ tool_name: "Bash", cwd: dir, session_id: "md", tool_input: { command: "ls" } });
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: bash }).code, 0, "ls changed nothing");
+	write(dir, "src/modules/items/service.js", fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8") + "\n");
+	const stop = runNode(hook("stop-verify.mjs"), [], { input: hookInput({ hook_event_name: "Stop", cwd: dir, session_id: "md" }) });
+	assert.doesNotMatch(stop.stderr, /notes\.md/, "the Stop hook's guard leaves the human's file out too");
+});
+
+test("blobIds hashes every file it can, even when one in the batch cannot be read", async () => {
+	const { blobIds } = await import("../scripts/hooks/session-record.mjs");
+	const dir = copySample();
+	git(dir, "init", "-q");
+	const ids = blobIds(dir, ["src/app.js", "gone/missing.js", "src/server.js"]);
+	assert.deepEqual([...ids.keys()].sort(), ["src/app.js", "src/server.js"]);
+	assert.match(ids.get("src/app.js"), /^[0-9a-f]{40}$/);
+	if (process.platform !== "win32") {
+		write(dir, '"quoted.js', "x\n");
+		assert.ok(blobIds(dir, ['"quoted.js', "src/app.js"]).has('"quoted.js'), "a name git would unquote is hashed on its own");
+	}
+});
+
+test("after-edit hooks running at the same time keep every entry, and the after-shell hook reports none of them again", async () => {
+	const { spawn } = await import("node:child_process");
+	const dir = copySample();
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	const files = Array.from({ length: 8 }, (_, i) => `src/modules/m${i}/controller.js`);
+	for (const f of files) write(dir, f, 'export const q = "SELECT * FROM t";\n');
+	const run = (f) =>
+		new Promise((resolve) => {
+			const child = spawn(process.execPath, [hook("post-edit-guard.mjs")], { stdio: ["pipe", "ignore", "ignore"] });
+			child.on("close", resolve);
+			child.stdin.end(hookInput({ tool_name: "Write", cwd: dir, session_id: "par", tool_input: { file_path: f } }));
+		});
+	await Promise.all(files.map(run));
+	const { readSeen } = await import("../scripts/hooks/session-record.mjs");
+	assert.deepEqual(Object.keys(readSeen(dir, "par")).filter((f) => files.includes(f)).sort(), [...files].sort());
+	assert.equal(runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: dir, session_id: "par", tool_input: { command: "npm test" } }) }).code, 0);
+});
+
+test("the after-shell guard reaches a monorepo project when the command runs at the top of the repository", () => {
+	const top = tempDir("stack-agent-mono-");
+	fs.cpSync(copySample(), path.join(top, "apps", "api"), { recursive: true });
+	write(top, "README.md", "monorepo\n");
+	git(top, "init", "-q");
+	git(top, "add", "-A");
+	git(top, "commit", "-qm", "base");
+	write(top, "apps/api/src/modules/items/controller.js", 'export const q = "SELECT * FROM items";\n');
+	write(top, "tools/loose.js", "-----BEGIN PRIVATE KEY-----\n");
+	const r = runNode(hook("post-bash-guard.mjs"), [], { input: hookInput({ tool_name: "Bash", cwd: top, session_id: "mono", tool_input: { command: "sed -i ..." } }) });
+	assert.equal(r.code, 2, r.stderr);
+	assert.match(r.stderr, /apps\/api\/src\/modules\/items\/controller\.js:1 \[no-sql-in-controller\]/);
+	assert.doesNotMatch(r.stderr, /loose\.js/, "a file outside every project has no guard config");
+});
+
+test("pre-edit-protect lets setup fill in a guard config or workflow that init wrote and git has never seen, and asks otherwise", () => {
+	const script = hook("pre-edit-protect.mjs");
+	const decision = (dir, rel, tool = "Edit") => {
+		const out = runNode(script, [], { input: hookInput({ tool_name: tool, cwd: dir, tool_input: { file_path: rel } }) }).stdout;
+		return out ? JSON.parse(out).hookSpecificOutput.permissionDecision : "allow";
+	};
+	// a library with no Stack Agent yet, committed; init writes the templates
+	const dir = tempDir("stack-agent-setup-");
+	write(dir, "package.json", JSON.stringify({ name: "lib", type: "module", scripts: { test: "node --test" } }));
+	write(dir, "src/index.js", "export const x = 1;\n");
+	git(dir, "init", "-q");
+	git(dir, "add", "-A");
+	git(dir, "commit", "-qm", "base");
+	assert.equal(runNode(path.join(repoRoot, "scripts", "init.mjs"), [dir, "--preset", "library"]).code, 0);
+	const config = ".stack-agent/guard.config.json";
+	const workflow = ".github/workflows/stack-agent.yml";
+	for (const rel of [config, workflow]) assert.match(fs.readFileSync(path.join(dir, rel), "utf8"), /EDIT ME/, `${rel} is a template`);
+
+	assert.equal(decision(dir, config), "allow", "untracked, with EDIT ME: setup fills it in");
+	assert.equal(decision(dir, workflow, "Write"), "allow");
+	assert.equal(decision(dir, path.join(dir, config)), "allow", "an absolute path works the same");
+	assert.equal(decision(dir, ".stack-agent/guard-baseline.json", "Write"), "ask", "the baseline is never a template");
+	assert.equal(decision(dir, ".stack-agent/bin/guard.mjs"), "ask", "nor are the tools");
+
+	// placeholders gone: the config now says something, so editing it asks
+	const filled = fs.readFileSync(path.join(dir, config), "utf8").replaceAll("EDIT ME", "done");
+	fs.writeFileSync(path.join(dir, config), filled);
+	assert.equal(decision(dir, config), "ask");
+	fs.writeFileSync(path.join(dir, config), filled.replace("done", "EDIT ME"));
+
+	// staged, committed, or committed and then unstaged: git has seen it, so it asks
+	git(dir, "add", config);
+	assert.equal(decision(dir, config), "ask", "staged");
+	git(dir, "commit", "-qm", "setup");
+	assert.equal(decision(dir, config), "ask", "committed");
+	git(dir, "rm", "-q", "--cached", config);
+	assert.equal(decision(dir, config), "ask", "unstaged but still in HEAD");
+
+	// outside git nothing tells a fresh template from a config in use
+	const loose = tempDir("stack-agent-setup-");
+	write(loose, config, '{ "rules": [], "note": "EDIT ME" }\n');
+	assert.equal(decision(loose, config), "ask");
+	// a guard config Write would create from nothing is not a template init wrote
+	assert.equal(decision(tempDir("stack-agent-setup-"), config, "Write"), "ask");
+});
+
+test("a shell write to the guard config or workflow still asks, and points setup at Edit or Write", () => {
+	const hint = /use the Edit or Write tool instead/;
+	for (const cmd of [`node -e "require('fs').writeFileSync('.stack-agent/guard.config.json','{}')"`, "sed -i s/x/y/ .github/workflows/stack-agent.yml"]) {
+		const r = classify(cmd);
+		assert.equal(r?.decision, "ask", cmd);
+		assert.match(r.reason, hint, cmd);
+	}
+	const baseline = classify("sed -i s/1/5/ .stack-agent/guard-baseline.json");
+	assert.equal(baseline?.decision, "ask");
+	assert.doesNotMatch(baseline.reason, hint, "the baseline is never a template");
+});
+
+test("pre-bash denies the other ways git is told to skip its hooks: GIT_CONFIG_* env, exported hook-disabling env, and aliases", () => {
+	for (const cmd of [
+		"GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x",
+		'GIT_CONFIG_PARAMETERS="core.hookspath=/dev/null" git commit -m x',
+		"export GIT_CONFIG_PARAMETERS=core.hookspath=/dev/null; git commit -m x",
+		"export HUSKY=0; git commit -m x",
+		'git -c alias.ci="commit --no-verify" ci -m x',
+		'git -c alias.c="commit -n" c',
+		'git config alias.ci "commit --no-verify"',
+		'git config alias.pushit "push --no-verify"',
+	])
+		assert.equal(classify(cmd)?.decision, "deny", cmd);
+});
+
+test("pre-bash asks before the repo's local git hooks are changed, and leaves reading them and .husky alone", () => {
+	for (const cmd of ["echo exit 0 > .git/hooks/pre-commit", "chmod -x .git/hooks/pre-commit", "rm .git/hooks/pre-commit", "mv .git/hooks .git/h", `node -e "require('fs').writeFileSync('.git/hooks/pre-commit','exit 0')"`]) {
+		const r = classify(cmd);
+		assert.equal(r?.decision, "ask", cmd);
+		assert.match(r.reason, /local git hooks/);
+	}
+	// outside a Stack Agent project the repo's gates are not Stack Agent's business
+	assert.equal(classify("rm .git/hooks/pre-commit", 0, () => null, { inProject: false }), null);
+});
+
+test("pre-bash does not ask about ordinary commands, also with quoted values glued to a name", () => {
+	for (const cmd of [
+		"cat .git/hooks/pre-commit",
+		"ls .git/hooks",
+		"git status",
+		"git log -n 5 --oneline",
+		'git commit -m "fix: the --no-verify docs" ',
+		"git commit -m 'msg with -n inside'",
+		'git config alias.st status',
+		'git config alias.lg "log -n 5"',
+		'git -c user.name="Ada Lovelace" commit -m x',
+		'git -c color.ui="always" diff',
+		"HUSKY=0 npm test",
+		"export PATH=$PATH:/x",
+		"export NODE_ENV=production",
+		"sed -i s/a/b/ .husky/pre-commit",
+		"ls .github/hooks-docs",
+		'echo "a b" > out.txt',
+		"npm run build && git add -A",
+		'FOO="a b" node script.js',
+	])
+		assert.equal(classify(cmd), null, cmd);
+});
+
+test("pre-edit-protect asks before Edit/Write changes a local git hook, in a Stack Agent project only", () => {
+	const script = hook("pre-edit-protect.mjs");
+	const decision = (cwd, file) => {
+		const out = runNode(script, [], { input: hookInput({ tool_name: "Write", cwd, tool_input: { file_path: file } }) }).stdout;
+		return out ? JSON.parse(out).hookSpecificOutput.permissionDecision : "allow";
+	};
+	const dir = copySample();
+	git(dir, "init", "-q");
+	assert.equal(decision(dir, ".git/hooks/pre-commit"), "ask");
+	assert.equal(decision(dir, path.join(dir, ".git", "hooks", "commit-msg")), "ask");
+	assert.equal(decision(dir, "src/app.js"), "allow");
+	assert.equal(decision(dir, ".husky/pre-commit"), "allow", ".husky is committed and reviewed");
+	assert.equal(decision(tempDir("stack-agent-nohooks-"), ".git/hooks/pre-commit"), "allow", "not a Stack Agent project");
 });

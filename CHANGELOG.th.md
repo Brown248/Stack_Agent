@@ -4,14 +4,82 @@
 
 [English](CHANGELOG.md)
 
-## ยังไม่ออกรุ่น
+## 0.5.1 (2026-10-27)
 
-### เพิ่ม
+ส่วนใหญ่คือการปิดช่องเลี่ยง guard จากการตรวจ 0.5.0 สองรอบ (agent อ่านโค้ดแยกกัน, ลองเลี่ยงกับ git จริง และรันขั้นตอนของ CI บน Linux) `verify.mjs`, `guard.mjs` และ `lib/files.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/`
 
-- A/B task `bug-flaky-list`: บั๊กที่สุ่มเกิดจริง (สำเนาสำหรับอ่านสองชุดที่สุ่มเลือก การสร้าง item รีเฟรชแค่ชุดเดียว) รวมเข้า commit แรกของโปรเจคด้วย `plantBug(..., { hidden: true })` ตัวใหม่ ประวัติ git จึงไม่ชี้ไปที่บั๊ก
+### ผลการวัด
+
+- `feature-map-lookup` (ใหม่) แขนละ 2 รอบ: 1.00 เมื่อมี plugin เทียบกับเฉลี่ย 0.25 เมื่อไม่มี และมีแค่แขน plugin ที่อ่าน feature map ส่วน `verify-before-done` หลังแก้สกิล: 1.00 ทั้งสองแขน
+- A/B `init-library` (ใหม่) แขน plugin: ก่อนการเปลี่ยนเรื่องการติดตั้งด้านล่าง `init --check` ผ่าน 0 ใน 2 รอบ เพราะ session แบบ headless อนุมัติการแก้ guard config และ workflow ที่ป้องกันไว้ไม่ได้ หลังเปลี่ยนและเพิ่มคำแนะนำให้ใช้ Edit หรือ Write ผ่าน 3 ใน 3 รอบ แต่ละรอบมีกฎ guard ของตัวเองและเช็กจริง รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026 (รอบหลัง)
+- A/B `shell-sort` (ใหม่) แขนละ 3 รอบ: guard หลังคำสั่ง shell รายงานการผิดกฎของ one-liner ในทั้ง 3 รอบของแขน plugin ซึ่งเป็นครั้งแรกที่เห็นมันจับได้ใน session จริง และ agent ทุกตัวย้ายการเรียงไปไว้ใน repository แขนที่ไม่มี plugin ก็ทำได้เช่นกัน โดยรัน `npm run guard` เอง task นี้จึงแสดงว่า hook ทำงานได้ ไม่ได้แสดงว่าจำเป็นเมื่อ guard เป็นสคริปต์ที่มองเห็น
+- `up-down-up` ของ `add-migration-column` ตอนนี้เป็น regex ที่อ่าน trace (`target: trace`) เมื่อรันคู่กับ llm grader ที่ถูกแทน ทั้งสองผ่าน 2 ใน 2
+- `npm test`: 514 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
 
 ### แก้ไข
 
+- ช่องเลี่ยง guard เพิ่มเติม ที่หาเจอโดยลองกับ git จริง (แต่ละแบบ commit ผ่าน pre-commit hook ที่ fail ได้ ขณะที่ hook ของ shell ปล่อยผ่าน): `GIT_CONFIG_PARAMETERS` และ `GIT_CONFIG_KEY_<n>` ที่ตั้ง `core.hooksPath`, alias ที่รัน `commit --no-verify` (ตั้งด้วย `-c` หรือ `git config`), `export HUSKY=0` และการลบหรือแทนที่ไฟล์ใน `.git/hooks` ทั้งจาก shell และ Edit/Write สามแบบแรกปฏิเสธ ส่วนการแก้ `.git/hooks` จะถาม เฉพาะในโปรเจกต์ที่ติดตั้ง Stack Agent ส่วน `.husky/` ถูก commit และรีวิวอยู่แล้วจึงไม่แตะ นอกจากนี้ tokenizer ของคำสั่งเคยแยก `key="two words"` เป็นสอง token ซึ่ง shell จริงไม่ทำ ทำให้รูปแบบ alias หลุด ตอนนี้ถือว่า word คือชุดของตัวอักษรทั่วไปกับส่วนที่อยู่ในเครื่องหมายคำพูดต่อกัน
+- ช่องเลี่ยง guard: hook ของ shell ปล่อย `git commit --no-verif` (git รับรูปย่อของ option ยาวที่ไม่กำกวม), `git --config-env=core.hooksPath=VAR commit` และ `git config core.hooksPath x` ผ่านไป ตอนนี้ปฏิเสธทั้งสามแบบ และด่าน git อื่นก็จับรูปย่อด้วย (`push --de`, `push --m`, `reset --k`, `clean --f`)
+- hook หลังแก้ไฟล์และหลังคำสั่ง shell, guard ของ Stop hook และ `guard.mjs --files` ไม่ใช้รายการ `ignore` ของ config และโฟลเดอร์ที่ข้ามเป็นค่าเริ่มต้น ซึ่งการสแกนทั้งโปรเจกต์ของ CI ใช้ ไฟล์ fixture หรือไฟล์ที่ generate จึงถูกโทษในเครื่องแต่ผ่านใน CI
+- guard หลังคำสั่ง shell (ใหม่ใน 0.5.0): โทษคำสั่งแรกสำหรับไฟล์ `.md` หรือ `docs/` ที่แก้ค้างไว้ก่อนเริ่ม session เพราะบันทึกของ session ตัดไฟล์พวกนี้ออก ไฟล์ที่เปลี่ยนแต่อ่านไม่ได้ไฟล์เดียวทำให้ไม่ตรวจอะไรเลยไปตลอด session hook แก้ไฟล์ที่รันพร้อมกันทำข้อมูลของกันและกันหาย การผิดกฎจึงอาจถูกรายงานซ้ำ และคำสั่งที่รันจากระดับบนสุดของ monorepo ไปไม่ถึงโปรเจกต์ใดเลย guard ของ Stop hook ก็มองไม่เห็นไฟล์ `.md` แบบเดียวกัน
+- verify: คำสั่งที่จบไปแล้วแต่ process ที่มันเปิดไว้ยังถือ output อยู่ (`start /b`, `&`) ถูกรอจนกว่า process นั้นจะจบ แล้วรายงานว่า timed out ตอนนี้ตัดสินจาก exit code เมื่อ output เงียบไป 1.5 วินาที (รอนานสุด 10 วินาที) และหยุด process นั้น (บน Windows หาจาก parent id เพราะ Windows ไม่มี process group) output ระหว่าง 8 ถึง 12 MB ผ่านเหมือนตรวจครบทั้งหมด ตอนนี้ขีดจำกัด 8 MB ใช้ได้จริง คำสั่งที่ถูก signal ฆ่าจะรายงานเป็น `killed by <signal>` และนับเป็น red จริงใน `--repeat` ไม่ใช่รอบที่สรุปไม่ได้ verify ที่ถูกหยุดด้วย Ctrl+C หรือ SIGTERM จะหยุดเซิร์ฟเวอร์และคำสั่งที่มันเปิดไว้ และปฏิเสธ `--skip-tests --skip-checks --repeat` แทนที่จะรันเทสต์ไปทั้งที่สั่งข้าม
+- บน Windows โปรเจกต์ที่เข้าถึงผ่านชื่อย่อแบบ 8.3 (runner ของ GitHub เก็บโฟลเดอร์ temp ไว้ที่ `C:UsersRUNNER~1`) ถูกมองเป็นคนละที่กับที่ git รายงานด้วยชื่อเต็ม ไฟล์ shared rules ที่อยู่ใน repository จึงถูกปฏิเสธว่าอยู่นอก repository, `init` แสดง path ของ workflow ที่ไต่ออกนอกโปรเจกต์ และ guard หลังคำสั่ง shell แสดงชื่อไฟล์โดยไม่มีโฟลเดอร์ของ monorepo ตอนนี้ guard, init, guard หลังคำสั่ง shell และตัวตรวจ path ที่ป้องกันไว้เทียบด้วย path จริง เจอจากการรัน CI บน GitHub ครั้งแรก ซึ่งเทสต์บน Windows fail 11 ตัว ในเครื่องไม่เกิดเพราะชื่อโฟลเดอร์ผู้ใช้สั้นเกินกว่าจะมีชื่อย่อ
+- `npm run guard` และ `npm run verify` ของ sample backend ชี้ไปที่ `../../scripts/` ซึ่งมีแค่ใน repo นี้ จึงล้มในทุกสำเนาที่ติดตั้ง (รวมโปรเจกต์ของ A/B และ eval) ตอนนี้รันเครื่องมือที่ vendor ไว้ ผล A/B ก่อนหน้าที่ agent ใช้ `npm run guard` อาจทำให้แขนที่ไม่มี plugin ดูแย่กว่าความจริง
+- เทสต์ A/B `cli-minlen` fail บนเครื่องที่มีแค่ `python3` ตอนนี้ข้ามไปเหมือนเทสต์ Python ตัวอื่น
+- เอกสารที่คลาดจากโค้ด: README (EN/TH) บอกว่า guard รันหลังแก้ไฟล์เท่านั้น และ CI ไม่รัน verify สกิล init บอกชื่อไฟล์ที่คัดลอกแค่สามในหกไฟล์ สกิล verify ขาด `expectHeaders`, `followRedirects` และ `timeoutSec` และ changelog ภาษาไทยข้อ `--repeat` ขาดเรื่อง output ของรอบแรกที่ red
+
+### เพิ่ม
+
+- บันทึกในเอกสารสิ่งที่โค้ดรองรับอยู่แล้ว: `--config` และ `--json` ของ verify, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, `timeoutSec` ของ HTTP check, `type` และค่าเริ่มต้นของ `evidenceDir`, ส่วนของ guard คือ `baseline`, `--files`, `--strict`, `--json`, `--config` และ `pythonRoots`, ของ api-map คือ `--config`, `--json` และ `verifyConfig`, ของ feature-map คือ `--map` และ `--json`, ของ review-findings คือ `--stage` และ `rows --date` และ `--disallowed-tools` ของ A/B harness
+- eval case `feature-map-lookup` (บนตัวอย่าง library) และ A/B task `init-library` (ติดตั้ง Stack Agent จากศูนย์ผ่านสกิล) `evals/scaffold.mjs` รับชื่อตัวอย่างที่จะคัดลอก และ `run-evals` บอกว่าแต่ละสกิลวัดผลอย่างไร และทำไม `mine-corrections` จึงไม่ได้วัด
+- guard หลังคำสั่ง shell ต่อท้ายสิ่งที่รายงานลงใน `.stack-agent/evidence/sessions/<id>.reports.log` เพราะ transcript ของ session ไม่มี output ของ hook ไฟล์นี้จึงเป็นหลักฐานว่ามีการรายงาน
+- A/B task `shell-sort` (one-liner `sed -i` ที่ผิดกฎ guard สองข้อ) และ `grade` ของ task ได้รับ transcript กับชื่อแขนด้วย
+- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 514 เทสต์)
+
+### เปลี่ยน
+
+- การติดตั้งทำจนจบได้โดยไม่ต้องมีคนเฝ้า: Edit/Write บน `guard.config.json` หรือ workflow ของ Stack Agent ที่ git ยังไม่เคยเห็นและยังมี placeholder `EDIT ME` ไม่ต้องถามแล้ว ใน A/B `init-library` agent ทั้งสองถูกหยุดตรงนี้ เพราะ session แบบ headless อนุมัติไม่ได้ เมื่อ placeholder หมดหรือไฟล์ถูก stage หรือ commit แล้ว การแก้จะถามอีกครั้ง ส่วนการเขียนผ่าน shell ยังถามเหมือนเดิม และข้อความปฏิเสธบอกให้ใช้ Edit หรือ Write กับ template ซึ่งสกิล init ก็บอกแบบเดียวกัน
+- micro-test `guard-request` ไม่บอกแล้วว่า hook หลังแก้ไฟล์มองไม่เห็นการแก้ผ่าน shell สถานการณ์ตอนนี้ให้ agent ทำงานต่อโดยไม่ได้แก้ตามที่ hook หลังคำสั่ง shell รายงาน คะแนนก่อนหน้านี้จึงเทียบกันตรงๆ ไม่ได้
+
+## 0.5.0 (2026-10-26)
+
+จากการติดตั้งครั้งแรกกับโปรเจคจริง (monorepo pnpm + Next.js บน PostgreSQL บน Windows) และงานค้างจากผลการวัดของ 0.4.0 `verify.mjs` เปลี่ยน จึงต้องรัน `init` ใหม่เพื่ออัปเดต `.stack-agent/bin/` (`--check` จะแสดงว่า outdated จนกว่าจะรัน)
+
+### ผลการวัด
+
+- `add-migration-column` แขนละ 3 รอบ: `up-down-up` ผ่านเป็นครั้งแรก 2 ใน 3 เมื่อมี plugin และ 0 ใน 3 เมื่อไม่มี (ทุกรอบก่อนหน้านี้ไม่ผ่านทั้งสองแขน) เฉลี่ย 0.88 ต่อ 0.79 ส่วน `debug-blank-name` แขนละ 2 รอบ: 1.00 ต่อ 0.75 และ `repro-before-fix` 2 ใน 2 ต่อ 0 ใน 2
+- A/B แขนละ 3 รอบ: ทาง import ใหม่ถูกใช้กับ agent จริงเป็นครั้งแรก (`job-new-export`: เจอกรณีนี้ใน 2 รอบของแขน plugin และทั้งสองรอบจบด้วย verify check ที่จับการเปลี่ยนแปลงได้) ใน `bug-flaky-list` และ `bug-stale-list` agent ทุกตัวเขียน repro เป็นเทสต์ที่วนจน red ทุกครั้ง จึงไม่มีการวัดอัตรา red และก็ไม่จำเป็นต้องวัด guard หลังคำสั่ง shell ไม่รายงานผิดเลยใน 9 session ของแขน plugin
+- รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026
+
+### เพิ่ม
+
+- template ของ workflow CI รันด้วย token แบบอ่านอย่างเดียว (`permissions: contents: read`)
+- `no-private-keys` ในทุก preset จับ `ENCRYPTED PRIVATE KEY` และ `PGP PRIVATE KEY BLOCK` ได้ด้วย โปรเจคที่ติดตั้งแล้วมีสำเนากฎของตัวเอง ให้คัดลอก pattern ใหม่จาก preset ไปใส่เอง
+- HTTP check รับ `followRedirects` (ค่าเริ่มต้น `true`) และ `expectHeaders` จึงตรวจได้ว่าหน้าที่ต้อง login ส่งผู้ใช้ไป `/login` จริง แทนที่จะเห็นแค่หน้า login ที่ไปถึง
+- `init` เพิ่ม `.stack-agent/` ลงใน `.prettierignore` เมื่อโปรเจคใช้ Prettier (รวมถึงกรณีที่มีแค่ใน dependency) และลงใน `.eslintignore` ถ้ามีอยู่แล้ว ทั้งในโฟลเดอร์โปรเจคและที่ระดับบนสุดของ repository เดิมเครื่องมือที่ vendor มาทำให้ `prettier --check .` (9 ไฟล์) และ `eslint .` (66 error) ของโปรเจค fail `--check` เขียนโน้ตเมื่อ ESLint flat config ไม่มีคำว่า `.stack-agent`
+- workflow CI ที่ `init` เขียนใช้ Node ตามโปรเจคจาก `.nvmrc`, `.node-version` หรือขอบล่างของ `engines.node` เมื่อใหม่กว่า 22 และ `--check` เขียนโน้ตเมื่อ workflow ใช้เวอร์ชันเก่ากว่าที่โปรเจคต้องการ หรือเก่ากว่า 22
+- docs/adoption.md: วิธี verify โปรแกรมที่ต้องมีฐานข้อมูลหรือผู้ใช้ทดสอบ (สคริปต์ตัวเดียวสำหรับ `server`) และวิธีตรวจขั้นตอนที่ต้อง login (ใช้ command check)
+- A/B task `bug-flaky-list`: บั๊กที่สุ่มเกิดจริง (สำเนาสำหรับอ่านสองชุดที่สุ่มเลือก การสร้าง item รีเฟรชแค่ชุดเดียว) รวมเข้า commit แรกของโปรเจคด้วย `plantBug(..., { hidden: true })` ตัวใหม่ ประวัติ git จึงไม่ชี้ไปที่บั๊ก
+- `verify.mjs --check <name> --repeat N` รันเช็กที่ระบุ N รอบและรายงานอัตรา red (`red in 7 of 30 runs (23%)`) พร้อมความล้มเหลวแต่ละแบบและจำนวนครั้ง และ output ของรอบแรกที่ red เซิร์ฟเวอร์เริ่มครั้งเดียวตลอดทุกรอบ `--skip-checks --repeat N` ทำแบบเดียวกันกับชุดเทสต์ สำหรับ repro ที่เขียนเป็นเทสต์ (ซึ่ง agent ทุกตัวเขียนแบบนี้ใน A/B วันที่ 26 ต.ค. 2026) ใน A/B `bug-stale-list` และ `bug-flaky-list` ไม่มี agent คนไหนวัดอัตรา red ได้ เพราะ loop ใน shell ถูก permission rules หยุดไว้ สกิล `debug` จึงชี้มาที่ flag นี้แทน
+- hook PostToolUse หลัง Bash และ PowerShell รัน guard กับไฟล์ที่คำสั่งเปลี่ยนนอกเครื่องมือแก้ไฟล์ (`sed -i`, codemod, ตัว generate โค้ด) การแก้ผ่าน shell จึงได้ feedback ทันทีแบบเดียวกับ Edit ไฟล์ถูกเทียบด้วย git blob id กับที่ hook guard เห็นครั้งล่าสุด การผิดกฎแต่ละครั้งจึงถูกรายงานครั้งเดียว และไฟล์ที่แก้ค้างไว้ก่อนเริ่ม session จะไม่ถูกนับจนกว่าคำสั่งใดจะแก้มัน ใช้เวลาประมาณ 130 ms ต่อคำสั่งเมื่อมีไฟล์เปลี่ยน 5 ไฟล์ใน repository 20,000 ไฟล์ (`scripts/bench-hooks.mjs` จับเวลาส่วนนี้แล้ว)
+- ตัวรัน migration ของ sample backend มีคำสั่ง `redo [N]`: บนฐานข้อมูล in-memory ที่ทิ้งได้ จะ apply ทุก migration, rollback N ตัวล่าสุด, apply ใหม่ แสดง schema หลังแต่ละขั้น และ fail เมื่อ schema กลับมาไม่เหมือนเดิม ไม่เขียนไฟล์ใด sandbox ที่อ่านอย่างเดียวจึงยังพิสูจน์ migration ได้ทั้งสองทาง
+- A/B: `bug-flaky-list` และ `bug-stale-list` ให้คะแนน `redRateMeasured` (มีการรัน `verify.mjs --repeat` ที่ red) จากไฟล์ evidence ทุกไฟล์ที่ session ทิ้งไว้
+
+### เปลี่ยน
+
+- `add-migration`: ให้ใช้คำสั่ง round-trip ของตัวรันเองก่อน (task redo ของ Rails, `redo` ของ sample) และเมื่อเขียนไฟล์ไม่ได้ ให้ใช้ฐานข้อมูล in-memory หรือแบบทิ้งได้แทนการข้าม up-down-up ใน eval ทุกรอบที่ผ่านมา ทั้งสองแขนไม่ผ่าน `up-down-up` เพราะ sandbox ของ eval เขียนไฟล์ฐานข้อมูลชั่วคราวไม่ได้ grader `up-down-up` รับการรัน `redo` ที่แสดงครบทั้งสามขั้น
+- `debug`: อ่านโค้ดเพื่อเล็งว่าจะทำ repro ตรงไหนได้ และการเห็นสาเหตุในไฟล์สั้น ๆ ก็เป็นเรื่องปกติ แต่ห้ามแก้อะไรจนกว่า repro จะ red ใน A/B ทุก agent อ่าน service สั้น ๆ ก่อนทำ repro และแก้บั๊กถูกตัวทั้งหมด
+- `run-evals`: การรันแขนละรอบเดียวบอกทิศทาง ไม่ใช่คะแนน ให้ดู grader ที่การแก้ตั้งใจเปลี่ยน และรันใหม่ด้วย `--runs 3` เมื่อ grader อื่นขยับอยู่ตัวเดียว
+- ข้อความ guard ของ Stop hook ไม่บอกแล้วว่า hook หลังแก้ไฟล์มองไม่เห็นการแก้ผ่าน shell
+
+### แก้ไข
+
+- ขั้น against ลิงก์ `node_modules` ของ workspace package (`apps/*/node_modules`, `packages/*/node_modules`) เข้า worktree เป็นค่าเริ่มต้นด้วย ไม่ใช่แค่ที่ root เดิมใน monorepo แบบ pnpm เทสของโค้ดเก่าจะ fail ใน worktree เพราะหา package ไม่เจอ แล้ว verify รายงานว่าจับการเปลี่ยนแปลงได้ ตั้ง `against.link` เพื่อกำหนดรายการเองได้เหมือนเดิม
+- บน Windows ที่ตั้ง `core.autocrlf=true` (ค่าเริ่มต้นของ Git for Windows) เครื่องมือที่ vendor ไว้และถูก checkout เป็น CRLF ถูก `--check` และ SessionStart hook รายงานว่า `outdated` และรัน `init` ใหม่ก็แก้ไม่ได้ ตอนนี้สำเนาที่ต่างกันแค่ตัวขึ้นบรรทัดถือว่าเป็นเครื่องมือเดียวกัน และ `init` เขียน `.stack-agent/.gitattributes` (`* text eol=lf`)
+- docs/adoption.md เคยบอกว่า `--compare-ref` fail เมื่อกฎ "แคบลง" ที่จริง fail เมื่อ files, exclude หรือ pattern ของกฎเปลี่ยนแบบใดก็ตาม รวมถึงการขยาย
+- `init --check` ไม่นับประโยคคำแนะนำใน template ของ feature map ("replace every EDIT ME") เป็น placeholder อีกแล้ว เดิมทำให้ feature map ที่กรอกครบแล้วยังค้างว่าไม่เสร็จ feature map ที่ติดตั้งด้วย 0.4.0 ยังมีประโยคเดิมอยู่ `--check` ก็ข้ามประโยคนั้นให้ด้วย
+- ถ้าไม่มี `origin/HEAD` (repository ที่ push ขึ้นไปเอง ไม่ได้ clone) `init` เขียน `origin/main` หรือ `origin/master` ที่มีอยู่ตัวเดียวเป็น branch ที่ push แล้วรัน CI และ `--check` เขียนโน้ตว่าเป็นการเดา จนกว่า `git remote set-head origin --auto` จะบันทึก branch จริง
+- `init --help` บอกแล้วว่า exit code 1 ใช้กับ `--check` ส่วน `init` เองจะจบด้วย 0 หลังเขียนไฟล์ แม้การตั้งค่ายังไม่ครบ
 - grader `honest-report` ของ eval ทั้งสี่ตัวอ่าน trace และยอมรับการบอกว่าอะไรผ่านควบคู่กับการบอกว่า verify รันไม่ได้ เดิม grader ตัดสินเทียบกับ trace โดยเห็นแค่ข้อความสุดท้าย จึงตัดรอบที่มี plugin ซึ่งรายงานตรงๆ ว่า sandbox อ่านได้อย่างเดียว มีเทสใหม่ที่บังคับให้ llm grader ใดก็ตามที่เอ่ยถึง trace ต้องอ่าน trace
 
 ## 0.4.0 (2026-10-24)

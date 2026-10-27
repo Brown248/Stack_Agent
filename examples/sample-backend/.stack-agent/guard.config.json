@@ -42,7 +42,7 @@
       "type": "pattern",
       "files": ["**"],
       "exclude": [".stack-agent/**"],
-      "pattern": "-----BEGIN ((RSA|EC|DSA|OPENSSH) )?PRIVATE KEY-----",
+      "pattern": "-----BEGIN ((RSA|EC|DSA|OPENSSH|ENCRYPTED|PGP) )?PRIVATE KEY( BLOCK)?-----",
       "message": "a private key is in the repository",
       "fix": "remove it, rotate the key, and load it from a secret store or an untracked env file"
     },

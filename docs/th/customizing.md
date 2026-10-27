@@ -150,7 +150,8 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | `--runs N` | จำนวนรอบต่อ task และ arm ค่าเริ่มต้น 1 |
 | `--model`, `--budget USD` | ต้องระบุทั้งคู่ งบเป็นเพดานต่อรอบ ส่งเป็น `--max-budget-usd` และไม่มีค่าเริ่มต้นโดยตั้งใจ |
 | `--plugin DIR`, `--out DIR` | plugin ที่จะทดสอบ (ค่าเริ่มต้นคือ repo นี้) และที่เก็บผล (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |
-| `--no-isolate` | ไม่ส่ง `--setting-sources project,local --strict-mcp-config` ปกติจะแยกให้เสมอ |
+| `--no-isolate` | ไม่ส่ง `--setting-sources project,local --strict-mcp-config` ปกติจะแยกให้เสมอ (`--isolate` ใส่ได้แต่ไม่เปลี่ยนอะไร) |
+| `--disallowed-tools LIST` | รายการคั่นด้วย comma ที่ส่งให้ `claude --disallowedTools` ทั้งสองแขน เช่น `"Bash(node:*)"` สำหรับ agent ที่รัน Node ไม่ได้ hook ยังทำงานตามปกติ |
 | `--judge MODEL` | ให้คะแนน `rubric` ของ task ด้วย (เกณฑ์ที่ script ตรวจไม่ได้ เช่น "controller แค่อ่าน request") โดยใช้ `agents/judge.md` รันเป็น session `claude` ที่สองด้วย MODEL judge อ่านสำเนาของรอบนั้นที่ตั้งชื่อแบบสุ่ม มีการแก้อยู่ใน `CHANGES.diff` และไม่มีหลักฐานของ verify ไฟล์ skip หรือ config ของ Stack Agent (เหลือแค่ `rules.md`) จึงบอกไม่ได้ว่าเป็นกลุ่มไหน แต่ละเกณฑ์จะเป็นคอลัมน์ `judge:...` ข้อที่ judge ไม่ตอบนับเป็นไม่เกี่ยวข้อง ปิดไว้เป็นค่าเริ่มต้น เพราะเสียเงินเพิ่มได้ถึง `--budget` ต่อรอบ |
 | `--dry-run` | สร้างโปรเจคและตรวจสำเนาที่ยังไม่แก้ ไม่เรียก `claude` ไม่เสียเงิน ใช้เช็ก task ใหม่ |
 | `--json` | พิมพ์ผลเป็น JSON แทนตารางสรุป |

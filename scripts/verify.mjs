@@ -10,10 +10,13 @@ import { FINGERPRINT_VERSION, SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerp
 
 const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests] [--skip-checks]
                       [--check NAME...] [--reuse] [--json] [--against GIT_REF | --no-against]
+       node verify.mjs --check NAME... --repeat N   run each named check N times and report how many went red
+       node verify.mjs --skip-checks --repeat N     run the test suite N times and report how many went red
        node verify.mjs --skip "REASON"   record why verification cannot run for the current code
        node verify.mjs --evidence-status  say whether the latest evidence is a full pass for the code as it is now (runs nothing)
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
 const MIN_SKIP_REASON = 15;
+const MAX_REPEAT = 1000;
 
 const CHECK_TYPES = ["http", "command"];
 
@@ -65,6 +68,12 @@ export function loadVerifyConfig(file) {
 		if (type === "http") {
 			if (!c.method || !c.path || typeof c.expectStatus !== "number") throw new ConfigError(`${where}: http checks need method, path, expectStatus`);
 			if (!config.baseUrl) throw new ConfigError("verify config needs baseUrl when it has http checks");
+			if (c.followRedirects !== undefined && typeof c.followRedirects !== "boolean") throw new ConfigError(`${where}: followRedirects must be true or false`);
+			if (c.expectHeaders !== undefined && (typeof c.expectHeaders !== "object" || c.expectHeaders === null || Array.isArray(c.expectHeaders) || !Object.values(c.expectHeaders).every((v) => typeof v === "string")))
+				throw new ConfigError(`${where}: expectHeaders must map a header name to text its value must include, e.g. {"location": "/login"}`);
+			// an invalid name would make the request code throw, which reads as "could not run" instead of a config mistake
+			const badName = Object.keys(c.expectHeaders ?? {}).find((n) => !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(n));
+			if (badName !== undefined) throw new ConfigError(`${where}: expectHeaders has an invalid header name ${JSON.stringify(badName)}`);
 		}
 		if (type === "command") {
 			checkRunSpec(c, where, "command checks need a command string or an args array");
@@ -99,11 +108,36 @@ function tail(text, max = 4000) {
 	return text.length > max ? "...\n" + text.slice(-max) : text;
 }
 
+// every process tree verify started and has not seen close, so a verify that is interrupted can stop them
+const live = new Set();
+
 // `command` runs through the platform shell; `args` runs the program directly, so quoting is the same on every OS.
 function spawnTree(spec, cwd, env) {
 	const options = { cwd, detached: process.platform !== "win32", env: childEnv(env), windowsHide: true };
-	return spec.args ? spawn(spec.args[0], spec.args.slice(1), { ...options, shell: false }) : spawn(spec.command, { ...options, shell: true });
+	const child = spec.args ? spawn(spec.args[0], spec.args.slice(1), { ...options, shell: false }) : spawn(spec.command, { ...options, shell: true });
+	live.add(child);
+	child.on("close", () => live.delete(child));
+	child.on("error", () => live.delete(child));
+	return child;
 }
+
+// Windows has no process groups, and taskkill /T cannot start from a parent that has exited. A child keeps its
+// parent's id as ParentProcessId after the parent is gone, so the leftover tree is found by walking down from it.
+// Only processes started after the command did are taken, so a reused id cannot pull in an unrelated older process.
+function stopOrphansOnWindows(pid, sinceMs) {
+	const script = `$all = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CreationDate
+$root = [DateTimeOffset]::FromUnixTimeMilliseconds(${Math.floor(sinceMs) - 2000}).LocalDateTime
+$todo = @(${Number(pid)}); $kill = @()
+while ($todo.Count) { $p = $todo[0]; $todo = @($todo | Select-Object -Skip 1)
+  foreach ($c in $all) { if ($c.ParentProcessId -eq $p -and $c.CreationDate -gt $root -and $kill -notcontains $c.ProcessId) { $kill += $c.ProcessId; $todo += $c.ProcessId } } }
+foreach ($k in $kill) { Stop-Process -Id $k -Force -ErrorAction SilentlyContinue }`;
+	spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { stdio: "ignore", windowsHide: true, timeout: 15000 });
+}
+
+// how long to wait for the output after the command exits; a process it left running in the background can hold the
+// output open forever. LINGER_MS is the quiet time that ends the wait, LINGER_MAX_MS the longest it can last.
+const LINGER_MS = 1500;
+const LINGER_MAX_MS = 10_000;
 
 function startFailure(spec, err) {
 	let hint = "";
@@ -118,22 +152,25 @@ export const OUTPUT_LIMIT = 8 * 1024 * 1024;
 function collect(child, limit = OUTPUT_LIMIT) {
 	let head = "";
 	let rest = "";
-	let truncated = false;
+	// every character seen, so output over the limit counts as truncated even while rest still holds all of its tail
+	let total = 0;
 	const add = (d) => {
 		const chunk = String(d);
+		total += chunk.length;
 		if (head.length < limit / 2) {
 			const room = limit / 2 - head.length;
 			head += chunk.slice(0, room);
 			rest += chunk.slice(room);
 		} else rest += chunk;
-		if (rest.length > limit) {
-			rest = rest.slice(-limit / 2);
-			truncated = true;
-		}
+		// keeps memory bounded; up to the limit nothing is dropped, since head + rest is then everything
+		if (rest.length > limit) rest = rest.slice(-limit / 2);
 	};
 	child.stdout.on("data", add);
 	child.stderr.on("data", add);
-	return () => ({ text: truncated ? head + "\n...[output truncated]...\n" + rest.slice(-limit / 2) : head + rest, truncated });
+	return () => {
+		const truncated = total > limit;
+		return { text: truncated ? head + "\n...[output truncated]...\n" + rest.slice(-limit / 2) : head + rest, truncated };
+	};
 }
 
 async function runCommand(root, spec, defaultTimeoutSec) {
@@ -148,29 +185,75 @@ async function runCommand(root, spec, defaultTimeoutSec) {
 	}
 	const output = collect(child);
 	let timedOut = false;
+	let lingering = false;
 	let startError;
-	const exitCode = await new Promise((resolve) => {
+	const { exitCode, signal } = await new Promise((resolve) => {
+		let done = false;
+		let linger;
+		const finish = (r) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			clearTimeout(linger);
+			resolve(r);
+		};
 		const timer = setTimeout(async () => {
 			timedOut = true;
 			await stopProcess(child);
 		}, (timeoutSec ?? defaultTimeoutSec) * 1000);
-		child.on("close", (code) => {
+		// the exit code is known at exit; the output is complete at close, once every process holding it has let go
+		child.on("exit", (code, sig) => {
 			clearTimeout(timer);
-			resolve(code);
+			const stop = () => {
+				lingering = true;
+				// the command is done; what still holds its output is a process it left behind (POSIX: its process group)
+				if (process.platform !== "win32") signalTree(child, "SIGKILL");
+				else stopOrphansOnWindows(child.pid, started);
+				child.stdout.destroy();
+				child.stderr.destroy();
+				finish({ exitCode: code, signal: sig });
+			};
+			// waiting ends after LINGER_MS with no new output, so a slow machine still delivers all of a fast command's
+			// output; a leftover process that keeps printing is cut off after LINGER_MAX_MS
+			const idle = () => {
+				clearTimeout(linger);
+				linger = setTimeout(stop, LINGER_MS);
+			};
+			idle();
+			child.stdout.on("data", idle);
+			child.stderr.on("data", idle);
+			const cap = setTimeout(stop, LINGER_MAX_MS);
+			child.once("close", () => {
+				clearTimeout(cap);
+				finish({ exitCode: code, signal: sig });
+			});
 		});
 		child.on("error", (err) => {
-			clearTimeout(timer);
 			startError = startFailure(spec, err);
-			resolve(null);
+			finish({ exitCode: null, signal: null });
 		});
 	});
 	const { text, truncated } = output();
-	return { exitCode, timedOut, startError, output: startError ? [startError, text].filter(Boolean).join("\n") : text, truncated, durationMs: Date.now() - started };
+	const note = lingering
+		? `\n[verify: the command exited but a process it started kept running and holding its output; verify stopped waiting once its output went quiet and stopped it]`
+		: "";
+	return { exitCode, signal, timedOut, startError, lingering, output: (startError ? [startError, text].filter(Boolean).join("\n") : text) + note, truncated, durationMs: Date.now() - started };
 }
 
 async function runTests(root, test) {
 	const r = await runCommand(root, test, 600);
-	return { step: "tests", command: shown(test), ...(test.args && { args: test.args }), ok: r.exitCode === 0 && !r.timedOut, exitCode: r.exitCode, timedOut: r.timedOut, durationMs: r.durationMs, output: tail(r.output) };
+	return {
+		step: "tests",
+		command: shown(test),
+		...(test.args && { args: test.args }),
+		ok: r.exitCode === 0 && !r.timedOut,
+		exitCode: r.exitCode,
+		...(r.signal && { signal: r.signal }),
+		...(r.startError && { inconclusive: true }),
+		timedOut: r.timedOut,
+		durationMs: r.durationMs,
+		output: tail(r.output),
+	};
 }
 
 async function runCommandCheck(root, check) {
@@ -179,6 +262,7 @@ async function runCommandCheck(root, check) {
 	const problems = [];
 	if (r.startError) problems.push(r.startError);
 	else if (r.timedOut) problems.push(`timed out after ${check.timeoutSec ?? 120}s`);
+	else if (r.signal) problems.push(`killed by ${r.signal}, expected exit ${expectExit}`);
 	else if (r.exitCode !== expectExit) problems.push(`exit ${r.exitCode}, expected ${expectExit}`);
 	if (check.expectOutputIncludes && !r.output.includes(check.expectOutputIncludes)) problems.push(`output does not include ${JSON.stringify(check.expectOutputIncludes)}`);
 	const flags = check.expectOutputFlags ?? "m";
@@ -270,11 +354,18 @@ async function runCheck(baseUrl, check) {
 			method: check.method,
 			headers,
 			body: check.body === undefined ? undefined : typeof check.body === "string" ? check.body : JSON.stringify(check.body),
+			// false: the check sees the 3xx itself (an unauthenticated page that must send the user to /login)
+			redirect: check.followRedirects === false ? "manual" : "follow",
 			signal: AbortSignal.timeout((check.timeoutSec ?? 10) * 1000),
 		});
 		const text = await res.text();
 		const problems = [];
 		if (res.status !== check.expectStatus) problems.push(`status ${res.status}, expected ${check.expectStatus}`);
+		for (const [name, want] of Object.entries(check.expectHeaders ?? {})) {
+			const got = res.headers.get(name);
+			if (got === null) problems.push(`no ${name} header`);
+			else if (!got.includes(want)) problems.push(`${name} header ${JSON.stringify(got)} does not include ${JSON.stringify(want)}`);
+		}
 		if (check.expectBodyIncludes && !text.includes(check.expectBodyIncludes)) problems.push(`body does not include ${JSON.stringify(check.expectBodyIncludes)}`);
 		if (check.expectJson !== undefined) {
 			let parsed;
@@ -297,9 +388,57 @@ function gitHead(root) {
 	return r.status === 0 ? { head: r.stdout.trim(), dirty: dirty.stdout.trim().length > 0 } : null;
 }
 
-export async function runVerify({ root, config, skipTests, skipChecks, only, reuse }) {
+// One step for N runs of a check: the red count, and each distinct problem with how often it came up.
+// The server (when there is one) stays up across the runs, so state left by one run can reach the next.
+async function repeatCheck(root, baseUrl, check, times) {
+	const started = Date.now();
+	const counts = new Map();
+	let red = 0;
+	let inconclusive = 0;
+	let first;
+	let last;
+	for (let i = 0; i < times; i++) {
+		last = checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(baseUrl, check);
+		if (last.ok) continue;
+		red++;
+		if (last.inconclusive) inconclusive++;
+		first ??= { run: i + 1, ...(last.output !== undefined && { output: last.output }), ...(last.body !== undefined && { body: last.body }) };
+		const text = last.problems.join("; ");
+		counts.set(text, (counts.get(text) ?? 0) + 1);
+	}
+	const problems = [...counts].sort((a, b) => b[1] - a[1]).map(([text, count]) => ({ text, count }));
+	return { step: "repeat", type: last.type, name: check.name, request: last.request, runs: times, red, inconclusive, ok: red === 0, problems, ...(first && { firstRed: first }), durationMs: Date.now() - started };
+}
+
+// The test suite N times, for a repro written as a test: same shape as a repeated check.
+async function repeatTests(root, test, times) {
+	const started = Date.now();
+	const counts = new Map();
+	let red = 0;
+	let inconclusive = 0;
+	let first;
+	for (let i = 0; i < times; i++) {
+		const r = await runTests(root, test);
+		if (r.ok) continue;
+		red++;
+		// a test killed by a signal (a crash) is a real red; only a run that never got to an answer is inconclusive
+		if (r.timedOut || r.inconclusive) inconclusive++;
+		first ??= { run: i + 1, output: r.output };
+		const text = r.timedOut ? "timed out" : r.signal ? `killed by ${r.signal}` : r.inconclusive ? "could not start" : `exit ${r.exitCode}`;
+		counts.set(text, (counts.get(text) ?? 0) + 1);
+	}
+	const problems = [...counts].sort((a, b) => b[1] - a[1]).map(([text, count]) => ({ text, count }));
+	return { step: "repeat", type: "tests", name: "tests", request: shown(test), runs: times, red, inconclusive, ok: red === 0, problems, ...(first && { firstRed: first }), durationMs: Date.now() - started };
+}
+
+export async function runVerify({ root, config, skipTests, skipChecks, only, reuse, repeat }) {
 	const steps = [];
-	if (runs(config.test) && !skipTests) steps.push(await runTests(root, config.test));
+	if (repeat && skipChecks) {
+		if (!runs(config.test)) throw new ConfigError("--skip-checks --repeat repeats the test suite, and verify.json has no test command");
+		steps.push(await repeatTests(root, config.test, repeat));
+		return steps;
+	}
+	if (runs(config.test) && !skipTests && !repeat) steps.push(await runTests(root, config.test));
 
 	const checks = (config.checks ?? []).filter((c) => !only?.length || only.includes(c.name));
 	if (only?.length) {
@@ -322,7 +461,10 @@ export async function runVerify({ root, config, skipTests, skipChecks, only, reu
 					if (!server.ok) return steps;
 				}
 			}
-			for (const check of checks) steps.push(checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(config.baseUrl, check));
+			for (const check of checks)
+				steps.push(
+					repeat ? await repeatCheck(root, config.baseUrl, check, repeat) : checkType(check) === "command" ? await runCommandCheck(root, check) : await runCheck(config.baseUrl, check),
+				);
 		} finally {
 			await stopProcess(server?.child);
 		}
@@ -497,6 +639,26 @@ function cleanStaleWorktrees(top, base, prefix = AGAINST_PREFIX) {
 // paths: folders relative to the project to check out, the project's own folder always included; leave it out to
 // check out the whole repository. On a large monorepo the full checkout is the slow part (about 30 s at 100,000
 // files, see design notes), and the project needs only its own folder and what it imports.
+// The folders the against worktree links from the project when against.link is not set: node_modules, plus the
+// node_modules of workspace packages one or two levels down (apps/web/node_modules, packages/core/node_modules), which
+// pnpm, Yarn, and npm workspaces create. Without them the old code's tests fail on missing packages, and that failure
+// read as "detects the change" (the first real install, a pnpm monorepo, 2026-10-24).
+export function defaultLinks(root) {
+	const found = ["node_modules"];
+	const dirs = (dir) => {
+		try {
+			return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith(".") && e.name !== "node_modules");
+		} catch {
+			return [];
+		}
+	};
+	for (const a of dirs(root)) {
+		if (fs.existsSync(path.join(root, a.name, "node_modules"))) found.push(`${a.name}/node_modules`);
+		for (const b of dirs(path.join(root, a.name))) if (fs.existsSync(path.join(root, a.name, b.name, "node_modules"))) found.push(`${a.name}/${b.name}/node_modules`);
+	}
+	return found;
+}
+
 export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, link = ["node_modules"], paths } = {}) {
 	const top = gitTop(root);
 	if (!top) return { error: "not a git repository" };
@@ -595,7 +757,7 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 	if (changedTests.length) step.tests = changedTests;
 
 	// with a setup step (often an install) nothing is linked unless asked: an install through a link would rewrite the real folder
-	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : ["node_modules"]), paths: config.against?.paths });
+	const made = createWorktree(root, ref, { tmpDir: config.against?.tmpDir, link: config.against?.link ?? (config.against?.setup ? [] : defaultLinks(root)), paths: config.against?.paths });
 	const { tmp, links = [] } = made;
 	try {
 		if (made.error) return conclude(step, config, made.error);
@@ -681,7 +843,14 @@ function summarize(steps) {
 			if (s.skipped) return `SKIP against: ${s.skipped}${removed}`;
 			return (s.ok ? `PASS against ${s.ref}: ${s.detecting.join(", ")} fail(s) on the code before the change` : `FAIL against ${s.ref}: ${s.problems.join("; ")}`) + removed;
 		}
-		if (s.step === "tests") return `${mark} tests: ${s.command} (exit ${s.exitCode}${s.timedOut ? ", timed out" : ""})${s.ok ? "" : "\n" + s.output}`;
+		if (s.step === "repeat") {
+			const rate = `red in ${s.red} of ${s.runs} runs (${Math.round((100 * s.red) / s.runs)}%)`;
+			const odd = s.inconclusive ? `, ${s.inconclusive} of them inconclusive (timed out, could not start, or no response)` : "";
+			const why = s.problems.map((p) => `\n  ${p.count}x ${p.text}`).join("");
+			const shownRed = s.firstRed?.output ?? s.firstRed?.body;
+			return `${s.red ? "RED" : "PASS"} ${s.type === "tests" ? "tests" : `check ${s.name}`} x${s.runs}: ${s.request} -> ${rate}${odd}${why}${shownRed ? `\n  first red (run ${s.firstRed.run}):\n${shownRed}` : ""}`;
+		}
+		if (s.step === "tests") return `${mark} tests: ${s.command} (${s.signal ? `killed by ${s.signal}` : `exit ${s.exitCode}`}${s.timedOut ? ", timed out" : ""})${s.ok ? "" : "\n" + s.output}`;
 		if (s.step === "server") return `${mark} server: ${s.ok ? "ready" : s.reason}${s.ok || !s.log ? "" : "\n" + s.log}`;
 		if (s.type === "command") return `${mark} check ${s.name}: ${s.request} -> exit ${s.exitCode}${s.ok ? "" : " (" + s.problems.join("; ") + ")\n" + s.output}`;
 		return `${mark} check ${s.name}: ${s.request} -> ${s.status ?? "no response"}${s.ok ? "" : " (" + s.problems.join("; ") + ")"}`;
@@ -689,18 +858,26 @@ function summarize(steps) {
 }
 
 async function main(argv) {
-	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status"], options: ["root", "config", "skip", "against"], multi: ["check"] });
+	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status"], options: ["root", "config", "skip", "against", "repeat"], multi: ["check"] });
 	if (args.help) return { code: 0, text: USAGE };
+	const repeat = args.repeat === undefined ? undefined : Number(args.repeat);
+	if (repeat !== undefined) {
+		if (!/^\d+$/.test(args.repeat) || repeat < 2 || repeat > MAX_REPEAT) throw new ConfigError(`--repeat needs a whole number from 2 to ${MAX_REPEAT}`);
+		if (!args.check?.length && !args["skip-checks"]) throw new ConfigError("--repeat needs --check NAME (repeat those checks) or --skip-checks (repeat the test suite)");
+		if (args.check?.length && args["skip-checks"]) throw new ConfigError("--repeat takes --check NAME or --skip-checks, not both");
+		if (args["skip-checks"] && args["skip-tests"]) throw new ConfigError("--skip-checks --repeat repeats the test suite, so it cannot be used with --skip-tests");
+		if (args.against !== undefined) throw new ConfigError("--repeat is a partial run, so it never runs the against step; drop --against");
+	}
 	const root = path.resolve(args.root ?? process.cwd());
 	const configPath = path.resolve(root, args.config ?? ".stack-agent/verify.json");
 	const config = loadVerifyConfig(configPath);
 	if (args.skip !== undefined) return writeSkip(root, config, args.skip);
 	if (args["evidence-status"]) return evidenceStatus(root, config, args.json);
 	const before = codeFingerprint(root, fingerprintOptions(config));
-	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse });
+	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse, repeat });
 	if (steps.length === 0) throw new ConfigError("nothing ran: every step was skipped");
 	const flags = argv.filter((a) => a.startsWith("--") && !["--root", "--config", "--json", "--against"].includes(a));
-	const full = !args["skip-tests"] && !args["skip-checks"] && !args.check?.length && !args.reuse;
+	const full = !args["skip-tests"] && !args["skip-checks"] && !args.check?.length && !args.reuse && !repeat;
 	const wantAgainst = args.against !== undefined || (config.against !== false && !args["no-against"]);
 	if (full && wantAgainst && steps.every((s) => s.ok)) steps.push(await runAgainst({ root, config, configRel: toPosix(path.relative(root, configPath)), ref: args.against }));
 	// the Stop hook refuses evidence from a run with the against step off unless the session started that way
@@ -749,7 +926,18 @@ function writeSkip(root, config, reason) {
 	return { code: 0, text: `verify: skipped, reason recorded in ${SKIP_FILE} for the current code. Tell the user the change is unverified and why.` };
 }
 
+// Interrupted (Ctrl+C, a caller's timeout that sends SIGTERM): stop the server and the commands verify started, so
+// none is left holding the port for the next run. A hard kill (SIGKILL, Windows TerminateProcess) cannot be caught.
+export async function stopAll() {
+	await Promise.all([...live].map((child) => stopProcess(child)));
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+	for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]])
+		process.once(signal, () => {
+			process.stderr.write(`verify: interrupted by ${signal}, stopping what it started\n`);
+			stopAll().finally(() => process.exit(code));
+		});
 	main(process.argv.slice(2)).then(
 		({ code, text }) => {
 			(code === 0 ? console.log : console.error)(text);
