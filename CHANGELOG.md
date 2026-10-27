@@ -6,6 +6,12 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 ## Unreleased
 
+`verify.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/`. Nothing changes until a project sets the new option.
+
+### Added
+
+- `"against": { "requireNewCoverage": true }` in `verify.json` makes a change to the code with no new or changed check or test fail the against step. By default that case still skips with a note (CI passes, and the Stop hook asks once), so CI was a reminder, not a gate; found in a read of this repo's own CI template. A change that alters no behavior (a refactor, a rename) is waived by a `Stack-Agent-No-New-Test: <reason>` line (at least 15 characters) in a commit message since the base; the reason is shown and stays in the history. It is separate from `against.required`, which keeps its meaning (inconclusive results fail).
+
 ### Fixed
 
 - The A/B task `bug-stale-list` (this repo's tests only; nothing a project installs): its planted cache lasted 50 ms, and on a loaded Windows CI runner a read, a create, and a read took longer, so the bug never showed and `tests/ab-tasks.test.mjs` failed on three of six Windows jobs. The window is 300 ms now.

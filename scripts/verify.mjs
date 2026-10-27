@@ -47,12 +47,13 @@ export function loadVerifyConfig(file) {
 	if (config.server !== undefined) checkRunSpec(config.server, "server", "server needs a command string or an args array");
 	if (config.checks !== undefined && !Array.isArray(config.checks)) throw new ConfigError("checks must be an array");
 	if (config.against !== undefined && typeof config.against !== "boolean" && (typeof config.against !== "object" || config.against === null || Array.isArray(config.against)))
-		throw new ConfigError("against must be true, false, or an object with keep, link, paths, setup, tmpDir, required");
+		throw new ConfigError("against must be true, false, or an object with keep, link, paths, setup, tmpDir, required, requireNewCoverage");
 	if (config.against && typeof config.against === "object") {
 		const a = config.against;
 		for (const key of ["keep", "link", "paths"]) requireStringArray(a[key], `against.${key}`, { optional: true });
 		if (a.tmpDir !== undefined && (typeof a.tmpDir !== "string" || !a.tmpDir)) throw new ConfigError("against.tmpDir must be a folder path string");
 		if (a.required !== undefined && typeof a.required !== "boolean") throw new ConfigError("against.required must be true or false");
+		if (a.requireNewCoverage !== undefined && typeof a.requireNewCoverage !== "boolean") throw new ConfigError("against.requireNewCoverage must be true or false");
 		if (a.setup !== undefined) checkRunSpec(a.setup, "against.setup", "against.setup needs a command string or an args array");
 	}
 	requireStringArray(config.stopHookIgnore, "stopHookIgnore", { optional: true });
@@ -704,6 +705,17 @@ export function createWorktree(root, ref, { prefix = AGAINST_PREFIX, tmpDir, lin
 	}
 }
 
+// A change that alters no behavior (a refactor, a rename) can say so in a commit message since the base, in a line that
+// starts "Stack-Agent-No-New-Test:" and gives a reason of at least 15 characters. It sits in the history for the reviewer.
+const WAIVER = /^Stack-Agent-No-New-Test:[ \t]*(.*)$/gim;
+function noNewTestWaiver(top, ref) {
+	const log = gitRun(top, ["log", "--format=%B%x00", `${ref}..HEAD`, "--"]);
+	if (log.status !== 0) return null;
+	for (const message of log.stdout.split("\0"))
+		for (const m of message.matchAll(WAIVER)) if (m[1].trim().length >= 15) return m[1].trim();
+	return null;
+}
+
 const conclude = (step, config, reason) =>
 	config.against?.required ? { ...step, ok: false, problems: [`${reason} (against.required is set, so this fails the run)`] } : { ...step, skipped: `${reason} (inconclusive)` };
 
@@ -746,6 +758,18 @@ export async function runAgainst({ root, config, configRel = ".stack-agent/verif
 		// Code changed and nothing new tests it: the step has nothing to run, so it cannot fail, and the evidence would
 		// stand for a change no check or test touched. The flag lets the Stop hook ask once.
 		if (!codeChangedSince(root, ref, config, keep).length) return { ...step, skipped: "no new or changed checks or tests" };
+		if (config.against?.requireNewCoverage) {
+			const reason = noNewTestWaiver(top, ref);
+			if (reason) return { ...step, noNewCoverage: true, skipped: `no new or changed checks or tests, but the code changed since ${ref}; waived by a commit message since ${ref}: ${reason}` };
+			return {
+				...step,
+				ok: false,
+				noNewCoverage: true,
+				problems: [
+					`the code changed since ${ref} but no check or test is new or changed (against.requireNewCoverage is set). Add a test or a check to verify.json that fails without the change, or, if it alters no behavior (a refactor, a rename), put a line "Stack-Agent-No-New-Test: <reason>" (at least 15 characters) in a commit message since ${ref}`,
+				],
+			};
+		}
 		return {
 			...step,
 			noNewCoverage: true,
