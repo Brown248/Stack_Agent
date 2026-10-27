@@ -4,7 +4,7 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.5.3 (2026-10-27)
 
 `verify.mjs` changed, so rerun `init` to refresh `.stack-agent/bin/`. Nothing changes until a project sets the new option.
 
