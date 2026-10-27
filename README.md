@@ -186,7 +186,7 @@ If neither happens, see [Troubleshooting](#troubleshooting).
 
 You do not set anything up. `.stack-agent/` and the CI workflow are committed, so once you clone the repository the guard and verify already work and CI already enforces them. What you add is the plugin, so the hooks and skills work in your own Claude Code sessions.
 
-1. Check whether you already have the plugin with `claude plugin list`. If it is not there, install it with the two commands from step 1. (A project set up with `--scope project` also lists it in `.claude/settings.json`, but that does not install it for you.)
+1. Check whether you already have the plugin with `claude plugin list`. If it is not there, install it with the two commands from step 1. (A project set up with `--scope project` also lists it in `.claude/settings.json`; `claude plugin list` is what tells you whether it is installed on your machine.)
 2. Install the project's own dependencies the way its README says, then run the guard and verify. Both should pass before you change anything. The guard needs no install at all.
 
    ```bash
