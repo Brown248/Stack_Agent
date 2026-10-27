@@ -61,7 +61,7 @@ Stack Agent เริ่มจากบันทึกสรุปทอล์�
 
 | สิ่งที่ตรวจ | สถานะ |
 | --- | --- |
-| Unit และ integration test | ผ่าน 513 เทสบน Windows 11 กับ Node 26 และบน Linux (WSL2 Ubuntu) กับ Node 22 (27 ต.ค. 2026) |
+| Unit และ integration test | ผ่าน 514 เทสบน Windows 11 กับ Node 26 และบน Linux (WSL2 Ubuntu) กับ Node 22 (27 ต.ค. 2026) |
 | ตัวอย่างทั้งห้า หนึ่งตัวต่อ preset (Node API, Python CLI, library, frontend, script ประมวลผลข้อมูล) | ผ่าน guard และ verify แบบเต็ม และ verify fail เมื่อจงใจทำให้พฤติกรรมเสีย (`tests/sample-presets.test.mjs`, `tests/sample-cli.test.mjs`) |
 | Mutation check (จงใจใส่บั๊ก 14 จุด) | เทสจับได้ครบ |
 | `claude plugin validate --strict` | ผ่าน |

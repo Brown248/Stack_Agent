@@ -129,3 +129,24 @@ test("an installed example's npm scripts run the vendored tools, not files from 
 	assert.equal(r.code, 0, r.stdout + r.stderr);
 	assert.match(pkg.scripts.guard, /\.stack-agent\/bin\/guard\.mjs/);
 });
+
+test("a project reached through a Windows 8.3 short name is the same project git reports by its long name", async (t) => {
+	if (process.platform !== "win32") return t.skip("8.3 short names are a Windows thing");
+	const { spawnSync } = await import("node:child_process");
+	const { realPath } = await import("../scripts/lib/files.mjs");
+	const { main: guard } = await import("../scripts/guard.mjs");
+	const long = path.join(tempDir("stack-agent-83-"), "a-folder-name-longer-than-eight");
+	fs.mkdirSync(long);
+	const short = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${long}').ShortPath`], { encoding: "utf8" }).stdout.trim();
+	if (!short || short.toLowerCase() === long.toLowerCase()) return t.skip("this volume does not make 8.3 short names");
+	assert.equal(realPath(short), realPath(long));
+	assert.equal(realPath(path.join(short, "not-yet", "file.json")), path.join(realPath(long), "not-yet", "file.json"), "a path that does not exist yet");
+	// what GitHub's Windows runner hit: a shared rules file inside the repository looked like it was outside
+	write(long, "shared/rules.json", JSON.stringify({ rules: [{ id: "no-todo", type: "pattern", files: ["**/*.js"], pattern: "TODO", message: "m", fix: "f" }] }));
+	write(long, "app/.stack-agent/guard.config.json", JSON.stringify({ extends: ["../../shared/rules.json"], rules: [{ id: "no-fixme", type: "pattern", files: ["**/*.js"], pattern: "FIXME", message: "m", fix: "f" }] }));
+	write(long, "app/src/a.js", "// TODO later\n");
+	git(long, "init", "-q");
+	const r = guard(["--root", path.join(short, "app")]);
+	assert.equal(r.code, 1, r.text);
+	assert.match(r.text, /src\/a\.js:1 {2}\[no-todo\]/, "the shared rule applies");
+});

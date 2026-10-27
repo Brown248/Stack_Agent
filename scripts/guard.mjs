@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { ConfigError, gitIgnored, isSkipped, matchesAny, parseArgs, projectFiles, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
+import { ConfigError, gitIgnored, isSkipped, matchesAny, parseArgs, projectFiles, readJson, realPath, requireStringArray, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node guard.mjs [--root DIR] [--config FILE] [--files F...] [--json] [--strict]
                      [--update-baseline [--allow-increase]] [--compare-ref GIT_REF]
@@ -25,7 +25,7 @@ const MAX_EXTENDS_DEPTH = 5;
 
 function gitTopOf(dir) {
 	const r = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: dir, encoding: "utf8" });
-	return r.status === 0 ? path.resolve(r.stdout.trim()) : null;
+	return r.status === 0 ? realPath(r.stdout.trim()) : null;
 }
 
 // Rules shared by several projects: "extends" lists JSON files, relative to the file that names them, each with
@@ -78,7 +78,8 @@ const readOrNull = (abs) => {
 
 export function loadConfig(configPath) {
 	const config = readJson(configPath, "guard config");
-	const configAbs = path.resolve(configPath);
+	// the real path, so it compares with the repository top git reports (an 8.3 short temp folder on Windows is not)
+	const configAbs = realPath(configPath);
 	if (config.extends !== undefined) {
 		const project = path.dirname(path.dirname(configAbs));
 		const { rules, files } = expandExtends(config, configAbs, { read: readOrNull, boundary: gitTopOf(project) ?? project });
@@ -522,7 +523,7 @@ export function compareWithRef(root, ref, configRel, baselineRel, config, counts
 function main(argv) {
 	const args = parseArgs(argv, { flags: ["json", "strict", "update-baseline", "allow-increase", "help"], options: ["root", "config", "compare-ref"], multi: ["files"] });
 	if (args.help) return { code: 0, text: USAGE };
-	const root = path.resolve(args.root ?? process.cwd());
+	const root = realPath(args.root ?? process.cwd());
 	const configPath = path.resolve(root, args.config ?? ".stack-agent/guard.config.json");
 	const config = loadConfig(configPath);
 	const baselinePath = path.resolve(root, config.baseline ?? ".stack-agent/guard-baseline.json");

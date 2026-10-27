@@ -19,6 +19,26 @@ const DEFAULT_IGNORE = [
 	".stack-agent/bin",
 ];
 
+// The path as the file system names it: symbolic links resolved and, on Windows, 8.3 short names (C:\Users\RUNNER~1)
+// expanded to the long ones git reports (C:\Users\runneradmin). Comparing a path git printed with one a user or a
+// temp folder gave only works once both went through this. For a path that does not exist yet, the nearest folder
+// that does is resolved and the rest kept as written.
+export function realPath(p) {
+	const abs = path.resolve(p);
+	let head = abs;
+	const tail = [];
+	for (;;) {
+		try {
+			return path.join(fs.realpathSync.native(head), ...tail);
+		} catch {
+			const parent = path.dirname(head);
+			if (parent === head) return abs;
+			tail.unshift(path.basename(head));
+			head = parent;
+		}
+	}
+}
+
 export function toPosix(p) {
 	return p.split(path.sep).join("/");
 }

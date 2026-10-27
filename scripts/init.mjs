@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./guard.mjs";
-import { ConfigError, parseArgs, toPosix } from "./lib/files.mjs";
+import { ConfigError, parseArgs, realPath, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--shared-rules FILE] [--check] [--list-presets]
   copies the Stack Agent tools into TARGET_DIR/.stack-agent/bin (refreshed on every run),
@@ -482,7 +482,8 @@ function main(argv) {
 	if (args.help) return { code: 0, text: USAGE };
 	if (args["list-presets"]) return { code: 0, text: listPresets().join("\n") };
 	if (args._.length > 1) throw new ConfigError("give at most one target directory");
-	const target = path.resolve(args._[0] ?? process.cwd());
+	// the real path: git reports the repository top that way, and paths shown relative to it must not climb out
+	const target = realPath(args._[0] ?? process.cwd());
 	if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) throw new ConfigError(`target is not a directory: ${target}`);
 	if (path.resolve(target) === pluginRoot) throw new ConfigError("target is the Stack Agent repo itself; run this inside the project you want to set up");
 	const recorded = recordedPreset(target);

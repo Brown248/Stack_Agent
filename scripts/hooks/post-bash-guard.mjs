@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../guard.mjs";
-import { ConfigError, readJson, toPosix } from "../lib/files.mjs";
+import { ConfigError, readJson, realPath, toPosix } from "../lib/files.mjs";
 import { changedFiles, gitTop } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
 import { blobIds, noteReport, readSeen, seenLogOffset, writeSeen } from "./session-record.mjs";
@@ -21,8 +21,10 @@ const CONFIG = ".stack-agent/guard.config.json";
 const MAX_FILES = 2000;
 
 const input = readHookInput();
-const cwd = path.resolve(input.cwd ?? process.cwd());
-const top = gitTop(cwd);
+// real paths on both sides: git reports the top with long names, a Windows temp folder may be an 8.3 short name
+const cwd = realPath(input.cwd ?? process.cwd());
+const gitRoot = gitTop(cwd);
+const top = gitRoot ? realPath(gitRoot) : null;
 const changed = top ? (changedFiles(top) ?? []) : [];
 const failures = [];
 if (changed.length <= MAX_FILES) {

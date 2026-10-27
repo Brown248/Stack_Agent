@@ -47,7 +47,9 @@ test("a command that leaves a process holding its output passes on its exit code
 		const r = await main(["--root", dir]);
 		const seconds = (Date.now() - started) / 1000;
 		assert.equal(r.code, 0, r.text);
-		assert.ok(seconds < 6, `took ${seconds}s; it waited for the background process`);
+		// the leftover would hold the output for 20 s; well under that means verify stopped waiting (a CI runner starts
+		// PowerShell slowly, so the margin is wide)
+		assert.ok(seconds < 15, `took ${seconds}s; it waited for the background process`);
 		const step = JSON.parse(fs.readFileSync(path.join(dir, ".stack-agent/evidence/latest.json"), "utf8")).steps[0];
 		assert.equal(step.timedOut, false);
 		assert.match(step.output, /verify: the command exited but a process it started kept running/);

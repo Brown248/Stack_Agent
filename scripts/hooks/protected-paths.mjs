@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { realPath } from "../lib/files.mjs";
 
 export const PROTECTED = [
 	{ re: /(^|[\\/])\.stack-agent[\\/]guard\.config\.json$/, what: "the guard rules" },
@@ -17,7 +18,7 @@ export const PROTECTED = [
 // E4: a custom evidenceDir is protected too. Both the session snapshot and the live verify.json are read; using
 // both only ever adds protection, so editing verify.json cannot remove it.
 export function evidenceGuard(root, cwd, dirs) {
-	const targets = [...new Set(dirs.filter((d) => typeof d === "string" && d))].map((d) => path.resolve(root, d, "latest.json"));
+	const targets = [...new Set(dirs.filter((d) => typeof d === "string" && d))].map((d) => realPath(path.resolve(root, d, "latest.json")));
 	if (!targets.length) return Object.assign(() => null, { mentions: () => null });
 	const win = process.platform === "win32";
 	const norm = (p) => (win ? p.toLowerCase() : p);
@@ -29,7 +30,7 @@ export function evidenceGuard(root, cwd, dirs) {
 	const rels = [...new Set(dirs.filter((d) => typeof d === "string" && d))].map((d) => new RegExp(`(?<![\\w.-])${escape(norm(path.posix.normalize(d.replaceAll("\\", "/")).replace(/\/$/, "")))}(?:/latest\\.json)?(?![\\w.\\\\/-])`));
 	const guard = (filePath) => {
 		if (!filePath) return null;
-		const abs = norm(path.resolve(cwd, fromMsys(String(filePath).replace(/^["']|["']$/g, ""))));
+		const abs = norm(realPath(path.resolve(cwd, fromMsys(String(filePath).replace(/^["']|["']$/g, "")))));
 		return wanted.has(abs) ? "the verify evidence" : null;
 	};
 	// for inline scripts (node -e "..."), where the path sits inside a string
@@ -44,14 +45,14 @@ export function sharedRulesGuard(cwd, files) {
 	const win = process.platform === "win32";
 	const norm = (p) => (win ? p.toLowerCase() : p);
 	const fromMsys = (p) => (win && /^\/[a-z]\//i.test(p) ? `${p[1]}:${p.slice(2)}` : p);
-	const wanted = new Set(files.map((f) => norm(path.resolve(f))));
+	const wanted = new Set(files.map((f) => norm(realPath(f))));
 	if (!wanted.size) return Object.assign(() => null, { mentions: () => null });
 	const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 	const names = [...new Set(files.map((f) => path.basename(f)))].map((n) => new RegExp(`(?<![\\w.-])${escape(norm(n))}(?![\\w.-])`));
 	const what = "the shared guard rules (a file guard.config.json extends)";
 	const guard = (filePath) => {
 		if (!filePath) return null;
-		const abs = norm(path.resolve(cwd, fromMsys(String(filePath).replace(/^["']|["']$/g, ""))));
+		const abs = norm(realPath(path.resolve(cwd, fromMsys(String(filePath).replace(/^["']|["']$/g, "")))));
 		return wanted.has(abs) ? what : null;
 	};
 	guard.mentions = (text) => (names.some((r) => r.test(norm(String(text ?? "")))) ? what : null);
