@@ -182,6 +182,24 @@ Start a **new** Claude Code session in the project (hooks load when a session st
 
 If neither happens, see [Troubleshooting](#troubleshooting).
 
+### Joining a project that already uses it
+
+You do not set anything up. `.stack-agent/` and the CI workflow are committed, so once you clone the repository the guard and verify already work and CI already enforces them. What you add is the plugin, so the hooks and skills work in your own Claude Code sessions.
+
+1. Check whether you already have the plugin with `claude plugin list`. If it is not there, install it with the two commands from step 1. (A project set up with `--scope project` also lists it in `.claude/settings.json`, but that does not install it for you.)
+2. Install the project's own dependencies the way its README says, then run the guard and verify. Both should pass before you change anything. The guard needs no install at all.
+
+   ```bash
+   node .stack-agent/bin/guard.mjs
+   ```
+
+   ```bash
+   node .stack-agent/bin/verify.mjs
+   ```
+
+3. Start Claude Code in the project. If the plugin is newer than the tools in `.stack-agent/bin/`, the SessionStart hook says so and prints the command that refreshes them. That command changes committed files, so run it with your team's agreement and commit the result on its own.
+4. Work as usual. The hooks ask a person before an edit to the guard's config, its baseline, or the workflow, and CI fails a pull request that loosens them, so a change to a rule always goes through review.
+
 ### Update and remove
 
 ```bash
