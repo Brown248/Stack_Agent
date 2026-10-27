@@ -1,18 +1,64 @@
 {
-  "test": { "command": "node --test", "timeoutSec": 120 },
+  "test": {
+    "command": "node --test",
+    "timeoutSec": 120
+  },
   "server": {
     "command": "node -e \"require('fs').rmSync('data/verify.db',{force:true})\" && node scripts/migrate.mjs up && node src/server.js",
-    "env": { "PORT": "3999", "DB_FILE": "data/verify.db" },
+    "env": {
+      "PORT": "3999",
+      "DB_FILE": "data/verify.db"
+    },
     "readyUrl": "http://127.0.0.1:3999/health",
     "readyTimeoutSec": 20
   },
   "baseUrl": "http://127.0.0.1:3999",
   "evidenceDir": ".stack-agent/evidence",
   "checks": [
-    { "name": "health", "method": "GET", "path": "/health", "expectStatus": 200, "expectJson": { "status": "ok" } },
-    { "name": "create-item", "method": "POST", "path": "/items", "body": { "name": "pen" }, "expectStatus": 201, "expectJson": { "name": "pen" } },
-    { "name": "list-items", "method": "GET", "path": "/items", "expectStatus": 200, "expectBodyIncludes": "\"items\"" },
-    { "name": "create-item-rejects-empty", "method": "POST", "path": "/items", "body": {}, "expectStatus": 400 },
-    { "name": "reports-summary", "method": "GET", "path": "/reports/summary", "expectStatus": 200, "expectBodyIncludes": "itemCount" }
-  ]
+    {
+      "name": "health",
+      "method": "GET",
+      "path": "/health",
+      "expectStatus": 200,
+      "expectJson": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "create-item",
+      "method": "POST",
+      "path": "/items",
+      "body": {
+        "name": "pen"
+      },
+      "expectStatus": 201,
+      "expectJson": {
+        "name": "pen"
+      }
+    },
+    {
+      "name": "list-items",
+      "method": "GET",
+      "path": "/items",
+      "expectStatus": 200,
+      "expectBodyIncludes": "\"items\""
+    },
+    {
+      "name": "create-item-rejects-empty",
+      "method": "POST",
+      "path": "/items",
+      "body": {},
+      "expectStatus": 400
+    },
+    {
+      "name": "reports-summary",
+      "method": "GET",
+      "path": "/reports/summary",
+      "expectStatus": 200,
+      "expectBodyIncludes": "itemCount"
+    }
+  ],
+  "against": {
+    "requireNewCoverage": true
+  }
 }
