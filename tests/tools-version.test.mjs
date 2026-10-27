@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { staleReason } from "../scripts/hooks/stop-verify.mjs";
+import { outdatedTools } from "../scripts/init.mjs";
 import { FINGERPRINT_VERSION } from "../scripts/lib/fingerprint.mjs";
 import { main as verify } from "../scripts/verify.mjs";
 import { copyExample, copySample, git, repoRoot, runNode, tempDir } from "./helpers.mjs";
@@ -33,6 +34,19 @@ test("SessionStart tells the human which vendored tools differ from the plugin, 
 	assert.match(systemMessage, /init\.mjs/);
 	// the session record is still written
 	assert.ok(fs.readdirSync(path.join(dir, ".stack-agent/evidence/sessions")).some((f) => f.endsWith(".start.json")));
+});
+
+test("a version stamp that differs on its own is not an outdated tool, so a release that changed no tool asks nobody to rerun init", () => {
+	const dir = initialized();
+	fs.writeFileSync(path.join(dir, ".stack-agent/bin/VERSION"), "0.1.0\n");
+	assert.deepEqual(outdatedTools(dir), []);
+	const r = sessionStart(dir);
+	assert.equal(r.code, 0, r.stderr);
+	assert.equal(r.stdout, "");
+	assert.doesNotMatch(runNode(path.join(repoRoot, "scripts/init.mjs"), [dir, "--check"]).stdout, /VERSION|differ from this plugin/);
+	// a tool that differs still brings the stamp along, so the refresh message names both
+	fs.appendFileSync(path.join(dir, ".stack-agent/bin/verify.mjs"), "// older copy\n");
+	assert.deepEqual(outdatedTools(dir), ["verify.mjs", "VERSION"]);
 });
 
 test("SessionStart says nothing about tools in a project that has no .stack-agent/bin", () => {
