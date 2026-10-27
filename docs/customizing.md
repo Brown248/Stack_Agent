@@ -30,7 +30,8 @@ agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (wires scripts/hooks/*.mjs into Claude Code)
 skills/<name>/    one SKILL.md per skill, plus any scripts it calls
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
-                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests)
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests),
+                  skill-scan.mjs (SkillSpector over the skills and hooks; this repo's CI only, needs Python)
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),
@@ -146,7 +147,7 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | Option | Meaning |
 | --- | --- |
 | `--task NAME` | Task module in `scripts/ab/tasks/`, named after its file (`endpoint`, `validate`, `bug-blank-name`, ...). An unknown name prints the full list. Repeat it for several. Required. |
-| `--arms` | Comma list of `full` (the plugin as is), `none` (no plugin), `hooks-only` (a copy without `skills/`), `skills-only` (a copy without `hooks/hooks.json`). Default `full,none`. |
+| `--arms` | Comma list of `full` (the plugin as is), `none` (no plugin), `hooks-only` (a copy without `skills/`), `skills-only` (a copy without `hooks/hooks.json`), `full+superpowers` (the plugin beside obra/superpowers; needs `--superpowers DIR`, an installed superpowers folder, and counts as isolated only with exactly those two plugins). Default `full,none`. Every arm sets `SUPERPOWERS_DISABLE_TELEMETRY=1`. |
 | `--runs N` | Runs per task and arm. Default 1. |
 | `--model`, `--budget USD` | Both required. The budget is a per-run cap passed as `--max-budget-usd`; there is no default on purpose. |
 | `--plugin DIR`, `--out DIR` | Plugin to test (default: this repo) and where to write results (default: a new folder under the system temp dir). |

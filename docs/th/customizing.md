@@ -30,7 +30,8 @@ agents/           judge.md, reviewer.md, finding-verifier.md
 hooks/            hooks.json (ผูก scripts/hooks/*.mjs เข้ากับ Claude Code)
 skills/<name>/    SKILL.md หนึ่งไฟล์ต่อ skill และ script ที่ skill เรียกใช้
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
-                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test)
+                  review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test),
+                  skill-scan.mjs (SkillSpector สแกน skill และ hook ใช้เฉพาะใน CI ของ repo นี้ ต้องมี Python)
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),
@@ -146,7 +147,7 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | ตัวเลือก | ความหมาย |
 | --- | --- |
 | `--task NAME` | task ใน `scripts/ab/tasks/` ตั้งชื่อตามไฟล์ (`endpoint`, `validate`, `bug-blank-name`, ...) ถ้าใส่ชื่อที่ไม่มีจะพิมพ์รายชื่อทั้งหมดออกมา ใส่ซ้ำได้หลายตัว จำเป็นต้องมี |
-| `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`) ค่าเริ่มต้น `full,none` |
+| `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`), `full+superpowers` (plugin คู่กับ obra/superpowers ต้องระบุ `--superpowers DIR` ซึ่งเป็นโฟลเดอร์ superpowers ที่ติดตั้งไว้ และนับว่าแยกถูกต้องเฉพาะเมื่อโหลดสอง plugin นี้เท่านั้น) ค่าเริ่มต้น `full,none` ทุกแขนตั้ง `SUPERPOWERS_DISABLE_TELEMETRY=1` |
 | `--runs N` | จำนวนรอบต่อ task และ arm ค่าเริ่มต้น 1 |
 | `--model`, `--budget USD` | ต้องระบุทั้งคู่ งบเป็นเพดานต่อรอบ ส่งเป็น `--max-budget-usd` และไม่มีค่าเริ่มต้นโดยตั้งใจ |
 | `--plugin DIR`, `--out DIR` | plugin ที่จะทดสอบ (ค่าเริ่มต้นคือ repo นี้) และที่เก็บผล (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |

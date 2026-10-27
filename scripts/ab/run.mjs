@@ -17,6 +17,7 @@ const USAGE = `usage: node scripts/ab/run.mjs --task NAME [--task NAME ...] --mo
   --model MODEL   model passed to claude (required)
   --budget USD    --max-budget-usd for each run (required, no default; a Sonnet run measured $0.25-0.45)
   --plugin DIR    plugin to test (default: this repo)
+  --superpowers DIR  the superpowers plugin folder the full+superpowers arm loads beside it
   --out DIR       output directory (default: a new folder under the system temp dir)
   --no-isolate    do not pass --setting-sources project,local --strict-mcp-config (default is isolated; --isolate is accepted)
   --dry-run       scaffold and grade an untouched copy of each project; never calls claude
@@ -41,7 +42,7 @@ export async function loadTask(name) {
 }
 
 export function parseOptions(argv) {
-	const args = parseArgs(argv, { flags: ["dry-run", "json", "isolate", "no-isolate"], options: ["arms", "runs", "model", "budget", "plugin", "out", "disallowed-tools", "judge"], multi: ["task"] });
+	const args = parseArgs(argv, { flags: ["dry-run", "json", "isolate", "no-isolate"], options: ["arms", "runs", "model", "budget", "plugin", "out", "disallowed-tools", "judge", "superpowers"], multi: ["task"] });
 	if (args._.length) throw new ConfigError(`unexpected argument ${args._[0]}`);
 	if (!args.task?.length) throw new ConfigError("--task is required");
 	if (!args.model) throw new ConfigError("--model is required");
@@ -55,10 +56,21 @@ export function parseOptions(argv) {
 	if (!Number.isInteger(runs) || runs < 1) throw new ConfigError(`--runs must be a positive integer, got "${args.runs}"`);
 	const plugin = path.resolve(args.plugin ?? repoRoot);
 	if (!fs.existsSync(path.join(plugin, ".claude-plugin", "plugin.json"))) throw new ConfigError(`--plugin ${plugin} has no .claude-plugin/plugin.json`);
+	let superpowers = null;
+	if (args.superpowers !== undefined) {
+		superpowers = path.resolve(args.superpowers);
+		const manifest = path.join(superpowers, ".claude-plugin", "plugin.json");
+		let name;
+		try {
+			name = JSON.parse(fs.readFileSync(manifest, "utf8")).name;
+		} catch {}
+		if (name !== "superpowers") throw new ConfigError(`--superpowers ${superpowers} is not a superpowers plugin (no .claude-plugin/plugin.json named superpowers)`);
+	}
+	if (arms.includes("full+superpowers") && !superpowers) throw new ConfigError("the full+superpowers arm needs --superpowers DIR");
 	const out = path.resolve(args.out ?? fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-ab-")));
 	if (out === plugin || out.startsWith(plugin + path.sep)) throw new ConfigError("--out must not be inside the plugin directory");
 	const disallowedTools = (args["disallowed-tools"] ?? "").split(",").map((t) => t.trim()).filter(Boolean);
-	return { tasks: [...new Set(args.task)], arms, runs, model: args.model, budget, plugin, out, isolate: !args["no-isolate"], dryRun: Boolean(args["dry-run"]), json: Boolean(args.json), disallowedTools, judge: args.judge ?? null };
+	return { tasks: [...new Set(args.task)], arms, runs, model: args.model, budget, plugin, out, isolate: !args["no-isolate"], dryRun: Boolean(args["dry-run"]), json: Boolean(args.json), disallowedTools, judge: args.judge ?? null, superpowers };
 }
 
 async function runOne({ opts, task, arm, n, pluginDir, claude, meta }) {
@@ -151,10 +163,11 @@ export async function main(argv) {
 		pluginDirty: git.dirty,
 		harnessVersion: harnessVersion(),
 		claudeVersion: opts.dryRun ? "dry-run (claude not called)" : claudeVersion(claude),
+		...(opts.superpowers && { superpowersDir: opts.superpowers, superpowersVersion: JSON.parse(fs.readFileSync(path.join(opts.superpowers, ".claude-plugin", "plugin.json"), "utf8")).version }),
 	};
 	const log = opts.json ? (s) => process.stderr.write(s + "\n") : (s) => console.log(s);
 	log(`out: ${opts.out}${opts.dryRun ? " (dry run)" : ""}`);
-	const armPlugins = Object.fromEntries(opts.arms.map((a) => [a, makeArmPlugin(a, opts.plugin, opts.out)]));
+	const armPlugins = Object.fromEntries(opts.arms.map((a) => [a, makeArmPlugin(a, opts.plugin, opts.out, { superpowers: opts.superpowers })]));
 	const rows = [];
 	for (let n = 1; n <= opts.runs; n++) {
 		for (const task of tasks) {

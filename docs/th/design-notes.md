@@ -460,6 +460,45 @@ harness ที่ใช้ในการทดสอบนี้เก็บแ
 
 **process ค้างบน Windows** process ที่คำสั่งทิ้งไว้ถูกหยุดบน Windows ด้วยแล้ว Windows ไม่มี process group และ `taskkill /T` เริ่มจาก parent ที่จบไปแล้วไม่ได้ verify จึงไล่ลงจาก id ของ parent ที่จบแล้วด้วย `Get-CimInstance` และหยุดเฉพาะ process ที่เริ่มหลังคำสั่ง id ที่ถูกนำกลับมาใช้จึงดึง process เก่าเข้ามาไม่ได้ เทสต์ว่า process ค้างหายไปแล้วตอนนี้รันบนทุก OS
 
+## SkillSpector ใน CI ของ repo นี้ ไม่ใช่ในโปรเจกต์ของผู้ใช้ (27 ต.ค. 2026)
+
+**คืออะไร** NVIDIA SkillSpector เป็นตัวสแกนความปลอดภัยแบบ static สำหรับ agent skill มี 71 รูปแบบใน 17 หมวด (prompt injection, การส่งข้อมูลออก, การยกระดับสิทธิ์, supply chain, MCP tool poisoning) ใช้ regex, YARA และ taint tracking และมีการรีวิวด้วย LLM เป็นทางเลือก ใช้ license Apache-2.0 และ Python 3.12 ขึ้นไป
+
+**ลองก่อน** เวอร์ชัน 2.12.0 ติดตั้งจาก repo ของ NVIDIA บน GitHub ลงใน virtual environment ที่ทิ้งได้ (ไม่ใช้ PyPI เพราะยืนยันไม่ได้ว่าชื่อแพ็กเกจนั้นเป็นของ NVIDIA) รันด้วย `--no-llm` กับ `skills/`, `agents/`, `hooks/` และ `scripts/hooks/` (`hooks/` มีแค่ `hooks.json` ส่วนโค้ดที่รันในเครื่องผู้ใช้อยู่ใน `scripts/hooks/`) ได้ 8 finding ตรวจกับบรรทัดที่ชี้ทีละข้อ เป็นผลบวกลวงทั้งหมด:
+
+| Finding | ที่ | สิ่งที่อยู่จริง |
+| --- | --- | --- |
+| TM1 tool parameter abuse, 3 | skill `debug` และ `verify` | `--skip-tests`, `--skip-checks`: flag ของ verify สำหรับระหว่างแก้ ซึ่ง Stop hook ไม่นับเป็นหลักฐาน |
+| TM1, 3 | `scripts/hooks/pre-bash.mjs` | `--no-verify`, `reset --hard`, `--force` ในข้อความของ hook ที่บล็อกหรือถามก่อนทำสิ่งเหล่านั้น |
+| AR2 anti-refusal | `agents/finding-verifier.md` | รูปแบบ output (JSON array ว่างเมื่ออ่าน diff ไม่ได้) ตัว scanner เองก็ติดป้ายว่าน่าจะไม่เป็นอันตราย |
+| EA4 unbounded consumption | `scripts/hooks/stop-verify.mjs` | คอมเมนต์ที่อธิบาย `MAX_BLOCKS` ซึ่งเป็นเพดานการวนของ Stop hook |
+
+โหมด static ยังตรวจ skill ได้แค่บางส่วน (ครบ 0%) และ hook script ได้ 45% การไม่มี finding จึงไม่ใช่หลักฐานว่าปลอดภัย
+
+**สิ่งที่นำมาใช้** job `skill-scan` ใน CI ของ repo นี้: SkillSpector ตรึงไว้ที่ commit ของ v2.12.0 ใช้ `--no-llm` (ไม่มีไฟล์ออกจาก runner และไม่ใช้ credential) สแกนแต่ละเป้าหมายแยกกันพร้อม baseline ใน `.github/skillspector/` ซึ่งทั้ง 8 ข้อมีเหตุผลตามข้างบน step ที่สแกนมี `continue-on-error` finding ใหม่จึงแสดงเป็นคำเตือนและ check ยังเขียว เมื่อลองใส่บรรทัดที่สั่ง agent ให้ส่ง `~/.ssh/id_rsa` และ credential ของ AWS ไปยัง URL ภายนอกลงใน skill ที่มี baseline ผลคือถูกรายงานเป็น finding ใหม่ baseline ซ่อนเฉพาะบรรทัดที่รู้จัก ไม่ได้ซ่อนทั้งไฟล์ `scripts/skill-scan.mjs` เก็บรายการเป้าหมาย CI และการรันในเครื่องจึงตรงกัน และเทสต์ใช้ scanner ปลอม `npm test` จึงไม่ต้องมี Python
+
+**สิ่งที่ไม่นำมาใช้** ไม่ใช่ด่านบังคับ: finding อยู่ระดับคำ แยกไม่ออกระหว่าง hook ที่บล็อก `--no-verify` กับ skill ที่รันมัน ใน repo ที่สร้างมาเพื่อกันการหลบเลี่ยง finding ส่วนใหญ่จึงจะเป็นผลบวกลวง ไม่ใส่ในโปรเจกต์ของผู้ใช้: เครื่องมือที่ vendor เป็น Node ที่ไม่มี dependency และงานของ Stack Agent คือโค้ดของโปรเจกต์เอง ไม่ใช่คัดกรอง skill ของคนอื่น (`out-of-scope.md` เรื่องเครื่องมือที่ต้องติดตั้ง) ไม่ใช้การรีวิวด้วย LLM: ต้องส่งเนื้อหาไฟล์ให้ผู้ให้บริการ มีค่าใช้จ่าย และผลไม่คงที่พอสำหรับ CI
+
+## ใช้คู่กับ obra/superpowers (27 ต.ค. 2026)
+
+หลายคนใช้ Stack Agent คู่กับ superpowers แต่ A/B ทุกรอบที่ผ่านมาตัด plugin อื่นออก ตอนนี้ฮาร์เนสมีแขน `full+superpowers` แล้ว: ส่ง plugin ทั้งสองโฟลเดอร์ให้ `claude` ระบุ superpowers ด้วย `--superpowers DIR` (บันทึกเวอร์ชันลงผล) นับว่าแยกถูกต้องเฉพาะเมื่อโหลดสอง plugin นี้เท่านั้น และทุกแขนตั้ง `SUPERPOWERS_DISABLE_TELEMETRY=1`
+
+**A/B** plugin ที่ `f0b3d8e` บวก job ของ SkillSpector และแขนนี้ที่ยังไม่ commit (ไม่มี skill หรือ hook เปลี่ยน) superpowers 7.0.0, Claude Code 2.1.310, Sonnet, ไม่เกิน $1 ต่อรอบ งานละ 3 รอบต่อแขน ใช้ได้ครบ 18 รอบ (ทุก transcript มีทั้งสอง plugin และ bootstrap ตอน SessionStart ของ superpowers) $2.45
+
+| Task | แขน | ถูก | verify แล้ว evidence ตรง | `checkDetects` | turn เฉลี่ย | ค่าใช้จ่ายเฉลี่ย |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bug-blank-name` | Stack Agent | 3/3 | 3/3 | 3/3 | 11.0 | $0.113 |
+| | + superpowers | 3/3 | 3/3 | 3/3 | 12.7 | $0.124 |
+| `bug-dup-count` | Stack Agent | 3/3 | 3/3 | 3/3 | 10.0 | $0.100 |
+| | + superpowers | 3/3 | 3/3 | 3/3 | 11.3 | $0.115 |
+| `endpoint` | Stack Agent | 3/3 (map, controller บาง, มีเทสต์) | 3/3 | - | 21.3 | $0.176 |
+| | + superpowers | 3/3 (เหมือนกัน) | 3/3 | - | 21.3 | $0.187 |
+
+- **ไม่ชนกันและไม่ได้ช่วยเพิ่มในงานเหล่านี้** ทุกรอบทั้งสองแขนแก้หรือสร้างถูก ผ่าน guard และ verify ด้วยหลักฐานที่สด Stop hook ไม่ต้องดึงกลับเลยสักครั้ง
+- **superpowers ไม่ถูกใช้เลย** ใน 9 รอบที่มี agent เรียก `stack-agent:debug` สำหรับรายงานบั๊ก และ `stack-agent:add-endpoint` สำหรับ endpoint ไม่อ่านไฟล์ของ superpowers และไม่เอ่ยชื่อ skill ใดของมัน ทั้งที่ bootstrap บอกให้เรียก skill แม้มีโอกาสแค่ 1% เมื่อมี skill ของ Stack Agent ที่ตรงกับงาน agent เลือกใช้ตัวนั้น
+- **ต้นทุน** bootstrap เพิ่มบริบทราว 2,200 โทเค็นในทุก request (cache creation 8,030 เทียบกับ 10,222 โทเค็นในงานเดียวกัน) เพิ่มราวหนึ่ง turn ในงานบั๊ก และใช้เงินมากขึ้น 9% ใน 9 รอบ ($1.28 เทียบกับ $1.17)
+- **ยังไม่ได้วัด:** งานที่ไม่มี skill ของ Stack Agent ตรง (refactor, ฟีเจอร์ที่ไม่มี endpoint, การวางแผน) ซึ่ง skill brainstorming และวางแผนของ superpowers อาจเริ่มทำงานและแย่งงบก่อนถึงขั้น verify รวมถึง model อื่น และมากกว่า 3 รอบต่อช่อง งานทั้งสามนี้เขียนมาเพื่อ skill ของ Stack Agent จึงได้เปรียบ
+
 ## บันทึกการตรวจงานตัวเอง
 
 หลังสร้างรอบแรก มีผู้ตรวจอิสระสองคน คนแรกหาบั๊กและทางเลี่ยง ส่วนอีกคนลองติดตั้งกับโปรเจคใหม่ตามเอกสาร ทั้งสองเจอปัญหาจริงประมาณ 15 ข้อ แก้แล้วทั้งหมด และทุกข้อมีเทสกันไม่ให้กลับมา ข้อหลักๆ คือ:
