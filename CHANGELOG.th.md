@@ -12,10 +12,11 @@
 
 - `feature-map-lookup` (ใหม่) แขนละ 2 รอบ: 1.00 เมื่อมี plugin เทียบกับเฉลี่ย 0.25 เมื่อไม่มี และมีแค่แขน plugin ที่อ่าน feature map ส่วน `verify-before-done` หลังแก้สกิล: 1.00 ทั้งสองแขน
 - A/B `init-library` (ใหม่) แขน plugin: ก่อนการเปลี่ยนเรื่องการติดตั้งด้านล่าง `init --check` ผ่าน 0 ใน 2 รอบ เพราะ session แบบ headless อนุมัติการแก้ guard config และ workflow ที่ป้องกันไว้ไม่ได้ หลังเปลี่ยนและเพิ่มคำแนะนำให้ใช้ Edit หรือ Write ผ่าน 3 ใน 3 รอบ แต่ละรอบมีกฎ guard ของตัวเองและเช็กจริง รายละเอียดและข้อควรระวัง: design notes วันที่ 26 ต.ค. 2026 (รอบหลัง)
-- `npm test`: 506 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
+- `npm test`: 510 เทสต์ ผ่านทั้งหมดบน Windows (Node 26) และ Linux (Node 22, WSL2)
 
 ### แก้ไข
 
+- ช่องเลี่ยง guard เพิ่มเติม ที่หาเจอโดยลองกับ git จริง (แต่ละแบบ commit ผ่าน pre-commit hook ที่ fail ได้ ขณะที่ hook ของ shell ปล่อยผ่าน): `GIT_CONFIG_PARAMETERS` และ `GIT_CONFIG_KEY_<n>` ที่ตั้ง `core.hooksPath`, alias ที่รัน `commit --no-verify` (ตั้งด้วย `-c` หรือ `git config`), `export HUSKY=0` และการลบหรือแทนที่ไฟล์ใน `.git/hooks` ทั้งจาก shell และ Edit/Write สามแบบแรกปฏิเสธ ส่วนการแก้ `.git/hooks` จะถาม เฉพาะในโปรเจกต์ที่ติดตั้ง Stack Agent ส่วน `.husky/` ถูก commit และรีวิวอยู่แล้วจึงไม่แตะ นอกจากนี้ tokenizer ของคำสั่งเคยแยก `key="two words"` เป็นสอง token ซึ่ง shell จริงไม่ทำ ทำให้รูปแบบ alias หลุด ตอนนี้ถือว่า word คือชุดของตัวอักษรทั่วไปกับส่วนที่อยู่ในเครื่องหมายคำพูดต่อกัน
 - ช่องเลี่ยง guard: hook ของ shell ปล่อย `git commit --no-verif` (git รับรูปย่อของ option ยาวที่ไม่กำกวม), `git --config-env=core.hooksPath=VAR commit` และ `git config core.hooksPath x` ผ่านไป ตอนนี้ปฏิเสธทั้งสามแบบ และด่าน git อื่นก็จับรูปย่อด้วย (`push --de`, `push --m`, `reset --k`, `clean --f`)
 - hook หลังแก้ไฟล์และหลังคำสั่ง shell, guard ของ Stop hook และ `guard.mjs --files` ไม่ใช้รายการ `ignore` ของ config และโฟลเดอร์ที่ข้ามเป็นค่าเริ่มต้น ซึ่งการสแกนทั้งโปรเจกต์ของ CI ใช้ ไฟล์ fixture หรือไฟล์ที่ generate จึงถูกโทษในเครื่องแต่ผ่านใน CI
 - guard หลังคำสั่ง shell (ใหม่ใน 0.5.0): โทษคำสั่งแรกสำหรับไฟล์ `.md` หรือ `docs/` ที่แก้ค้างไว้ก่อนเริ่ม session เพราะบันทึกของ session ตัดไฟล์พวกนี้ออก ไฟล์ที่เปลี่ยนแต่อ่านไม่ได้ไฟล์เดียวทำให้ไม่ตรวจอะไรเลยไปตลอด session hook แก้ไฟล์ที่รันพร้อมกันทำข้อมูลของกันและกันหาย การผิดกฎจึงอาจถูกรายงานซ้ำ และคำสั่งที่รันจากระดับบนสุดของ monorepo ไปไม่ถึงโปรเจกต์ใดเลย guard ของ Stop hook ก็มองไม่เห็นไฟล์ `.md` แบบเดียวกัน
@@ -27,7 +28,7 @@
 
 - บันทึกในเอกสารสิ่งที่โค้ดรองรับอยู่แล้ว: `--config` และ `--json` ของ verify, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, `timeoutSec` ของ HTTP check, `type` และค่าเริ่มต้นของ `evidenceDir`, ส่วนของ guard คือ `baseline`, `--files`, `--strict`, `--json`, `--config` และ `pythonRoots`, ของ api-map คือ `--config`, `--json` และ `verifyConfig`, ของ feature-map คือ `--map` และ `--json`, ของ review-findings คือ `--stage` และ `rows --date` และ `--disallowed-tools` ของ A/B harness
 - eval case `feature-map-lookup` (บนตัวอย่าง library) และ A/B task `init-library` (ติดตั้ง Stack Agent จากศูนย์ผ่านสกิล) `evals/scaffold.mjs` รับชื่อตัวอย่างที่จะคัดลอก และ `run-evals` บอกว่าแต่ละสกิลวัดผลอย่างไร และทำไม `mine-corrections` จึงไม่ได้วัด
-- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 506 เทสต์)
+- เทสต์สำหรับพฤติกรรมที่ยังไม่มีเทสต์: ด่าน git, error ของ config ใน verify, guard และ api-map, เหตุผลที่ขั้น against ข้าม, `against.setup` และ `against.keep`, กรณีล้มเหลวของ HTTP, ขีดจำกัด output, option ของ feature-map และ api-map และ helper ของ A/B harness (จาก 464 เป็น 510 เทสต์)
 
 ### เปลี่ยน
 

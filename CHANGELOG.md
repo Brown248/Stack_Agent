@@ -12,10 +12,11 @@ From a detailed review of 0.5.0 (four agents reading the code independently, and
 
 - `feature-map-lookup` (new), 2 runs per arm: 1.00 with the plugin against a mean of 0.25 without; only the plugin arm read the feature map. `verify-before-done` after its skill edit: 1.00 in both arms.
 - A/B `init-library` (new), plugin arm: before the setup change below, `init --check` passed in 0 of 2 runs, because a headless session cannot approve edits to the protected guard config and workflow; after it, and the hint to use Edit or Write, in 3 of 3, each with its own guard rules and real checks. Details and caveats: design notes, 2026-10-26 (later).
-- `npm test`: 506 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
+- `npm test`: 510 tests, all passing on Windows (Node 26) and Linux (Node 22, WSL2).
 
 ### Fixed
 
+- More ways around the guard, found by trying them against real git (each committed past a failing pre-commit hook while the shell hook let it through): `GIT_CONFIG_PARAMETERS` and `GIT_CONFIG_KEY_<n>` setting `core.hooksPath`, an alias that runs `commit --no-verify` (set with `-c` or `git config`), `export HUSKY=0`, and deleting or replacing a file in `.git/hooks`, from the shell or Edit/Write. The first three are denied; a change to `.git/hooks` asks, in Stack Agent projects only. `.husky/` is committed and reviewed, so it is left alone. The command tokenizer split `key="two words"` into two tokens, as it would not in a shell, which hid the alias form; a word is now any run of plain and quoted pieces.
 - Ways around the guard: the shell hook let through `git commit --no-verif` (git takes any unambiguous prefix of a long option), `git --config-env=core.hooksPath=VAR commit`, and `git config core.hooksPath x`. All three are denied now, and the other git gates match abbreviations too (`push --de`, `push --m`, `reset --k`, `clean --f`).
 - The after-edit and after-shell hooks, the Stop hook's guard, and `guard.mjs --files` did not apply the config's `ignore` list or the default skipped folders, which CI's full scan does, so a fixture or generated file was blamed locally and passed in CI.
 - The after-shell guard (new in 0.5.0): it blamed the first command for a `.md` or `docs/` file left dirty before the session, because the session record left those out; one unreadable changed file made it check nothing for the rest of the session; edit hooks running at the same time lost each other's entries, so a violation could be reported twice; and a command run from the top of a monorepo reached no project. The Stop hook's guard had the same blind spot for `.md` files.
@@ -27,7 +28,7 @@ From a detailed review of 0.5.0 (four agents reading the code independently, and
 
 - Documented what the code already accepted: verify's `--config` and `--json`, `test.cwd`, `test.env`, `test.timeoutSec`, `server.readyTimeoutSec`, the HTTP check `timeoutSec`, `type`, and the `evidenceDir` default; the guard's `baseline`, `--files`, `--strict`, `--json`, `--config`, and `pythonRoots`; api-map's `--config`, `--json`, and `verifyConfig`; feature-map's `--map` and `--json`; review-findings' `--stage` and `rows --date`; and the A/B harness's `--disallowed-tools`.
 - Eval case `feature-map-lookup` (on the library example) and A/B task `init-library` (Stack Agent set up from scratch through the skill). `evals/scaffold.mjs` takes the example to copy. `run-evals` says how each skill is measured, and why `mine-corrections` is not.
-- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 506 tests).
+- Tests for behavior that had none: the git gates, config errors in verify, guard, and api-map, the against step's skip reasons, `against.setup` and `against.keep`, HTTP failure modes, the output limit, the feature-map and api-map options, and the A/B harness helpers (464 to 510 tests).
 
 ### Changed
 

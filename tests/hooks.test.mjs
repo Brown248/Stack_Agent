@@ -518,3 +518,66 @@ test("a shell write to the guard config or workflow still asks, and points setup
 	assert.equal(baseline?.decision, "ask");
 	assert.doesNotMatch(baseline.reason, hint, "the baseline is never a template");
 });
+
+test("pre-bash denies the other ways git is told to skip its hooks: GIT_CONFIG_* env, exported hook-disabling env, and aliases", () => {
+	for (const cmd of [
+		"GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null git commit -m x",
+		'GIT_CONFIG_PARAMETERS="core.hookspath=/dev/null" git commit -m x',
+		"export GIT_CONFIG_PARAMETERS=core.hookspath=/dev/null; git commit -m x",
+		"export HUSKY=0; git commit -m x",
+		'git -c alias.ci="commit --no-verify" ci -m x',
+		'git -c alias.c="commit -n" c',
+		'git config alias.ci "commit --no-verify"',
+		'git config alias.pushit "push --no-verify"',
+	])
+		assert.equal(classify(cmd)?.decision, "deny", cmd);
+});
+
+test("pre-bash asks before the repo's local git hooks are changed, and leaves reading them and .husky alone", () => {
+	for (const cmd of ["echo exit 0 > .git/hooks/pre-commit", "chmod -x .git/hooks/pre-commit", "rm .git/hooks/pre-commit", "mv .git/hooks .git/h", `node -e "require('fs').writeFileSync('.git/hooks/pre-commit','exit 0')"`]) {
+		const r = classify(cmd);
+		assert.equal(r?.decision, "ask", cmd);
+		assert.match(r.reason, /local git hooks/);
+	}
+	// outside a Stack Agent project the repo's gates are not Stack Agent's business
+	assert.equal(classify("rm .git/hooks/pre-commit", 0, () => null, { inProject: false }), null);
+});
+
+test("pre-bash does not ask about ordinary commands, also with quoted values glued to a name", () => {
+	for (const cmd of [
+		"cat .git/hooks/pre-commit",
+		"ls .git/hooks",
+		"git status",
+		"git log -n 5 --oneline",
+		'git commit -m "fix: the --no-verify docs" ',
+		"git commit -m 'msg with -n inside'",
+		'git config alias.st status',
+		'git config alias.lg "log -n 5"',
+		'git -c user.name="Ada Lovelace" commit -m x',
+		'git -c color.ui="always" diff',
+		"HUSKY=0 npm test",
+		"export PATH=$PATH:/x",
+		"export NODE_ENV=production",
+		"sed -i s/a/b/ .husky/pre-commit",
+		"ls .github/hooks-docs",
+		'echo "a b" > out.txt',
+		"npm run build && git add -A",
+		'FOO="a b" node script.js',
+	])
+		assert.equal(classify(cmd), null, cmd);
+});
+
+test("pre-edit-protect asks before Edit/Write changes a local git hook, in a Stack Agent project only", () => {
+	const script = hook("pre-edit-protect.mjs");
+	const decision = (cwd, file) => {
+		const out = runNode(script, [], { input: hookInput({ tool_name: "Write", cwd, tool_input: { file_path: file } }) }).stdout;
+		return out ? JSON.parse(out).hookSpecificOutput.permissionDecision : "allow";
+	};
+	const dir = copySample();
+	git(dir, "init", "-q");
+	assert.equal(decision(dir, ".git/hooks/pre-commit"), "ask");
+	assert.equal(decision(dir, path.join(dir, ".git", "hooks", "commit-msg")), "ask");
+	assert.equal(decision(dir, "src/app.js"), "allow");
+	assert.equal(decision(dir, ".husky/pre-commit"), "allow", ".husky is committed and reviewed");
+	assert.equal(decision(tempDir("stack-agent-nohooks-"), ".git/hooks/pre-commit"), "allow", "not a Stack Agent project");
+});
