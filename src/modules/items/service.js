@@ -9,3 +9,7 @@ export function createItem(input) {
 export function getItems() {
 	return listItems();
 }
+
+export function itemCount() {
+	return listItems().length;
+}
