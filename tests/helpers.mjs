@@ -93,8 +93,8 @@ export function usePort(dir, port) {
 	fs.writeFileSync(file, text);
 }
 
-export function runNode(script, args = [], { cwd, input } = {}) {
-	const r = spawnSync(process.execPath, [script, ...args], { cwd, input, encoding: "utf8" });
+export function runNode(script, args = [], { cwd, input, env } = {}) {
+	const r = spawnSync(process.execPath, [script, ...args], { cwd, input, encoding: "utf8", ...(env ? { env: { ...process.env, ...env } } : {}) });
 	return { code: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 

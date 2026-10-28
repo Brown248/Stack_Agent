@@ -4,10 +4,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { outdatedTools, pluginVersion } from "../init.mjs";
+import { t } from "../lib/messages.mjs";
 
 const initScript = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "init.mjs");
 
-export function toolsMessage(root) {
+export function toolsMessage(root, lang = "en") {
 	try {
 		if (!fs.existsSync(path.join(root, ".stack-agent/bin"))) return null;
 		const outdated = outdatedTools(root);
@@ -17,11 +18,7 @@ export function toolsMessage(root) {
 			vendored = fs.readFileSync(path.join(root, ".stack-agent/bin/VERSION"), "utf8").trim() || vendored;
 		} catch {}
 		const shown = outdated.slice(0, 4).join(", ") + (outdated.length > 4 ? ", ..." : "");
-		return (
-			`stack-agent: the tools in .stack-agent/bin (version ${vendored}) differ from this plugin's copy (version ${pluginVersion()}): ${shown}. ` +
-			`The hooks run the plugin's copy and CI runs .stack-agent/bin, so they can judge the same code differently. ` +
-			`Refresh them with \`node "${initScript}" "${root}"\` (it rewrites only the tools) and commit the result.`
-		);
+		return t(lang, "tools.differ", { vendored, plugin: pluginVersion(), shown, initScript, root });
 	} catch {
 		return null;
 	}

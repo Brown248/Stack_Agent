@@ -114,6 +114,10 @@ By default (`"stopHook": "block"`) the Stop hook keeps the agent from finishing 
 - Likewise, when the evidence matches the code but the code changed and no check or test is new or changed (the against step then has nothing to run and records `noNewCoverage`), the hook blocks once and asks for a test or check that fails without the change, or for the agent to say that nothing a user can observe changed. Changes only to files the fingerprint ignores (docs, `*.md`) are not flagged. Found in the `job-new-export` A/B runs, where one agent per round changed the code, wrote no test, verified, and stopped.
 - `"stopHook": "remind"` restores the earlier behavior: one reminder per change set, then the agent may stop.
 
+### Messages in Thai
+
+The hooks speak English. To have the messages a person reads, and the agent's replies, in plain Thai, set `"language": "th"` in `.stack-agent/verify.json` or `STACK_AGENT_LANG=th` in the environment (the environment wins; `"en"` switches back; anything else is English). It changes three things: the notice at session start that the vendored tools differ from the plugin's, the message when the Stop hook lets the agent go after its reminders ran out or after it said it could not verify, and a note added to the agent's context saying the reader prefers short plain Thai. It does not change what the agent is told when it is blocked, the guard's messages, the evidence files, or verify's output, so nothing depends on the language. The setting is read by the hooks that ship with the plugin, so a project needs no `init` rerun to use it. Thai text costs about twice the tokens of the same English text, which is why it is opt-in.
+
 ## 2. Guard
 
 Put the 3 to 5 rules that must never break in `.stack-agent/guard.config.json`. Each needs a `message` and a `fix` that names what to use instead. Keep the two universal rules. Delete or adapt template rules that do not fit your layout. The guard warns `rule ... matches no files` for those.
