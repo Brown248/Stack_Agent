@@ -182,6 +182,17 @@ test("the tag reaches the shell through an environment variable, never pasted in
 	assert.match(text, /TAG: \$\{\{ inputs\.tag \|\| github\.ref_name \}\}/);
 });
 
+// The first manual dry run on Actions (against v0.5.3) failed: the workflow checked out the tag, an old commit that does
+// not have scripts/release-notes.mjs. It runs the workflow's own checkout and reads the tag's files with --ref.
+test("the workflow checks out its own commit, not the tag, and reads the tag's files with --ref, so an old tag can be checked", () => {
+	const text = workflow();
+	assert.doesNotMatch(text, /^ {10}ref: /m, "no checkout of the tag");
+	const runs = text.split("\n").filter((l) => /node scripts\/release-notes\.mjs/.test(l) || /args\+=\(/.test(l));
+	assert.ok(runs.length >= 2);
+	assert.match(text, /args\+=\(--ref "\$TAG" --tag "\$TAG"\)/, "the check job gives --ref in a run for a tag");
+	assert.match(text, /node scripts\/release-notes\.mjs --ref "\$TAG" --tag "\$TAG" /, "the publish job too");
+});
+
 test("the workflow publishes only for a pushed tag or a manual run that is not a dry run, with --verify-tag", () => {
 	const text = workflow();
 	assert.match(text, /if: github\.event_name == 'push' \|\| \(github\.event_name == 'workflow_dispatch' && inputs\.dry_run == false\)/);
