@@ -301,6 +301,12 @@ claude plugin validate . --strict
 
 กติกาสำหรับการทำงานกับ repo นี้อยู่ใน [.claude/CLAUDE.md](.claude/CLAUDE.md)
 
+วิธีออกรุ่น: ใน pull request ให้เปลี่ยน `version` ใน `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` และ `package.json` และเปลี่ยนหัวข้อบนสุดของ changelog ทั้งสองภาษาเป็นเวอร์ชันนั้น (มีขั้นตรวจใน `.github/workflows/release.yml` รันบน pull request และบอกว่าอะไรไม่ตรง) พอ merge แล้วให้ push tag workflow เดียวกันจะตรวจ tag เทียบกับไฟล์เหล่านั้นแล้วสร้าง GitHub Release จากหัวข้อใน changelog และติดป้าย Latest เฉพาะรุ่นที่เลขสูงสุด
+
+```bash
+git tag -a vX.Y.Z -m "Stack Agent X.Y.Z" && git push origin vX.Y.Z
+```
+
 ## สัญญาอนุญาต
 
 [MIT](LICENSE)

@@ -302,6 +302,12 @@ claude plugin validate . --strict
 
 Rules for working on this repo are in [.claude/CLAUDE.md](.claude/CLAUDE.md).
 
+To release: in a pull request, bump `version` in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `package.json`, and retitle the top section of both changelogs to that version (a check in `.github/workflows/release.yml` runs on the pull request and says what is off). After it is merged, push the tag. The same workflow then checks the tag against those files and creates the GitHub Release from the changelog section, marked Latest only if it is the highest version.
+
+```bash
+git tag -a vX.Y.Z -m "Stack Agent X.Y.Z" && git push origin vX.Y.Z
+```
+
 ## License
 
 [MIT](LICENSE)

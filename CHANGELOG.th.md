@@ -1,8 +1,14 @@
 # บันทึกการเปลี่ยนแปลง
 
-สิ่งที่เปลี่ยนในแต่ละรุ่นของ Stack Agent เวลาออกรุ่นใหม่ ให้เปลี่ยน `version` ใน `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` และ `package.json` พร้อมกัน แล้วเพิ่มหัวข้อในไฟล์นี้
+สิ่งที่เปลี่ยนในแต่ละรุ่นของ Stack Agent เวลาออกรุ่นใหม่ ให้เปลี่ยน `version` ใน `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` และ `package.json` พร้อมกัน แล้วเพิ่มหัวข้อในไฟล์นี้ พอ push tag `vX.Y.Z` GitHub Release จะถูกสร้างจากหัวข้อนั้น (`.github/workflows/release.yml`)
 
 [English](CHANGELOG.md)
+
+## ยังไม่ออกรุ่น
+
+### เพิ่ม
+
+- ออกรุ่นด้วยการ push tag: `.github/workflows/release.yml` ตรวจ tag เทียบกับเวอร์ชันใน `plugin.json`, `marketplace.json` และ `package.json` และเทียบกับหัวข้อบนสุดของ changelog ทั้งสองภาษา (`scripts/release-notes.mjs` ซึ่งบอกทุกข้อที่ไม่ตรง) แล้วสร้าง GitHub Release จากหัวข้อใน changelog พร้อมลิงก์ไปฉบับภาษาไทย หรืออัปเดตถ้ามีอยู่แล้ว ติดป้าย Latest เฉพาะเมื่อ tag คือรุ่นที่เลขสูงสุด และ tag ที่มีส่วนต่อท้ายด้วย `-` เป็น pre-release การตรวจรันบน pull request ที่แตะไฟล์เวอร์ชันหรือ changelog ด้วย จะได้เห็นข้อผิดพลาดก่อนสร้าง tag และรันด้วยมือได้โดยค่าเริ่มต้นเป็นแบบไม่เผยแพร่ มีเฉพาะงาน publish ที่เขียนได้ เมื่อรันสคริปต์กับ v0.5.1, v0.5.2 และ v0.5.3 ได้โน้ตและชื่อตรงกับ Release ที่ทำด้วยมือ (ไม่นับบรรทัดว่าง) และติดป้าย Latest เฉพาะ v0.5.3 เป็นเครื่องมือของ repo นี้เอง สิ่งที่โปรเจกต์ติดตั้งไม่เปลี่ยน
 
 ## 0.5.3 (2026-10-27)
 
