@@ -4,6 +4,7 @@
 // Never throws: a hook must not fail or deny because this bookkeeping could not run.
 import path from "node:path";
 import { VERIFY_CONFIG } from "../lib/fingerprint.mjs";
+import { languageFor } from "../lib/messages.mjs";
 import { loadConfig } from "../guard.mjs";
 import { evidenceGuard, sharedRulesGuard } from "./protected-paths.mjs";
 
@@ -19,12 +20,20 @@ import { findUp } from "./read-input.mjs";
 import { ensureSessionRecord, readConfig, readStart } from "./session-record.mjs";
 
 const none = Object.assign(() => null, { mentions: () => null });
+// the language for what a person reads: the environment, else verify.json, else English; never throws
+const langOf = (root) => {
+	try {
+		return languageFor(root ? readConfig(root) : null);
+	} catch {
+		return "en";
+	}
+};
 
 export function projectContext(input, startDir) {
 	const cwd = input.cwd ?? process.cwd();
 	try {
 		const root = findUp(startDir ?? cwd, VERIFY_CONFIG) ?? (startDir ? findUp(cwd, VERIFY_CONFIG) : null);
-		if (!root) return { guard: none, record: () => null };
+		if (!root) return { guard: none, record: () => null, lang: langOf(null) };
 		const start = readStart(root, input.session_id);
 		const evidence = evidenceGuard(root, cwd, [start?.evidenceDir, readConfig(root).evidenceDir]);
 		const shared = sharedRulesGuard(cwd, sharedRuleFiles(root));
@@ -38,9 +47,9 @@ export function projectContext(input, startDir) {
 				return null;
 			}
 		};
-		return { root, guard, record };
+		return { root, guard, record, lang: langOf(root) };
 	} catch {
-		return { guard: none, record: () => null };
+		return { guard: none, record: () => null, lang: langOf(null) };
 	}
 }
 

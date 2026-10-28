@@ -45,7 +45,7 @@ test("a case needs prompt, score, better, and a control with no guidance", async
 	await assert.rejects(loadCase("no-such-case"), /no scripts[\\/]micro[\\/]cases[\\/]no-such-case\.mjs/);
 	const c = await loadCase("import-request");
 	assert.equal(c.variants[CONTROL], null);
-	assert.deepEqual(pickVariants(c, null), ["control", "before-4af59f0", "current"]);
+	assert.deepEqual(pickVariants(c, null), ["control", "before-4af59f0", "current", "current-th"]);
 	assert.deepEqual(pickVariants(c, ["current"]), ["control", "current"], "the control always runs");
 	assert.throws(() => pickVariants(c, ["nope"]), /--variant: nope not in case import-request/);
 	const good = { prompt: () => "p", score: () => 1, better: "higher", variants: { control: null, a: "say a" } };
@@ -133,16 +133,16 @@ test("--dry-run prints each prompt and the most it can cost, and never calls cla
 	const r = run(["--case", "import-request", "--model", "sonnet", "--budget", "0.05", "--runs", "4", "--dry-run", "--json"], { CLAUDE_BIN: path.join(tempDir(), "does-not-exist.exe") });
 	assert.equal(r.status, 0, r.stderr);
 	const out = JSON.parse(r.stdout);
-	assert.equal(out.calls, 12);
-	assert.ok(Math.abs(out.maxCost - 0.6) < 1e-9, String(out.maxCost));
-	assert.deepEqual(Object.keys(out.prompts), ["control", "before-4af59f0", "current"]);
-	assert.match(r.stderr, /12 calls, at most \$0\.60 \(dry run\)/);
+	assert.equal(out.calls, 16);
+	assert.ok(Math.abs(out.maxCost - 0.8) < 1e-9, String(out.maxCost));
+	assert.deepEqual(Object.keys(out.prompts), ["control", "before-4af59f0", "current", "current-th"]);
+	assert.match(r.stderr, /16 calls, at most \$0\.80 \(dry run\)/);
 });
 
 test("end to end with a fake claude: rounds across variants, an empty folder per call, results saved and summarized", () => {
 	const fake = fakeClaude();
 	const out = path.join(tempDir(), "out");
-	const r = run(["--case", "import-request", "--model", "sonnet", "--budget", "0.05", "--runs", "2", "--out", out], { CLAUDE_BIN: fake.bin });
+	const r = run(["--case", "import-request", "--model", "sonnet", "--budget", "0.05", "--runs", "2", "--variant", "before-4af59f0", "--variant", "current", "--out", out], { CLAUDE_BIN: fake.bin });
 	assert.equal(r.status, 0, r.stderr + r.stdout);
 	const calls = fake.calls();
 	assert.equal(calls.length, 6);

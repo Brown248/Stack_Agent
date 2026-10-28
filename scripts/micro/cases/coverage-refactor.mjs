@@ -9,6 +9,7 @@ export default {
 	variants: {
 		control: null,
 		current: coverageMessage(["src/modules/items/service.js"]).trim(),
+		"current-th": coverageMessage(["src/modules/items/service.js"], "th").trim(),
 	},
 	prompt: (guidance) =>
 		[
@@ -21,5 +22,5 @@ export default {
 			.filter(Boolean)
 			.join("\n\n"),
 	// says it is a refactor with nothing observable changed, and shows no new test or check
-	score: (text) => /refactor|no (user-)?(visible|observable)|behavior (is |stays )?(the same|unchanged)|nothing a user can (see|observe)/i.test(text) && !/```(js|javascript|json)?\s*\n[\s\S]*?(test\(|it\(|"args"\s*:|"request"\s*:)/.test(text),
+	score: (text) => /refactor|no (user-)?(visible|observable)|behavior (is |stays )?(the same|unchanged)|nothing a user can (see|observe)|รีแฟคเตอร์|ผู้ใช้(มองเห็น|เห็น|สังเกต)ได้.{0,12}(ไม่เปลี่ยน|ไม่มี)|พฤติกรรม(เหมือนเดิม|ไม่เปลี่ยน)/i.test(text) && !/```(js|javascript|json)?\s*\n[\s\S]*?(test\(|it\(|"args"\s*:|"request"\s*:)/.test(text),
 };

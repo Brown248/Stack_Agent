@@ -1,0 +1,107 @@
+{
+ "git -c core.hooksPath=/dev/null commit -m x": {
+  "decision": "deny",
+  "reason": "blocked: overriding core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead."
+ },
+ "git -c alias.ci='commit --no-verify' ci": {
+  "decision": "deny",
+  "reason": "blocked: this git alias commits or pushes without the repo's git hooks, which skips the guard and checks. Fix what the hook reports instead."
+ },
+ "git config core.hooksPath /tmp/h": {
+  "decision": "deny",
+  "reason": "blocked: setting core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead."
+ },
+ "HUSKY=0 git commit -m x": {
+  "decision": "deny",
+  "reason": "blocked: `HUSKY=0` turns off the repo's git hooks for this `git commit`. Fix what the hook reports instead."
+ },
+ "git commit --no-verify -m x": {
+  "decision": "deny",
+  "reason": "blocked: `git commit --no-verify` skips the repo's guard and checks. Fix what the hook reports instead."
+ },
+ "git commit -n -m x": {
+  "decision": "deny",
+  "reason": "blocked: `git commit -n` is --no-verify and skips the repo's guard and checks. Fix what the hook reports instead."
+ },
+ "export GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/x'\"": {
+  "decision": "deny",
+  "reason": "blocked: setting core.hooksPath through GIT_CONFIG_* turns off the repo's git hooks and guard. Fix what the hook reports instead."
+ },
+ "export HUSKY=0": {
+  "decision": "deny",
+  "reason": "blocked: `export HUSKY=0` turns off the repo's git hooks for every later command. Fix what the hook reports instead."
+ },
+ "git push --force origin main": {
+  "decision": "ask",
+  "reason": "force-push rewrites shared history and cannot be undone for others. A human must approve it."
+ },
+ "git push origin :old-branch": {
+  "decision": "ask",
+  "reason": "this push deletes a remote branch or tag. A human must approve it."
+ },
+ "git reset --hard HEAD~1": {
+  "decision": "ask",
+  "reason": "`git reset --hard` discards uncommitted work permanently. A human must approve it."
+ },
+ "git clean -fd": {
+  "decision": "ask",
+  "reason": "`git clean -f` deletes untracked files permanently. A human must approve it."
+ },
+ "git checkout .": {
+  "decision": "ask",
+  "reason": "this discards local changes to every file permanently. A human must approve it."
+ },
+ "git branch -D old": {
+  "decision": "ask",
+  "reason": "`git branch -D` deletes a branch even when its commits are not merged anywhere, which can lose work. A human must approve it."
+ },
+ "git branch -f main HEAD~1": {
+  "decision": "ask",
+  "reason": "`git branch` with a force flag points an existing branch at other commits; its old commits are then reachable only through the reflog. A human must approve it."
+ },
+ "git stash drop": {
+  "decision": "ask",
+  "reason": "this deletes stashed work permanently. A human must approve it."
+ },
+ "node .stack-agent/bin/guard.mjs --allow-increase": {
+  "decision": "ask",
+  "reason": "`--allow-increase` raises the guard baseline and accepts new rule violations. A human must approve it."
+ },
+ "chmod +x .git/hooks/pre-commit": {
+  "decision": "ask",
+  "reason": "this changes the repo's local git hooks (.git/hooks). They are the gate that runs the guard before a commit, and a change there is in no diff. A human must approve it."
+ },
+ "rm -rf .github/workflows": {
+  "decision": "ask",
+  "reason": "this deletes the folder holding the Stack Agent CI workflow, the check that still holds when the hooks do not. A human must approve it."
+ },
+ "echo x > .stack-agent/guard.config.json": {
+  "decision": "ask",
+  "reason": "this changes the guard rules. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead. If you are filling in the template init just wrote (it still has EDIT ME and is not committed), use the Edit or Write tool instead: those do not ask for it."
+ },
+ "echo x > .stack-agent/guard-baseline.json": {
+  "decision": "ask",
+  "reason": "this changes the guard baseline. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead."
+ },
+ "sed -i s/a/b/ .stack-agent/bin/verify.mjs": {
+  "decision": "ask",
+  "reason": "this changes the vendored Stack Agent tools. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead."
+ },
+ "echo x > .github/workflows/stack-agent.yml": {
+  "decision": "ask",
+  "reason": "this changes the Stack Agent CI workflow. That controls what the guard enforces, and loosening it is how a rule gets bypassed, so a human must approve it. To fix a violation, change the code instead. If you are filling in the template init just wrote (it still has EDIT ME and is not committed), use the Edit or Write tool instead: those do not ask for it."
+ },
+ "echo {} > .stack-agent/evidence/latest.json": {
+  "decision": "ask",
+  "reason": "this writes the verify evidence by hand. Only verify.mjs writes it (run it, or use verify.mjs --skip \"<reason>\"), so a hand-written one would claim a verification that did not happen; a human must approve it."
+ },
+ "echo {} > .stack-agent/verify-skip.json": {
+  "decision": "ask",
+  "reason": "this writes the verify skip record by hand. Only verify.mjs writes it (run it, or use verify.mjs --skip \"<reason>\"), so a hand-written one would claim a verification that did not happen; a human must approve it."
+ },
+ "echo x > .stack-agent/evidence/sessions/s1.start.json": {
+  "decision": "ask",
+  "reason": "this writes the Stop hook's session record by hand. Only verify.mjs writes it (run it, or use verify.mjs --skip \"<reason>\"), so a hand-written one would claim a verification that did not happen; a human must approve it."
+ },
+ "echo x > .stack-agent/notes.txt": null
+}

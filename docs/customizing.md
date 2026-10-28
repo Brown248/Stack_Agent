@@ -195,3 +195,30 @@ npm run micro -- --case import-request --model sonnet --budget 0.05 --runs 5 --d
 **Cost.** At most runs × variants × budget, printed before the first call. Each call runs in a new empty folder with `--tools ""`, `--no-session-persistence`, `--setting-sources project,local`, and `--strict-mcp-config`, so only the prompt reaches the model. Calls go in rounds (every variant once, then again), so a drift during the run hits every variant alike. The summary shows the mean, the lowest and highest score, the errors, and the mean cost per variant; a failed call counts as an error, never as a score of 0.
 
 **Add a case.** Drop `scripts/micro/cases/<name>.mjs` with a default export: `variants` (`control: null` plus one entry per wording), `prompt(guidance)` (the scenario, with the wording when it is not `null`), `score(text)` (a number, or a boolean counted as 1 or 0), `better` (`"higher"` or `"lower"`), and a `description`. Import the text under test from the code that sends it, as `import-request` does with the Stop hook's `importMessage`, so the case measures what ships. A micro-test answers whether a wording changes what the model says it will do; whether the agent then does it in a real session is still a question for an A/B run.
+
+## Tuning a wording (propose, never apply)
+
+`scripts/micro/tune.mjs` searches for a better wording of one message, so you do not have to rewrite it by hand and measure each try. It never edits a file in the repo: when it finds a better wording it writes it to `proposed.txt` and you copy it into the code yourself.
+
+```bash
+npm run tune -- --case import-request --budget 10 --dry-run
+```
+
+A strong model (opus) writes rewrites of the wording; a cheap one (haiku) screens them on the case's learning scenarios; the best survivor is then measured on the model people run (sonnet) against the original wording and against no guidance at all, on every scenario including one it never learned from. A wording is proposed only if it beats the original with one-sided Fisher p < 0.05 over all scenarios pooled **and** holds on the scenario held back (no worse than the original there, and either better or the original was already at 90% or more). Otherwise the verdict is `not adopted`, `no better wording found`, or `unfinished` (a call kept failing, or the budget ran out), with the counts reached so far.
+
+| Option | Meaning |
+| --- | --- |
+| `--case NAME` | Case in `scripts/micro/cases/` with at least two `scenarios`. Required. |
+| `--budget USD` | The most to spend in all. The run stops and says so before a call that could pass it. Required. |
+| `--variant NAME` | The wording to improve. Default `current`. |
+| `--rounds N`, `--candidates N` | Propose-and-screen rounds (default 2) and rewrites asked for in each (default 4). |
+| `--screen-runs N`, `--confirm-runs N` | Calls per wording and learning scenario in the cheap stage (default 3), and per arm and scenario in the last (default 30, 4 to 100). |
+| `--propose-model`, `--screen-model`, `--confirm-model` | Default opus, haiku, sonnet. Confirm on the model people run. |
+| `--call-budget USD` | `--max-budget-usd` for each call. Default 0.3. |
+| `--out DIR`, `--json`, `--dry-run` | Where `report.json` and `proposed.txt` go; the report as JSON; print the plan and the most it can cost without calling `claude`. |
+
+**Add the scenarios to a case.** Export `scenarios: [{ name, prompt(guidance), score(text) }, ...]` next to `variants`: the same task in two or more settings. Every scenario but the last is learned from; the last is held back and only looked at in the last stage, so a rewrite that only fits the learning scenarios shows. Export `keep: [...]` as well, the phrases every rewrite must still contain (a file name, a command), and a candidate that drops one is thrown away. `import-request` is the example.
+
+**Cost and time.** One real run of `import-request` (20 calls per arm and scenario, 237 calls in all) cost $5.19 and took about 36 minutes. A failing call is tried up to three times and each try counts against the budget. Run `--dry-run` first.
+
+**What it found, and what it did not.** Started from the old wording that got a direct-call check 0 times in 60, it proposed one that got it 42 times in 60, and 17 in 20 on the scenario it had not seen. The wording a person tuned by hand scores about 83% on the first scenario against the tuner's 65%, so the tuner has not beaten careful hand work; use it where you have no good wording yet, and read the reply it scores before trusting it. See the design notes, 2026-10-28.
