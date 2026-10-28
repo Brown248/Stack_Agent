@@ -125,6 +125,13 @@ test("--ref reads the files as they were at a tag, not as they are now", () => {
 	assert.equal(r.code, 0, r.text);
 });
 
+test("a tag that does not exist is said so, not reported as every file missing", () => {
+	const r = run(project("1.2.3"), ["--tag", "v9.9.9", "--ref", "v9.9.9"]);
+	assert.equal(r.code, 1);
+	assert.match(r.text, /v9\.9\.9 does not exist here.*push the tag/);
+	assert.doesNotMatch(r.text, /not found/);
+});
+
 test("without --repo the repository comes from GITHUB_REPOSITORY, then from the origin remote", () => {
 	const dir = project();
 	assert.throws(() => main(["--root", dir, "--tag", "v1.2.3"], {}), /--repo/);
