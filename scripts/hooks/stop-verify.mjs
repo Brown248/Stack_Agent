@@ -8,6 +8,7 @@ import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../gua
 import { matchesAny } from "../lib/files.mjs";
 import { FINGERPRINT_VERSION, SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
+import { languageFor, t } from "../lib/messages.mjs";
 import { blobIds, readConfig, readStart, readState, recordLost, writeState } from "./session-record.mjs";
 
 export { changedFiles, parsePorcelainZ };
@@ -66,12 +67,19 @@ export function markerReason(message) {
 
 export const validSkip = (skip, current) => Boolean(current && skip && skip.fingerprint === current.value && String(skip.reason ?? "").trim().length >= MIN_SKIP_REASON);
 
+// What the human is told when the agent stopped without verifying. A reason the agent gave in its final message is
+// said so until the hook has written it to SKIP_FILE, after which it is the same as one the agent recorded itself.
+export function skipMessage(lang, skip) {
+	const reason = String(skip.reason).trim().slice(0, 300);
+	return skip.via === "message" && !skip.written ? t(lang, "release.skip.message", { reason }) : t(lang, "release.skip.file", { file: SKIP_FILE, reason });
+}
+
 // "block" mode: keep the agent working until the evidence matches the code or it records why it cannot verify.
 // With a session-start record, "changed" means the fingerprint moved since the session began, so committing the
 // work does not hide it and files the human left dirty before the session are not blamed on the agent.
 // Blocks are counted per session and reset on each new user turn (stop_hook_active false); after MAX_BLOCKS in
 // a row the stop is released with a message to the human, so a stuck agent cannot loop forever.
-export function decideBlock({ root, files, ignore, evidence, current, skip, state = {}, stopHookActive = false, sessionStart = null, againstOff = false, lost = false, guardFailures = [] }) {
+export function decideBlock({ root, files, ignore, evidence, current, skip, state = {}, stopHookActive = false, sessionStart = null, againstOff = false, lost = false, guardFailures = [], lang = "en" }) {
 	const relevant = relevantFiles(root, files, ignore);
 	const next = { ...state, blocks: 0 };
 	const tracked = Boolean(sessionStart?.fingerprint && current);
@@ -84,7 +92,7 @@ export function decideBlock({ root, files, ignore, evidence, current, skip, stat
 	if (guardFailures.length) {
 		const blocks = (stopHookActive ? (state.blocks ?? 0) : 0) + 1;
 		if (blocks > MAX_BLOCKS)
-			return { action: "release", state: { ...state, blocks }, message: `stack-agent: stopping with guard violations after ${MAX_BLOCKS} reminders: ${guardFailures.slice(0, 3).join("; ")}${guardFailures.length > 3 ? "; ..." : ""}. Fix them before trusting this change; CI will fail on them.` };
+			return { action: "release", state: { ...state, blocks }, message: t(lang, "release.guard", { max: MAX_BLOCKS, list: guardFailures.slice(0, 3).join("; ") + (guardFailures.length > 3 ? "; ..." : "") }) };
 		return { action: "block", kind: "guard", state: { ...state, blocks }, violations: guardFailures, attempt: blocks };
 	}
 	const stale = staleReason(evidence, current, newestMtime(root, relevant), sessionStart, againstOff);
@@ -103,8 +111,7 @@ export function decideBlock({ root, files, ignore, evidence, current, skip, stat
 	if (!why) return { action: "allow", state: next };
 	if (validSkip(skip, current)) {
 		if (state.skipAnnounced === current.value) return { action: "allow", state: next, viaSkip: true };
-		const where = skip.via === "message" && !skip.written ? "said why in its final message" : `recorded why in ${SKIP_FILE}`;
-		return { action: "release", viaSkip: true, state: { ...next, skipAnnounced: current.value }, message: `stack-agent: the agent stopped without verifying and ${where}: "${String(skip.reason).trim().slice(0, 300)}"` };
+		return { action: "release", viaSkip: true, state: { ...next, skipAnnounced: current.value }, message: skipMessage(lang, skip) };
 	}
 	const dirty = sessionStart?.dirty;
 	const own = dirty && current ? relevant.filter((f) => dirty[f] !== current.entries.get(f)) : relevant;
@@ -112,7 +119,7 @@ export function decideBlock({ root, files, ignore, evidence, current, skip, stat
 	const blocks = (stopHookActive ? (state.blocks ?? 0) : 0) + 1;
 	if (blocks > MAX_BLOCKS) {
 		const list = shown.slice(0, 5).join(", ") + (shown.length > 5 ? ", ..." : "");
-		return { action: "release", state: { ...state, blocks }, message: `stack-agent: stopping with unverified changes after ${MAX_BLOCKS} reminders (${list}). Run node .stack-agent/bin/verify.mjs before trusting this change.` };
+		return { action: "release", state: { ...state, blocks }, message: t(lang, "release.unverified", { max: MAX_BLOCKS, list }) };
 	}
 	return { action: "block", state: { ...state, blocks }, why, files: shown, attempt: blocks };
 }
@@ -264,13 +271,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 				} else shortMarker = true;
 			}
 			const guardFailures = sessionGuardFailures(root, { files, sessionStart: start, current });
-			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: start, againstOff, lost: !start && recordLost(root, input.session_id), guardFailures });
+			const lang = languageFor(config);
+			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: start, againstOff, lost: !start && recordLost(root, input.session_id), guardFailures, lang });
 			// the hook runs outside any sandbox, so it can keep the agent's declared skip where reviewers see it
 			if (skip?.via === "message" && verdict.viaSkip) {
 				try {
 					const { written, ...record } = skip;
 					fs.writeFileSync(path.join(root, SKIP_FILE), JSON.stringify(record, null, 2) + "\n");
-					if (verdict.message) verdict.message = verdict.message.replace("said why in its final message", `recorded why in ${SKIP_FILE}`);
+					if (verdict.message) verdict.message = skipMessage(lang, { ...skip, written: true });
 				} catch {}
 			}
 			writeState(root, input.session_id, verdict.state);
