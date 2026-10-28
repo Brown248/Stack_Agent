@@ -1,8 +1,14 @@
 # Changelog
 
-What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `package.json` together, and add a section here.
+What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `package.json` together, and add a section here. Pushing the tag `vX.Y.Z` then makes the GitHub Release from that section (`.github/workflows/release.yml`).
 
 [ภาษาไทย](CHANGELOG.th.md)
+
+## Unreleased
+
+### Added
+
+- A release is made by pushing its tag: `.github/workflows/release.yml` checks the tag against the version in `plugin.json`, `marketplace.json`, and `package.json` and against the newest section of both changelogs (`scripts/release-notes.mjs`, which lists every mismatch), then creates the GitHub Release from the changelog section with a link to the Thai changelog, or updates it if it exists. It marks the Release Latest only when the tag is the highest version, and a tag with a `-` suffix is a pre-release. The check also runs on pull requests that touch the version files or changelogs, so a slip shows before the tag, and by hand with a dry run by default. Only the publish job can write. Run against v0.5.1, v0.5.2, and v0.5.3, the script gave the same notes and title as the Releases made by hand (blank lines aside) and marked only v0.5.3 Latest. This repo's own tooling; nothing a project installs changed.
 
 ## 0.5.3 (2026-10-27)
 

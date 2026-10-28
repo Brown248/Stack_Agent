@@ -33,6 +33,7 @@ scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs,
                   review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test),
                   skill-scan.mjs (SkillSpector สแกน skill และ hook ใช้เฉพาะใน CI ของ repo นี้ ต้องมี Python)
                   canary.mjs (ตรวจว่าปลั๊กอินยังโหลดและ hook ยังทำงานภายใต้ Claude Code รุ่นปัจจุบันไหม ใช้ใน CI ของ repo นี้ ทุกสัปดาห์)
+                  release-notes.mjs (ตรวจ tag ของรุ่นเทียบกับไฟล์เวอร์ชันและ changelog แล้วเขียนโน้ตของ GitHub Release ใช้โดย .github/workflows/release.yml)
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
 examples/         sample-backend (Node HTTP API), sample-cli (Python CLI),
                   sample-library (Node package), sample-frontend (static web app),

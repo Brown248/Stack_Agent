@@ -1,0 +1,100 @@
+name: release
+
+# A release is a pushed tag vX.Y.Z. This checks that the tag is the version in the three version files and in the newest
+# section of both changelogs, and then creates the GitHub Release from that section (or updates it, if it exists).
+# By hand it takes a tag and only checks, unless dry_run is switched off. In a pull request that touches the version
+# files or the changelogs it only checks, so a slip in the release prep shows before the tag is made.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag to check or release, for example v0.6.0"
+        required: true
+        type: string
+      dry_run:
+        description: "Only check and print the notes; create nothing"
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/release-notes.mjs
+      - .claude-plugin/**
+      - package.json
+      - CHANGELOG.md
+      - CHANGELOG.th.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.pull_request.number || inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # read-only: runs for every event
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # empty in a pull request, where the tag does not exist yet and the script uses v plus the version in plugin.json
+      TAG: ${{ github.event_name != 'pull_request' && (inputs.tag || github.ref_name) || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the release and write its notes
+        id: notes
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/notes.md" --github-output "$GITHUB_OUTPUT")
+          if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+          node scripts/release-notes.mjs "${args[@]}"
+      - name: Show what would be published
+        env:
+          TITLE: ${{ steps.notes.outputs.title }}
+          PRERELEASE: ${{ steps.notes.outputs.prerelease }}
+          LATEST: ${{ steps.notes.outputs.latest }}
+        run: |
+          echo "title: $TITLE | pre-release: $PRERELEASE | latest: $LATEST"
+          echo "-----"
+          cat "$RUNNER_TEMP/notes.md"
+
+  # the only job that can write: a pushed tag, or a manual run with dry_run switched off
+  publish:
+    needs: check
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Write the notes
+        id: notes
+        run: node scripts/release-notes.mjs --tag "$TAG" --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/notes.md" --github-output "$GITHUB_OUTPUT"
+      - name: Create the GitHub Release, or update it if it exists
+        env:
+          TITLE: ${{ steps.notes.outputs.title }}
+          PRERELEASE: ${{ steps.notes.outputs.prerelease }}
+          LATEST: ${{ steps.notes.outputs.latest }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md" --prerelease="$PRERELEASE" --latest="$LATEST"
+          else
+            gh release create "$TAG" --verify-tag --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md" --prerelease="$PRERELEASE" --latest="$LATEST"
+          fi
