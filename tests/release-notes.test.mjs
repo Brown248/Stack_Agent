@@ -125,6 +125,13 @@ test("--ref reads the files as they were at a tag, not as they are now", () => {
 	assert.equal(r.code, 0, r.text);
 });
 
+test("a tag that does not exist is said so, not reported as every file missing", () => {
+	const r = run(project("1.2.3"), ["--tag", "v9.9.9", "--ref", "v9.9.9"]);
+	assert.equal(r.code, 1);
+	assert.match(r.text, /v9\.9\.9 does not exist here.*push the tag/);
+	assert.doesNotMatch(r.text, /not found/);
+});
+
 test("without --repo the repository comes from GITHUB_REPOSITORY, then from the origin remote", () => {
 	const dir = project();
 	assert.throws(() => main(["--root", dir, "--tag", "v1.2.3"], {}), /--repo/);
@@ -180,6 +187,17 @@ test("the tag reaches the shell through an environment variable, never pasted in
 	assert.ok(runs.length >= 3, "has run steps");
 	for (const r of runs) assert.doesNotMatch(r, /\$\{\{/, `no expression inside a script: ${r}`);
 	assert.match(text, /TAG: \$\{\{ inputs\.tag \|\| github\.ref_name \}\}/);
+});
+
+// The first manual dry run on Actions (against v0.5.3) failed: the workflow checked out the tag, an old commit that does
+// not have scripts/release-notes.mjs. It runs the workflow's own checkout and reads the tag's files with --ref.
+test("the workflow checks out its own commit, not the tag, and reads the tag's files with --ref, so an old tag can be checked", () => {
+	const text = workflow();
+	assert.doesNotMatch(text, /^ {10}ref: /m, "no checkout of the tag");
+	const runs = text.split("\n").filter((l) => /node scripts\/release-notes\.mjs/.test(l) || /args\+=\(/.test(l));
+	assert.ok(runs.length >= 2);
+	assert.match(text, /args\+=\(--ref "\$TAG" --tag "\$TAG"\)/, "the check job gives --ref in a run for a tag");
+	assert.match(text, /node scripts\/release-notes\.mjs --ref "\$TAG" --tag "\$TAG" /, "the publish job too");
 });
 
 test("the workflow publishes only for a pushed tag or a manual run that is not a dry run, with --verify-tag", () => {

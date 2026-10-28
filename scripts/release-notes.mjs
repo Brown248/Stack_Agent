@@ -125,6 +125,8 @@ export function main(argv, env = process.env) {
 	const version = match[1];
 	const prerelease = version.includes("-");
 	const repo = repoName(args, env, root);
+	if (args.ref && spawnSync("git", ["rev-parse", "--verify", "--quiet", `${args.ref}^{commit}`], { cwd: root }).status !== 0)
+		return { code: 1, text: `release-notes: ${tag} is not ready:\n  - ${args.ref} does not exist here (push the tag first, or fetch the tags if it is on GitHub)` };
 
 	const problems = [];
 	// the three files that carry the version
