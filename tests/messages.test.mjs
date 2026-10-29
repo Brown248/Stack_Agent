@@ -139,14 +139,18 @@ test("the Stop hook's release message is Thai when verify.json says so, and Engl
 	}
 });
 
-test("what the agent is told when it is blocked stays English whatever the language", async () => {
-	const dir = await repo("th");
-	run("session-start.mjs", dir);
-	write(dir, "src/modules/items/service.js", fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8") + "\n");
-	const blocked = run("stop-verify.mjs", dir);
-	assert.equal(blocked.code, 2);
-	assert.doesNotMatch(blocked.stderr, THAI);
-	assert.match(blocked.stderr, /Stop 1 of 3/);
+test("what the agent is told when it is blocked follows the language, and keeps the commands it has to run", async () => {
+	for (const [language, expectThai] of [["th", true], [undefined, false]]) {
+		const dir = await repo(language);
+		run("session-start.mjs", dir);
+		write(dir, "src/modules/items/service.js", fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8") + "\n");
+		const blocked = run("stop-verify.mjs", dir);
+		assert.equal(blocked.code, 2);
+		assert.equal(THAI.test(blocked.stderr), expectThai, blocked.stderr);
+		assert.match(blocked.stderr, expectThai ? /Stop 1 จาก 3/ : /Stop 1 of 3/);
+		assert.match(blocked.stderr, /node \.stack-agent\/bin\/verify\.mjs --skip "<reason>"/);
+		assert.match(blocked.stderr, /there is no verify evidence yet/, "the reason is kept as it was");
+	}
 });
 
 test("SessionStart in Thai tells the agent the language and the human the tool notice, and says nothing in English", () => {

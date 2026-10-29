@@ -8,7 +8,7 @@ import { baselineVersion, compareToBaseline, loadConfig, runGuard } from "../gua
 import { matchesAny } from "../lib/files.mjs";
 import { FINGERPRINT_VERSION, SKIP_FILE, VERIFY_CONFIG as VERIFY, changedFiles, codeFingerprint, ignoreList, parsePorcelainZ } from "../lib/fingerprint.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
-import { languageFor, t } from "../lib/messages.mjs";
+import { agentLang, languageFor, t } from "../lib/messages.mjs";
 import { blobIds, readConfig, readStart, readState, recordLost, writeState } from "./session-record.mjs";
 
 export { changedFiles, parsePorcelainZ };
@@ -124,36 +124,17 @@ export function decideBlock({ root, files, ignore, evidence, current, skip, stat
 	return { action: "block", state: { ...state, blocks }, why, files: shown, attempt: blocks };
 }
 
-export function reminderMessage({ why, files, verifyConfigChanged, mode = "remind", attempt = 1 }) {
+export function reminderMessage({ why, files, verifyConfigChanged, mode = "remind", attempt = 1, lang = "en" }) {
 	const list = files.slice(0, 10).join(", ") + (files.length > 10 ? ", ..." : "");
-	const addCheck = verifyConfigChanged
-		? ""
-		: `${VERIFY} has no new check in this change set. If the change adds or changes behavior a user can see, ` +
-			`first add a check for it there (the success case and at least one rejection case), so the evidence covers ` +
-			`the new behavior and not only the old checks. If nothing a user can see changed, say so. `;
-	const ending =
-		mode === "block"
-			? `If verification truly cannot run here, record why with \`node .stack-agent/bin/verify.mjs --skip "<reason>"\`, or, if you ` +
-				`cannot run commands at all, end your final message with the line \`${SKIP_MARKER} <reason>\`; if the user asked you ` +
-				`not to verify, say so in the reason, and tell the user the change is unverified. ` +
-				`(Stop ${attempt} of ${MAX_BLOCKS}: stopping stays blocked until the evidence matches the code.)\n`
-			: `This reminder fires once per change set.\n`;
-	return (
-		`stack-agent: code changed but ${why} (${list}). Before you finish, ${addCheck ? addCheck + "Then run" : "run"} ` +
-		`the full verification (\`node .stack-agent/bin/verify.mjs\` with no flags, see the verify skill) and report ` +
-		`its evidence file, or say plainly why it cannot run here. ${ending}`
-	);
+	const run = verifyConfigChanged ? t(lang, "remind.run") : t(lang, "remind.addcheck", { verify: VERIFY });
+	const ending = mode === "block" ? t(lang, "remind.ending.block", { marker: SKIP_MARKER, attempt, max: MAX_BLOCKS }) : t(lang, "remind.ending.once");
+	return t(lang, "remind.main", { why, list, run, ending });
 }
 
-export function guardMessage(violations, attempt = 1) {
-	return (
-		`stack-agent: the guard fails on files changed in this session (the after-edit and after-shell hooks report a ` +
-		`violation once, so one left unfixed gets here). Fix the code, following each fix line; never raise the baseline ` +
-		`to get past it:\n` +
-		violations.slice(0, 10).map((v) => `  ${v}`).join("\n") +
-		(violations.length > 10 ? `\n  ... and ${violations.length - 10} more (run node .stack-agent/bin/guard.mjs)` : "") +
-		`\nThen run the full verification again. (Stop ${attempt} of ${MAX_BLOCKS}.)\n`
-	);
+export function guardMessage(violations, attempt = 1, lang = "en") {
+	const list = violations.slice(0, 10).map((v) => `  ${v}`).join("\n");
+	const more = violations.length > 10 ? t(lang, "guard.more", { n: violations.length - 10 }) : "";
+	return t(lang, "guard.block", { list, more, attempt, max: MAX_BLOCKS });
 }
 
 // The guard on the files this session changed (in the working tree, or committed since it started), compared with
@@ -187,31 +168,15 @@ export function sessionGuardFailures(root, { files, sessionStart = null, current
 	}
 }
 
-export function coverageMessage(files = []) {
+export function coverageMessage(files = [], lang = "en") {
 	const list = files.slice(0, 5).join(", ") + (files.length > 5 ? ", ..." : "");
-	return (
-		`stack-agent: verification passed, but no check or test is new or changed while the code is${list ? ` (${list})` : ""}, ` +
-		`so nothing shows that your change is tested: the against step had nothing to run on the code before it. If the ` +
-		`change adds or changes behavior, add a test, or a check to ${VERIFY}, that fails without it (the success case and ` +
-		"one rejection case), then run `node .stack-agent/bin/verify.mjs` again. If nothing a user can observe changed (a " +
-		`refactor, a rename), say so in your final message and stop; this is asked once.\n`
-	);
+	return t(lang, "coverage.main", { list: list ? ` (${list})` : "", verify: VERIFY });
 }
 
 // names: what the tests imported that the old code lacks, when verify could read them from the test output
-export function importMessage(names = []) {
+export function importMessage(names = [], lang = "en") {
 	const name = names[0] ?? "<the new function>";
-	const listed = names.length ? ` (${names.join(", ")})` : "";
-	return (
-		`stack-agent: verification passed, but its against step could not show that your change is tested: the changed tests ` +
-		`import something the code before the change does not have${listed}, so on that code they fail before testing anything. ` +
-		`Add a check to ${VERIFY} that fails without your change. If the program already runs the new code, run it the way a ` +
-		`user does (a command or an HTTP request on an input that reaches it). If nothing calls the new code yet, call it ` +
-		`directly with a command check, for example \`"args": ["node", "--input-type=module", "-e", "import { ${name} } from './src/<module>.js'; console.log(JSON.stringify(${name}(<input>)))"]\` ` +
-		`or \`"args": ["python", "-c", "from <module> import ${name}; print(${name}(<input>))"]\`, with \`expectOutputIncludes\` set to the ` +
-		`result you expect: on the code before your change it fails, and that is the proof. Then run \`node .stack-agent/bin/verify.mjs\` again. ` +
-		`Only if the new code cannot be called at all, say why and stop; this is asked once.\n`
-	);
+	return t(lang, "import.main", { listed: names.length ? ` (${names.join(", ")})` : "", verify: VERIFY, name });
 }
 
 const readJsonOr = (file, fallback) => {
@@ -228,6 +193,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	const files = root ? changedFiles(root) : null;
 	if (files) {
 		const config = readConfig(root);
+		const lang = languageFor(config);
 		// E0: with a session record, the settings that decide what the hook checks (mode, ignore list, evidence
 		// location, against) are the ones the session started with; editing verify.json mid-session changes nothing
 		const start = readStart(root, input.session_id);
@@ -257,7 +223,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 						fs.mkdirSync(evidenceDir, { recursive: true });
 						fs.writeFileSync(markerPath, verdict.fingerprint);
 					} catch {}
-					process.stderr.write(reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged }));
+					process.stderr.write(reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged, lang: agentLang(lang, "remind") }));
 					process.exitCode = 2;
 				}
 			}
@@ -271,7 +237,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 				} else shortMarker = true;
 			}
 			const guardFailures = sessionGuardFailures(root, { files, sessionStart: start, current });
-			const lang = languageFor(config);
 			const verdict = decideBlock({ root, files, ignore, evidence, current, skip, state, stopHookActive: input.stop_hook_active === true, sessionStart: start, againstOff, lost: !start && recordLost(root, input.session_id), guardFailures, lang });
 			// the hook runs outside any sandbox, so it can keep the agent's declared skip where reviewers see it
 			if (skip?.via === "message" && verdict.viaSkip) {
@@ -283,17 +248,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 			}
 			writeState(root, input.session_id, verdict.state);
 			if (verdict.action === "block" && verdict.kind === "import") {
-				process.stderr.write(importMessage(evidence?.missingImports));
+				process.stderr.write(importMessage(evidence?.missingImports, agentLang(lang, "import")));
 				process.exitCode = 2;
 			} else if (verdict.action === "block" && verdict.kind === "coverage") {
-				process.stderr.write(coverageMessage(verdict.files));
+				process.stderr.write(coverageMessage(verdict.files, agentLang(lang, "coverage")));
 				process.exitCode = 2;
 			} else if (verdict.action === "block" && verdict.kind === "guard") {
-				process.stderr.write(guardMessage(verdict.violations, verdict.attempt));
+				process.stderr.write(guardMessage(verdict.violations, verdict.attempt, agentLang(lang, "guard")));
 				process.exitCode = 2;
 			} else if (verdict.action === "block") {
 				const note = shortMarker ? `Your ${SKIP_MARKER} line needs a reason of at least ${MIN_SKIP_REASON} characters saying why verification cannot run. ` : "";
-				process.stderr.write(note + reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged, mode, attempt: verdict.attempt }));
+				process.stderr.write(note + reminderMessage({ why: verdict.why, files: verdict.files, verifyConfigChanged, mode, attempt: verdict.attempt, lang: agentLang(lang, "remind") }));
 				process.exitCode = 2;
 			} else if (verdict.action === "release") process.stdout.write(JSON.stringify({ systemMessage: verdict.message }));
 		}

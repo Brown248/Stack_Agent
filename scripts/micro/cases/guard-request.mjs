@@ -12,6 +12,7 @@ export default {
 	variants: {
 		control: null,
 		current: guardMessage([VIOLATION]).trim(),
+		"current-th": guardMessage([VIOLATION], 1, "th").trim(),
 	},
 	prompt: (guidance) =>
 		[

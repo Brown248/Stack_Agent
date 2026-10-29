@@ -8,6 +8,7 @@ export default {
 	variants: {
 		control: null,
 		current: coverageMessage(["src/modules/items/service.js"]).trim(),
+		"current-th": coverageMessage(["src/modules/items/service.js"], "th").trim(),
 	},
 	prompt: (guidance) =>
 		[

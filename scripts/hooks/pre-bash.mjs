@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { makeVerdict, renderVerdict } from "../lib/messages.mjs";
 import { WORKFLOWS_FOLDER, askForProtected, protectedMentioned, protectedWhat, workflowsFolderMentioned } from "./protected-paths.mjs";
 import { projectContext } from "./project-context.mjs";
 import { findUp, readHookInput } from "./read-input.mjs";
@@ -81,36 +82,36 @@ function classifyGit({ env, globals, sub, rest }) {
 	// options are matched by prefix down to the shortest form git takes for that subcommand
 	const long = (name, min) => rest.some((t) => t.length >= min && name.startsWith(t.split("=")[0]));
 	if (globals.some((g) => /^(-c|--config-env)=?core\.hookspath=/i.test(g)))
-		return { decision: "deny", reason: "blocked: overriding core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead." };
+		return makeVerdict("deny", "deny.hookspath-override");
 	// an alias that skips the hooks, set for one command (-c alias.ci=...) or for good (git config alias.ci ...)
 	if (globals.some((g) => /^-c=?alias\./i.test(g) && ALIAS_SKIPS_HOOKS.test(g)) || (sub === "config" && rest.some((t) => /^alias\./i.test(t)) && rest.some((t) => ALIAS_SKIPS_HOOKS.test(t))))
-		return { decision: "deny", reason: "blocked: this git alias commits or pushes without the repo's git hooks, which skips the guard and checks. Fix what the hook reports instead." };
+		return makeVerdict("deny", "deny.alias-skips");
 	// `git config core.hooksPath x` (or `git config set ...`) turns the hooks off for every later command; reading or
 	// unsetting it does not
 	if (sub === "config" && rest.some((t) => /^core\.hookspath$/i.test(t)) && !rest.some((t) => /^(--get|--get-all|--get-regexp|--unset|--unset-all|--list|-l|get|unset|list)$/.test(t)))
-		return { decision: "deny", reason: "blocked: setting core.hooksPath turns off the repo's git hooks and guard. Fix what the hook reports instead." };
+		return makeVerdict("deny", "deny.hookspath-config");
 	if ((sub === "commit" || sub === "push" || sub === "merge") && env.some((e) => HOOK_DISABLING_ENV.test(e)))
-		return { decision: "deny", reason: `blocked: \`${env.join(" ")}\` turns off the repo's git hooks for this \`git ${sub}\`. Fix what the hook reports instead.` };
+		return makeVerdict("deny", "deny.env-hooks", { env: env.join(" "), sub });
 	if ((sub === "commit" || sub === "push" || sub === "merge" || sub === "am" || sub === "rebase") && long("--no-verify", 8))
-		return { decision: "deny", reason: `blocked: \`git ${sub} --no-verify\` skips the repo's guard and checks. Fix what the hook reports instead.` };
+		return makeVerdict("deny", "deny.no-verify", { sub });
 	if (sub === "commit" && shortFlags(rest).includes("n"))
-		return { decision: "deny", reason: "blocked: `git commit -n` is --no-verify and skips the repo's guard and checks. Fix what the hook reports instead." };
+		return makeVerdict("deny", "deny.commit-n");
 	if (sub === "push") {
 		const forced = shortFlags(rest).includes("f") || rest.some((t) => t === "--force" || t.startsWith("--force-") || /^\+/.test(t) || /^[^-][^:]*:\+/.test(t)) || long("--mirror", 3);
-		if (forced) return { decision: "ask", reason: "force-push rewrites shared history and cannot be undone for others. A human must approve it." };
+		if (forced) return makeVerdict("ask", "ask.force-push");
 		const deletes = shortFlags(rest).includes("d") || long("--delete", 4) || long("--prune", 5) || rest.some((t) => /^:[^:]+$/.test(t));
-		if (deletes) return { decision: "ask", reason: "this push deletes a remote branch or tag. A human must approve it." };
+		if (deletes) return makeVerdict("ask", "ask.push-delete");
 	}
 	if (sub === "reset" && (long("--hard", 3) || long("--merge", 4) || long("--keep", 3)))
-		return { decision: "ask", reason: "`git reset --hard` discards uncommitted work permanently. A human must approve it." };
+		return makeVerdict("ask", "ask.reset-hard");
 	if (sub === "clean" && (shortFlags(rest).includes("f") || long("--force", 3)))
-		return { decision: "ask", reason: "`git clean -f` deletes untracked files permanently. A human must approve it." };
+		return makeVerdict("ask", "ask.clean");
 	const onlyUnstages = sub === "restore" && (rest.includes("--staged") || rest.includes("-S")) && !rest.includes("--worktree") && !rest.includes("-W");
 	if ((sub === "checkout" || sub === "restore") && !onlyUnstages && rest.some((t) => t === "." || t === ":/" || t === "*"))
-		return { decision: "ask", reason: "this discards local changes to every file permanently. A human must approve it." };
+		return makeVerdict("ask", "ask.discard-all");
 	// -d alone refuses to delete a branch whose commits are not merged anywhere; -D or --delete --force deletes them
 	if (sub === "branch" && (shortFlags(rest).includes("D") || ((shortFlags(rest).includes("d") || long("--delete", 5)) && (shortFlags(rest).includes("f") || long("--force", 6)))))
-		return { decision: "ask", reason: "`git branch -D` deletes a branch even when its commits are not merged anywhere, which can lose work. A human must approve it." };
+		return makeVerdict("ask", "ask.branch-delete");
 	// these point an existing branch somewhere else; its old commits survive only in the reflog. -M (force rename)
 	// is left alone: `git branch -M main` is the usual first step of a new repository.
 	const branchFlags = shortFlags(rest.filter((t, i) => !/^--(sort|format|contains|no-contains|merged|no-merged|points-at|set-upstream-to)$/.test(rest[i - 1] ?? "")));
@@ -119,9 +120,9 @@ function classifyGit({ env, globals, sub, rest }) {
 		(sub === "checkout" && shortFlags(rest).includes("B")) ||
 		(sub === "switch" && (shortFlags(rest).includes("C") || long("--force-create", 9)));
 	if (forceMoves)
-		return { decision: "ask", reason: `\`git ${sub}\` with a force flag points an existing branch at other commits; its old commits are then reachable only through the reflog. A human must approve it.` };
+		return makeVerdict("ask", "ask.branch-force-move", { sub });
 	if (sub === "stash" && (rest[0] === "clear" || rest[0] === "drop"))
-		return { decision: "ask", reason: "this deletes stashed work permanently. A human must approve it." };
+		return makeVerdict("ask", "ask.stash-drop");
 	return null;
 }
 
@@ -166,7 +167,7 @@ export function classify(command, depth = 0, extra = () => null, { inProject = t
 	for (const segment of splitSegments(String(command ?? ""))) {
 		const tokens = tokenize(segment);
 		if (tokens.includes("--allow-increase"))
-			return { decision: "ask", reason: "`--allow-increase` raises the guard baseline and accepts new rule violations. A human must approve it." };
+			return makeVerdict("ask", "ask.allow-increase");
 		const redirected = tokens.flatMap((t, i) => {
 			const glued = /^\d*>>?(.+)$/.exec(t);
 			if (glued) return [glued[1]];
@@ -176,12 +177,12 @@ export function classify(command, depth = 0, extra = () => null, { inProject = t
 		if (redirectHit) return askForProtected(protectedAt(redirectHit));
 		if (inProject) {
 			if (tokens.some((t) => GIT_CONFIG_HOOKSPATH.test(t)))
-				return { decision: "deny", reason: "blocked: setting core.hooksPath through GIT_CONFIG_* turns off the repo's git hooks and guard. Fix what the hook reports instead." };
+				return makeVerdict("deny", "deny.hookspath-gitconfig-env");
 			if (tokens[0] === "export" && tokens.slice(1).some((t) => HOOK_DISABLING_ENV.test(t)))
-				return { decision: "deny", reason: `blocked: \`${tokens.join(" ")}\` turns off the repo's git hooks for every later command. Fix what the hook reports instead.` };
+				return makeVerdict("deny", "deny.export-env", { env: tokens.join(" ") });
 			const hooksTouched = redirected.some((t) => GIT_HOOKS.test(t)) || (tokens.some((t) => GIT_HOOKS.test(t)) && tokens.some((t) => HOOK_CHANGERS.test(t))) || (hasInlineScript(tokens) && GIT_HOOKS.test(segment));
 			if (hooksTouched)
-				return { decision: "ask", reason: "this changes the repo's local git hooks (.git/hooks). They are the gate that runs the guard before a commit, and a change there is in no diff. A human must approve it." };
+				return makeVerdict("ask", "ask.git-hooks");
 		}
 		const target = tokens.find((t) => protectedAt(t));
 		// an interpreter given its program as an argument: node -e / -pe / --eval=..., python -c / -Ic, py -3 -c, deno eval
@@ -191,7 +192,7 @@ export function classify(command, depth = 0, extra = () => null, { inProject = t
 			(tokens.some((t) => DELETERS.test(t)) && tokens.some((t) => WORKFLOWS_FOLDER.test(t))) ||
 			(inlineScript && DELETE_CALL.test(segment) && workflowsFolderMentioned(segment));
 		if (deletesWorkflows && inProject)
-			return { decision: "ask", reason: "this deletes the folder holding the Stack Agent CI workflow, the check that still holds when the hooks do not. A human must approve it." };
+			return makeVerdict("ask", "ask.workflows-delete");
 		// the raw segment too: tokenizing drops a backslash inside double quotes ("\e"), but Python keeps it in the path
 		const scripted = inlineScript && ([...tokens, segment].map(protectedMentioned).find(Boolean) ?? tokens.map((t) => extra.mentions?.(t)).find(Boolean));
 		if (scripted) return askForProtected(scripted);
@@ -215,7 +216,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 	const ctx = projectContext(input);
 	const verdict = SHELL_TOOLS.includes(input.tool_name) ? classify(input.tool_input?.command, 0, ctx.guard, { inProject: Boolean(ctx.root ?? findUp(input.cwd ?? process.cwd(), ".stack-agent/guard.config.json")) }) : null;
 	if (verdict) {
-		process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: verdict.decision, permissionDecisionReason: verdict.reason } }));
+		process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: verdict.decision, permissionDecisionReason: renderVerdict(verdict, ctx.lang) } }));
 	}
 	ctx.record();
 }
