@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Use before saying any code change is done, fixed, or working, to prove it with the test suite and the project's real checks (HTTP requests against a running server, or commands that run the program the way a user would). Also whenever asked to "verify", "prove it works", "เช็กว่าใช้ได้จริง", "ยิง API", or "test the command".
+description: Use before saying any code change is done, fixed, or working, to prove it with the test suite and the project's real checks (HTTP requests against a running server, or commands that run the program the way a user would). Also whenever asked to confirm, double-check, make sure, check, or test that a change works, still works, behaves right, is valid, or is rejected as it should be, or to report what actually happened: "verify", "prove it works", "run the checks", "tell me whether it really works", "เช็กว่าใช้ได้จริง", "ยิง API", or "test the command".
 ---
 
 # Verify the change against the real program
@@ -10,7 +10,7 @@ description: Use before saying any code change is done, fixed, or working, to pr
 ## Steps
 
 1. Check that `.stack-agent/verify.json` exists. If it does not, tell the user to run `/stack-agent:stack-agent-init` and stop.
-2. If your change added or changed behavior a user can see, add or update a check in `verify.json` `checks[]` first. Cover the success case and at least one rejection case (bad input, missing auth, unknown flag).
+2. If your change added or changed behavior a user can see, add or update a check in `verify.json` `checks[]` first. Cover the success case and at least one rejection case (bad input, missing auth, unknown flag). If the project has a test suite (`test` in `verify.json`), also add or extend a test for the new behavior there: the check proves the program as a user runs it, the test keeps the rule proven on every later change.
    - **HTTP check** (servers, APIs, web apps): `name`, `method`, `path`, `expectStatus`, and optionally `body`, `headers`, `expectJson` (a subset the JSON response must contain), `expectBodyIncludes`, `expectHeaders` (header name to text its value must include), `followRedirects` (default `true`; `false` to see a redirect itself), `timeoutSec` (default 10). Needs `baseUrl`, and usually a `server` block that starts the app.
    - **Command check** (CLIs, libraries, scripts, browser test runners, anything): `name`, `command` or `args`, and optionally `expectExit` (default 0), `expectOutputIncludes`, `expectOutputExcludes`, `expectOutputMatches` (a JavaScript regex, case-sensitive) with `expectOutputFlags` (default `m`), `needsServer` (start the server first, e.g. for e2e tests), `cwd`, `env`, `timeoutSec`. Output means stdout and stderr together.
    - A `command` string runs in `cmd.exe` on Windows and `/bin/sh` elsewhere, so quoting differs by OS. For anything with quotes, spaces inside an argument, or shell characters, use `args` instead: `"args": ["python", "-c", "print('hi')"]` runs the program with no shell, one item per argument, the same on every OS. `test` and `server` take `args` too. Give `command` or `args`, not both.

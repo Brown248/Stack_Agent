@@ -42,3 +42,10 @@ test("descriptions say when to use a skill, not the steps it takes", () => {
 		assert.match(description, /\bUse\b/, `${name}: the description names when to use it`);
 	}
 });
+
+
+test("the verify skill asks for a test in the project's own suite as well as a check, found in an A/B where loading it more often meant no test", () => {
+	const text = read("verify");
+	assert.match(text, /also add or extend a test for the new behavior there/);
+	assert.match(text, /`test` in `verify\.json`/, "only when the project has a suite");
+});

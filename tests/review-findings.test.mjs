@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { COMMON, FIELDS, FINAL_VERDICTS, KINDS, SEVERITIES, STANDARDS_FILES, VERDICTS, checkRecords, logRows, main, validateFindings } from "../scripts/review-findings.mjs";
+import { COMMON, FIELDS, FINAL_VERDICTS, KINDS, SEVERITIES, STANDARDS_FILES, VERDICTS, checkRecords, logRows, main, printable, validateFindings } from "../scripts/review-findings.mjs";
 import { main as worktree } from "../scripts/review-worktree.mjs";
 import { main as verify } from "../scripts/verify.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
@@ -496,4 +496,93 @@ test("spec findings quote what was asked, from the commit message or a spec file
 	// candidates carry spec too, and a spec finding needs an agent verifier
 	assert.deepEqual(checkRecords([candidate({ source: "spec", spec: { from: "commit-message", quote: "abc" } })], { stage: "candidates" }), []);
 	has(checkRecords([spec({ verified_by: "script:node x.mjs" })]), /only guard, api-map, and verify-evidence findings can be verified by a script/);
+});
+
+// A field made only of characters that show nothing is not text (cloudflare/security-audit-skill requires a visible
+// character): a zero-width space passes `trim()`, so it used to pass as "non-empty".
+test("a field of only invisible characters is not text, and invisible characters inside real text are fine", () => {
+	const invisible = ["\u200b\u200b", "\ufeff", "\u2060\u00ad", "\u202e\u202c", " \t\u0001 ", "\u2028"];
+	for (const blank of invisible) {
+		has(checkRecords([rejected({ reason: blank })]), /reason must be non-empty text/);
+		has(checkRecords([confirmed({ observed: blank })]), /observed must be non-empty text/);
+		has(checkRecords([confirmed({ fix: blank })]), /fix must be non-empty text/);
+		has(checkRecords([needsValidation({ how_to_check: blank })]), /how_to_check must be non-empty text/);
+		has(checkRecords([needsValidation({ blockers: [blank] })]), /blockers must list at least one unresolved fact/);
+		has(checkRecords([hardening({ control: blank })]), /control must be non-empty text/);
+		has(checkRecords([candidate({ title: blank })], { stage: "candidates" }), /title must be non-empty text/);
+		has(checkRecords([candidate({ claim: blank })], { stage: "candidates" }), /claim must be non-empty text/);
+		has(checkRecords([candidate({ id: blank })], { stage: "candidates" }), /id must be non-empty text/);
+		has(checkRecords([candidate({ location: { file: SERVICE, line: 1, excerpt: blank } })], { stage: "candidates" }), /excerpt must quote at least 3 characters/);
+		has(checkRecords([candidate({ evidence: [{ file: SERVICE, line: 2, excerpt: "return { name };", description: blank }] })], { stage: "candidates" }), /description is required/);
+		has(checkRecords([candidate({ source: "spec", spec: { from: "commit-message", quote: blank } })], { stage: "candidates" }), /spec\.quote must quote at least 3 characters/);
+	}
+	// an excerpt padded with invisible characters is counted by what shows
+	has(checkRecords([candidate({ location: { file: SERVICE, line: 1, excerpt: "ab\u200b" } })], { stage: "candidates" }), /excerpt must quote at least 3 characters/);
+	assert.deepEqual(checkRecords([rejected({ reason: "create\u200b still returns early" })]), []);
+	assert.deepEqual(checkRecords([rejected({ reason: "ผ่านแล้ว" })]), []);
+});
+
+test("a control or bidirectional character in a finding never reaches the terminal or a log row as itself", () => {
+	const nasty = { id: "a\u001b[2Jb", "bad\u001b[31mkey": 1, reason: "\u200b" };
+	const file = path.join(tempDir(), "nasty.json");
+	fs.writeFileSync(file, JSON.stringify([rejected(nasty)]));
+	const r = runNode(script, ["validate", file, "--root", repo]);
+	assert.equal(r.code, 1);
+	const out = r.stdout + r.stderr;
+	assert.doesNotMatch(out, /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/, "no raw control or format character");
+	assert.match(out, /a\\u\{1b\}\[2Jb/);
+	assert.match(out, /bad\\u\{1b\}\[31mkey/);
+	// --json carries it escaped as well
+	const json = main(["validate", file, "--root", repo, "--json"]);
+	assert.doesNotMatch(json.text, /[\u202a-\u202e\u2066-\u2069\u200b-\u200f]/);
+	assert.match(JSON.parse(json.text).errors.join("\n"), /a\\u\{1b\}\[2Jb/);
+	// a row of the review log keeps the text and shows the characters as \u{..}, and a bidi override cannot reorder it
+	const rows = logRows([confirmed({ id: "x", kind: "one-off", severity: "non-blocking", title:"name\u202egnirts\u202c missing", fix: "restore\u001b[0m it" })], "2026-10-21");
+	assert.doesNotMatch(rows[0], /[\u001b\u202a-\u202e]/);
+	assert.match(rows[0], /name\\u\{202e\}gnirts\\u\{202c\} missing/);
+	assert.match(rows[0], /restore\\u\{1b\}\[0m it/);
+	// an unreadable file's message is escaped too
+	const bad = path.join(tempDir(), "bad\u202e.json");
+	const missing = runNode(script, ["validate", bad]);
+	assert.equal(missing.code, 2);
+	assert.doesNotMatch(missing.stderr, /\u202e/);
+});
+
+test("blank fillers, lone marks, and lone surrogates are not text either, and a quote is counted by what shows", () => {
+	const blanks = ["ㅤ", "⠀⠀", "ᅟᅠ", "ﾠ", "͏", "️︀", "́̂", "\ud800", "\u{e0041}\u{e0042}", "؜"];
+	for (const blank of blanks) {
+		has(checkRecords([rejected({ reason: blank })]), /reason must be non-empty text/);
+		has(checkRecords([confirmed({ fix: blank })]), /fix must be non-empty text/);
+	}
+	// an excerpt of 2 visible characters with an invisible one between them is 2 characters, and spaces do not count
+	for (const excerpt of ["a​b", "ab​", "a b", "ㅤab"]) has(checkRecords([candidate({ location: { file: SERVICE, line: 1, excerpt } })], { stage: "candidates" }), /excerpt must quote at least 3 characters/);
+	has(checkRecords([candidate({ source: "spec", spec: { from: "commit-message", quote: "a​b" } })], { stage: "candidates" }), /spec\.quote must quote at least 3 characters/);
+	assert.deepEqual(checkRecords([candidate({ location: { file: SERVICE, line: 1, excerpt: "abc" } })], { stage: "candidates" }), []);
+	// code points that are reserved to be invisible, and variation selectors with nothing to vary, show nothing either
+	for (const excerpt of ["a\u2065b", "a\ufe0f\ufe0f", "\u{e0080}ab"]) has(checkRecords([candidate({ location: { file: SERVICE, line: 1, excerpt } })], { stage: "candidates" }), /excerpt must quote at least 3 characters/);
+	has(checkRecords([rejected({ reason: "\u2065\ufe0f" })]), /reason must be non-empty text/);
+	// a combining mark on a base character is text: Thai tone marks and vowels
+	assert.deepEqual(checkRecords([rejected({ reason: "ก็" })]), []);
+	assert.deepEqual(checkRecords([rejected({ reason: "ที่ผ่านมา" })]), []);
+});
+
+test("escaping leaves the joiners that Thai, Persian, and emoji need, and escapes the controls that hide or reorder text", () => {
+	const keep = "Family emoji \u{1f468}‍\u{1f469}‍\u{1f467} / ไทย​คำ / Persian می‌خواهم";
+	const [row] = logRows([confirmed({ id: "x", kind: "one-off", severity: "non-blocking", title: keep })], "2026-10-21");
+	assert.ok(row.includes(keep), "joiners and the zero-width space are written as they are");
+	assert.equal(printable(keep), keep);
+	for (const [ch, shown] of [
+		["\u001b", "\\u{1b}"],
+		["\u0085", "\\u{85}"],
+		[" ", "\\u{2028}"],
+		[" ", "\\u{2029}"],
+		["‮", "\\u{202e}"],
+		["⁦", "\\u{2066}"],
+		["‎", "\\u{200e}"],
+		["؜", "\\u{61c}"],
+		["\u{e0041}", "\\u{e0041}"],
+			["\u2065", "\\u{2065}"],
+			["\ufff0", "\\u{fff0}"],
+			["\u{e0080}", "\\u{e0080}"],
+	]) assert.equal(printable(`a${ch}b`), `a${shown}b`);
 });

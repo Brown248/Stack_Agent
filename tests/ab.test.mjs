@@ -8,6 +8,7 @@ import { ARMS, checkIsolation, claudeArgs, makeArmPlugin, parseTranscript, resol
 import { parseOptions, summarize } from "../scripts/ab/run.mjs";
 import * as endpoint from "../scripts/ab/tasks/endpoint.mjs";
 import * as validate from "../scripts/ab/tasks/validate.mjs";
+import { memoryFilesAbove, pickWorkBase } from "../scripts/micro/work-dir.mjs";
 import { freePort, repoRoot, runNode, tempDir, usePort, write } from "./helpers.mjs";
 
 const runScript = path.join(repoRoot, "scripts", "ab", "run.mjs");
@@ -375,4 +376,29 @@ test("--disallowed-tools reaches claude as one --disallowedTools value", () => {
 	const allowed = extra[extra.indexOf("--allowedTools") + 1].split(",");
 	assert.ok(allowed.includes("Read") && allowed.includes("Bash(git:*)"));
 	assert.deepEqual(extra.slice(extra.indexOf("--add-dir"), extra.indexOf("--add-dir") + 2), ["--add-dir", "/tmp/x"]);
+});
+
+test("the default --out is made where no memory file is above it when there is such a place, and the run records which memory files it reads", () => {
+	const root = tempDir("stack-agent-work-");
+	write(root, "CLAUDE.md", "# a playbook\n");
+	const env = { ...process.env, CLAUDE_BIN: fakeClaude() };
+	// --out given: used as it is, and the files above it recorded
+	const out = path.join(root, "out");
+	const r = spawnSync(process.execPath, [runScript, "--task", "validate", "--arms", "full", "--model", "sonnet", "--budget", "0.5", "--json", "--out", out], { encoding: "utf8", env });
+	assert.equal(r.status, 0, r.stderr);
+	const saved = JSON.parse(fs.readFileSync(path.join(out, "results.json"), "utf8"));
+	assert.ok(saved.meta.memoryFilesRead.includes(path.join(root, "CLAUDE.md")));
+	assert.match(r.stderr, /NOTE: every session also reads \d+ memory file\(s\) of yours/);
+	// no --out: a folder under the work folder, and the record is of what is above that
+	const r2 = spawnSync(process.execPath, [runScript, "--task", "validate", "--arms", "full", "--model", "sonnet", "--budget", "0.5", "--json", "--work-dir", path.join(root, "work")], { encoding: "utf8", env });
+	assert.equal(r2.status, 0, r2.stderr);
+	const made = JSON.parse(r2.stdout).out;
+	assert.ok(made.startsWith(path.join(root, "work")), made);
+	const saved2 = JSON.parse(fs.readFileSync(path.join(made, "results.json"), "utf8"));
+	assert.deepEqual(saved2.meta.memoryFilesRead, memoryFilesAbove(made));
+	// --work-dir chooses the base of the default --out
+	const mine = path.join(tempDir("stack-agent-work-"), "mine");
+	const r3 = spawnSync(process.execPath, [runScript, "--task", "validate", "--arms", "full", "--model", "sonnet", "--budget", "0.5", "--json", "--work-dir", mine], { encoding: "utf8", env });
+	assert.equal(r3.status, 0, r3.stderr);
+	assert.ok(JSON.parse(r3.stdout).out.startsWith(mine));
 });

@@ -1,6 +1,6 @@
 ---
 name: feature-map
-description: For projects with .stack-agent/feature-map.md (web apps, CLIs, libraries, data jobs). Read or update the map of what a user does and where it lives in the code. Use to find the code behind a vague report ("the export button does nothing", a screenshot, "the --top flag is ignored") before searching the repo, and after adding, renaming, or removing something a user does.
+description: For projects with .stack-agent/feature-map.md (web apps, CLIs, libraries, data jobs). Use this first, before grepping or reading code, for any question about where something a user does is implemented: "where is the --top flag handled", "which file or function implements X, reads this option, or prints that output", "what code runs when the user clicks Save", "where does the export write its file", "the export button does nothing", a screenshot of a problem. Reads or updates the map of what a user does and where it lives in the code, and use it after adding, renaming, or removing something a user does.
 ---
 
 # Feature map

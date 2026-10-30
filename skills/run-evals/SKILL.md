@@ -29,7 +29,7 @@ claude plugin eval . --scaffold --allow-tools Bash Write Edit --no-publish --jso
 ```
 
 - `--scaffold` runs each case's `scaffold.sh`, which copies `examples/sample-backend` into the run directory and installs the tools.
-- `--allow-tools Bash Write Edit` grants the gated tools the coding cases need. The read-only case (`api-map-lookup`) needs none.
+- `--allow-tools Bash Write Edit` grants the gated tools the coding cases need. The read-only cases (`api-map-lookup`, `feature-map-lookup`, `reflect-lessons`, `reflect-reconcile`) need none.
 - `--no-publish` keeps the HTML report local instead of publishing it to claude.ai.
 - `--case "add-endpoint*"` runs one case. `--max-cost-usd <n>` is a spending cap. `--trust-plugin` skips the trust prompt in CI.
 - LLM graders use haiku by default, a different model from the one doing the work. `--judge-model <id>` changes it.
@@ -47,7 +47,7 @@ The exit code is 0 only when every case reaches the threshold (default 1.0).
 | `feature-map` | `feature-map-lookup` (the library example, so the map is a feature map, not an API map) |
 | `debug` | `debug-blank-name` (a plain bug report; `used-debug-skill` shows whether the skill was picked up on its own) |
 | `correct` | `correct-error-body` (started by name; the planted history shows the mistake twice) |
-| `reflect` | `reflect-lessons` (started by name; the corrections are quoted in the prompt) |
+| `reflect` | `reflect-lessons` (started by name; the corrections are quoted in the prompt) and `reflect-reconcile` (a planted line in a project skill that the new correction contradicts) |
 
 `sample-review` has no case: it reviews each commit in a temporary checkout, and the eval sandbox cannot write any file, so the checkout cannot be made. Measure it with the A/B task `review-spec` (`scripts/ab/run.mjs`), which runs real sessions.
 

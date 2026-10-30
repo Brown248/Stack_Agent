@@ -10,6 +10,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { claudeEnv, claudeVersion, harnessVersion, repoRoot, resolveClaude, spawnClaude } from "../ab/lib.mjs";
 import { ConfigError, parseArgs } from "../lib/files.mjs";
+import { memoryNote, pickWorkBase } from "./work-dir.mjs";
 
 const USAGE = `usage: node scripts/micro/run.mjs --case NAME --model MODEL --budget USD [options]
   --case NAME     a case in scripts/micro/cases/ (required)
@@ -18,6 +19,8 @@ const USAGE = `usage: node scripts/micro/run.mjs --case NAME --model MODEL --bud
   --runs N        calls per variant (default 5)
   --variant NAME  run only these variants (repeatable; default all, and the control always runs)
   --out DIR       results folder (default: a new folder in the system temp folder)
+  --work-dir DIR  where each call's empty folder is made. Default: the first of the system temp folder, C:/Users/Public,
+                  C:/ProgramData, /tmp with no CLAUDE.md above it (claude reads those whatever --setting-sources says)
   --dry-run       print each variant's prompt and the most it can cost; never calls claude
   --rescore FILE  score the replies saved in a results.json again with the case's current score(); never calls
                   claude, needs no --model or --budget (use it after fixing a scorer)
@@ -46,7 +49,7 @@ export function checkCase(name, mod) {
 }
 
 export function parseOptions(argv) {
-	const args = parseArgs(argv, { flags: ["dry-run", "json"], options: ["case", "model", "budget", "runs", "out", "rescore"], multi: ["variant"] });
+	const args = parseArgs(argv, { flags: ["dry-run", "json"], options: ["case", "model", "budget", "runs", "out", "rescore", "work-dir"], multi: ["variant"] });
 	if (!args.case) throw new ConfigError("--case is required");
 	if (args.rescore) return { caseName: args.case, rescore: path.resolve(args.rescore), json: Boolean(args.json) };
 	if (!args.model) throw new ConfigError("--model is required");
@@ -55,7 +58,7 @@ export function parseOptions(argv) {
 	const runs = args.runs === undefined ? 5 : Number(args.runs);
 	if (!Number.isInteger(runs) || runs < 1 || runs > 50) throw new ConfigError("--runs must be a whole number from 1 to 50");
 	const out = path.resolve(args.out ?? path.join(os.tmpdir(), `stack-agent-micro-${args.case}-${Date.now()}`));
-	return { caseName: args.case, model: args.model, budget, runs, variants: args.variant ?? null, out, dryRun: Boolean(args["dry-run"]), json: Boolean(args.json) };
+	return { caseName: args.case, model: args.model, budget, runs, variants: args.variant ?? null, workDir: args["work-dir"] ?? null, out, dryRun: Boolean(args["dry-run"]), json: Boolean(args.json) };
 }
 
 // the control first, then the variants asked for, in the case's order
@@ -78,8 +81,8 @@ export function toScore(value) {
 	throw new Error(`score() returned ${JSON.stringify(value)}; it must return a number or a boolean`);
 }
 
-export function callOnce({ claude, c, guidance, model, budget, env }) {
-	const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-micro-call-"));
+export function callOnce({ claude, c, guidance, model, budget, env, base = os.tmpdir() }) {
+	const cwd = fs.mkdtempSync(path.join(base, "stack-agent-micro-call-"));
 	try {
 		const r = spawnClaude(claude, microArgs({ prompt: c.prompt(guidance), model, budget }), cwd, env);
 		if (r.error) return { error: r.error.message };
@@ -143,15 +146,22 @@ export async function main(argv) {
 		return 0;
 	}
 	const claude = resolveClaude();
-	const meta = { case: c.name, model: opts.model, budget: opts.budget, runs: opts.runs, harnessVersion: harnessVersion(), claudeVersion: claudeVersion(claude) };
+	let work;
+	try {
+		work = pickWorkBase({ requested: opts.workDir });
+	} catch (err) {
+		throw new ConfigError(err.message);
+	}
+	const meta = { case: c.name, model: opts.model, budget: opts.budget, runs: opts.runs, harnessVersion: harnessVersion(), claudeVersion: claudeVersion(claude), workDir: work.base, memoryFilesRead: work.memory };
 	const { env } = claudeEnv(true);
 	fs.mkdirSync(opts.out, { recursive: true });
 	log(`out: ${opts.out}`);
+	if (memoryNote(work.memory)) log(memoryNote(work.memory));
 	const rows = [];
 	// rounds instead of one variant after another, so a slow drift in the model or the service hits every variant alike
 	for (let n = 1; n <= opts.runs; n++) {
 		for (const v of variants) {
-			const row = { variant: v, n, ...callOnce({ claude, c, guidance: c.variants[v], model: opts.model, budget: opts.budget, env }) };
+			const row = { variant: v, n, ...callOnce({ claude, c, guidance: c.variants[v], model: opts.model, budget: opts.budget, env, base: work.base }) };
 			rows.push(row);
 			fs.writeFileSync(path.join(opts.out, "results.json"), JSON.stringify({ meta, runs: rows }, null, 2));
 			log(`${v} #${n}: ${row.error ? `error: ${row.error}` : `score ${row.score}`}${typeof row.cost === "number" ? ` $${row.cost.toFixed(4)}` : ""}`);

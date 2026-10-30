@@ -32,6 +32,7 @@ skills/<name>/    SKILL.md หนึ่งไฟล์ต่อ skill และ 
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
                   review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-test),
                   skill-scan.mjs (SkillSpector สแกน skill และ hook ใช้เฉพาะใน CI ของ repo นี้ ต้องมี Python)
+                  mine-transcripts.mjs, skill-usage.mjs (อ่าน session เก่าของ Claude Code บนเครื่องนี้ให้ skill mine-corrections ซ่อนรหัสลับก่อน ฝั่ง plugin ไม่ถูก vendor โดย init)
                   canary.mjs (ตรวจว่าปลั๊กอินยังโหลดและ hook ยังทำงานภายใต้ Claude Code รุ่นปัจจุบันไหม ใช้ใน CI ของ repo นี้ ทุกสัปดาห์)
                   release-notes.mjs (ตรวจ tag ของรุ่นเทียบกับไฟล์เวอร์ชันและ changelog แล้วเขียนโน้ตของ GitHub Release ใช้โดย .github/workflows/release.yml)
 templates/        common/ (ไฟล์กฎ), ci/ (workflow), presets/<name>/ (config ของ verify และ guard)
@@ -152,7 +153,8 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | `--arms` | รายการคั่นด้วย comma จาก `full` (plugin ตามเดิม), `none` (ไม่มี plugin), `hooks-only` (สำเนาที่ไม่มี `skills/`), `skills-only` (สำเนาที่ไม่มี `hooks/hooks.json`), `full+superpowers` (plugin คู่กับ obra/superpowers ต้องระบุ `--superpowers DIR` ซึ่งเป็นโฟลเดอร์ superpowers ที่ติดตั้งไว้ และนับว่าแยกถูกต้องเฉพาะเมื่อโหลดสอง plugin นี้เท่านั้น) ค่าเริ่มต้น `full,none` ทุกแขนตั้ง `SUPERPOWERS_DISABLE_TELEMETRY=1` |
 | `--runs N` | จำนวนรอบต่อ task และ arm ค่าเริ่มต้น 1 |
 | `--model`, `--budget USD` | ต้องระบุทั้งคู่ งบเป็นเพดานต่อรอบ ส่งเป็น `--max-budget-usd` และไม่มีค่าเริ่มต้นโดยตั้งใจ |
-| `--plugin DIR`, `--out DIR` | plugin ที่จะทดสอบ (ค่าเริ่มต้นคือ repo นี้) และที่เก็บผล (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |
+| `--plugin DIR`, `--out DIR` | plugin ที่จะทดสอบ (ค่าเริ่มต้นคือ repo นี้) และที่เก็บผล (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใต้โฟลเดอร์ทำงาน ดู `--work-dir`) |
+| `--work-dir DIR` | ที่เก็บโฟลเดอร์ของแต่ละรอบและผลลัพธ์ (ค่าเริ่มต้น) เลือกแบบเดียวกับตัวทดสอบสด: อันแรกในโฟลเดอร์ temp ของระบบ, `C:\Users\Public`, `C:\ProgramData`, `/tmp` ที่ไม่มี `CLAUDE.md` อยู่ข้างบน |
 | `--no-isolate` | ไม่ส่ง `--setting-sources project,local --strict-mcp-config` ปกติจะแยกให้เสมอ (`--isolate` ใส่ได้แต่ไม่เปลี่ยนอะไร) |
 | `--disallowed-tools LIST` | รายการคั่นด้วย comma ที่ส่งให้ `claude --disallowedTools` ทั้งสองแขน เช่น `"Bash(node:*)"` สำหรับ agent ที่รัน Node ไม่ได้ hook ยังทำงานตามปกติ |
 | `--judge MODEL` | ให้คะแนน `rubric` ของ task ด้วย (เกณฑ์ที่ script ตรวจไม่ได้ เช่น "controller แค่อ่าน request") โดยใช้ `agents/judge.md` รันเป็น session `claude` ที่สองด้วย MODEL judge อ่านสำเนาของรอบนั้นที่ตั้งชื่อแบบสุ่ม มีการแก้อยู่ใน `CHANGES.diff` และไม่มีหลักฐานของ verify ไฟล์ skip หรือ config ของ Stack Agent (เหลือแค่ `rules.md`) จึงบอกไม่ได้ว่าเป็นกลุ่มไหน แต่ละเกณฑ์จะเป็นคอลัมน์ `judge:...` ข้อที่ judge ไม่ตอบนับเป็นไม่เกี่ยวข้อง ปิดไว้เป็นค่าเริ่มต้น เพราะเสียเงินเพิ่มได้ถึง `--budget` ต่อรอบ |
@@ -187,7 +189,8 @@ npm run micro -- --case import-request --model sonnet --budget 0.05 --runs 5 --d
 | `--model`, `--budget USD` | ต้องใส่ทั้งคู่ budget คือเพดานต่อการเรียกหนึ่งครั้งที่ส่งเป็น `--max-budget-usd` ไม่มีค่าเริ่มต้น |
 | `--runs N` | จำนวนครั้งต่อ variant ตั้งแต่ 1 ถึง 50 ค่าเริ่มต้น 5 |
 | `--variant NAME` | รันเฉพาะ variant เหล่านี้ (ใส่ซ้ำได้) control รันเสมอ |
-| `--out DIR` | ที่เก็บ `results.json` (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใน temp ของระบบ) |
+| `--out DIR` | ที่เก็บ `results.json` (ค่าเริ่มต้นคือโฟลเดอร์ใหม่ใต้โฟลเดอร์ทำงาน ดู `--work-dir`) |
+| `--work-dir DIR` | ที่เก็บโฟลเดอร์ของแต่ละการเรียก เลือกแบบเดียวกับ A/B `results.json` บันทึก `workDir` และ `memoryFilesRead` |
 | `--dry-run` | แสดง prompt ของทุก variant และค่าใช้จ่ายสูงสุดของรอบนั้น ไม่เรียก `claude` |
 | `--rescore FILE` | ให้คะแนนคำตอบที่เก็บไว้ใน `results.json` ใหม่ด้วย `score()` ปัจจุบันของ case ไม่เรียก `claude` และไม่ต้องใส่ `--model` หรือ `--budget` ควรอ่านคำตอบก่อนเชื่อคะแนน: รอบแรกที่รัน `import-request` จริง ให้ผ่านกับคำตอบที่ปฏิเสธ เพราะคำตอบเอ่ยถึง `verify.json` และชื่อฟังก์ชัน พอแก้ scorer แล้ว `--rescore` ก็ได้ตัวเลขที่ถูกโดยไม่เสียเงิน |
 | `--json` | แสดงผลเป็น JSON |
@@ -216,9 +219,36 @@ model เก่ง (opus) เขียนถ้อยคำใหม่หลา
 | `--propose-model`, `--screen-model`, `--confirm-model` | ค่าเริ่มต้น opus, haiku, sonnet ขั้นสุดท้ายควรใช้ model ที่คนใช้จริง |
 | `--call-budget USD` | `--max-budget-usd` ของการเรียกแต่ละครั้ง ค่าเริ่มต้น 0.3 |
 | `--out DIR`, `--json`, `--dry-run` | ที่เก็บ `report.json` กับ `proposed.txt` / แสดงรายงานเป็น JSON / แสดงแผนและค่าใช้จ่ายสูงสุดโดยไม่เรียก `claude` |
+| `--work-dir DIR` | ที่เก็บโฟลเดอร์ของแต่ละการเรียก เลือกแบบเดียวกับ A/B |
 
 **เพิ่ม scenario ให้ case** export `scenarios: [{ name, prompt(guidance), score(text) }, ...]` ไว้ข้าง `variants` คืองานเดียวกันในสองสถานการณ์ขึ้นไป ทุกอันยกเว้นอันสุดท้ายใช้เรียนรู้ อันสุดท้ายถูกกันไว้ ดูตอนขั้นสุดท้ายเท่านั้น ถ้อยคำที่เหมาะแต่กับสถานการณ์ที่เรียนมาจึงจะเห็น ให้ export `keep: [...]` ด้วย คือวลีที่ทุกแบบต้องยังมี (ชื่อไฟล์ คำสั่ง) แบบที่ทำวลีหายถูกทิ้ง ตัวอย่างคือ `import-request`
 
 **ค่าใช้จ่ายและเวลา** การรัน `import-request` จริงหนึ่งครั้ง (20 ครั้งต่อแขนและสถานการณ์ รวม 237 การเรียก) เสีย 5.19 ดอลลาร์ ใช้เวลาราว 36 นาที การเรียกที่พลาดจะลองใหม่สูงสุดสามครั้ง และทุกครั้งนับเข้างบ ลองรัน `--dry-run` ก่อน
 
 **เจออะไร และอะไรที่ยังไม่เจอ** เริ่มจากถ้อยคำเก่าที่ทำให้ agent เพิ่ม check เรียกฟังก์ชันตรงๆ ได้ 0 ครั้งจาก 60 มันเสนอถ้อยคำที่ได้ 42 ครั้งจาก 60 และ 17 จาก 20 ในสถานการณ์ที่ไม่เคยเห็น แต่ถ้อยคำที่คนปรับมือได้ราว 83% ในสถานการณ์แรก ขณะที่ของเครื่องได้ 65% เครื่องจึงยังไม่ชนะงานมือที่ตั้งใจทำ ใช้เมื่อยังไม่มีถ้อยคำที่ดี และอ่านคำตอบที่มันให้คะแนนก่อนเชื่อ ดูบันทึกการออกแบบ 2026-10-28
+
+## session จริงโหลด skill ไหม? (ตรวจการเลือก skill แบบสด)
+
+`scripts/micro/skill-routing` ถาม model ในการเรียกข้อความครั้งเดียวว่า 34 คำขอจะโหลด skill ไหน ส่วน `scripts/micro/routing-live.mjs` ถามใน session จริง: แต่ละคำขอแยกกัน ในโปรเจกต์ที่ตั้ง Stack Agent ไว้ (สำเนาของ `examples/sample-backend` หรือ `sample-cli` ถ้าคำขอเป็นเรื่อง command line) โหลด plugin ไว้ และปิด plugin กับ MCP server ของคุณเอง เครื่องมือตัวแรกที่ model เรียกเป็นตัวตัดสิน: Skill tool คือการโหลด skill นั้น เครื่องมืออื่นหรือไม่เรียกเลยคือ "ไม่โหลด skill" hook ปฏิเสธเครื่องมือทุกตัว (เครื่องมือยังอยู่ในรายการของ model ที่มันเลือกจึงเหมือนที่จะเลือกจริง) และ session ถูกหยุดที่การเรียกนั้น สิ่งที่ model ขอจึงไม่ถูกรัน และหนึ่งคำขอเสียราวหนึ่งรอบของ model
+
+```bash
+npm run micro:routing -- --model sonnet --budget 0.15 --runs 3 --dry-run
+```
+
+| ตัวเลือก | ความหมาย |
+| --- | --- |
+| `--model`, `--budget USD` | ต้องใส่ทั้งคู่ budget คือเพดานต่อ session (`--max-budget-usd`) |
+| `--runs N` | จำนวน session ต่อคำขอ 1 ถึง 20 ค่าเริ่มต้น 3 |
+| `--per-skill N`, `--near-miss N` | จำนวนคำขอจากสี่ข้อของแต่ละ skill (ค่าเริ่มต้น 2) และจากสิบข้อเกือบเกี่ยว (ค่าเริ่มต้น 3) หรือใช้ `--only 7,17,21` ระบุคำขอตามเลขในเคส |
+| `--requests FILE` | ใช้คำขอของคุณเองแทน 34 ข้อของ case: JSON array ของ `{ "request": "...", "ok": ["verify"] }` โดย `ok` คือ skill ที่ถือว่าโหลดก่อนได้ถูก หรือ `["none"]` นับเลขจาก 1 ตามลำดับในไฟล์ และใช้แทน `--per-skill`, `--near-miss`, `--only` คำขอห้ามขึ้นต้นด้วย `-` ใช้ทดสอบคำอธิบายใหม่กับถ้อยคำที่ case ยังไม่เคยเห็น `scripts/micro/cases/skill-routing-extra.json` มีคำขอแบบนี้ 68 ข้อ |
+| `--arms` | `full` (plugin นี้ตัวเดียว ค่าเริ่มต้น) และ/หรือ `full+superpowers` (คู่กับ obra/superpowers ต้องใส่ `--superpowers DIR`) session ที่ plugin ไม่โหลดถูกทำเครื่องหมาย invalid และทำให้การรันล้ม |
+| `--project sample\|bare` | เริ่มในโปรเจกต์ตัวอย่าง (ค่าเริ่มต้น) หรือโฟลเดอร์ว่าง |
+| `--work-dir DIR` | ที่เก็บโฟลเดอร์ของแต่ละ session ค่าเริ่มต้นคืออันแรกในโฟลเดอร์ temp ของระบบ, `C:\Users\Public`, `C:\ProgramData`, `/tmp` ที่ไม่มี `CLAUDE.md` อยู่ข้างบน ถ้ายังอ่านได้ การรันจะบอกรายการไฟล์นั้น |
+| `--concurrency N`, `--timeout S`, `--total-budget USD` | จำนวน session พร้อมกัน (ค่าเริ่มต้น 3) วินาทีที่รอการเรียกเครื่องมือแรก (ค่าเริ่มต้น 120) และเพดานเงินทั้งหมด |
+| `--dry-run`, `--json`, `--out DIR` | แสดงคำขอและค่าใช้จ่ายสูงสุดโดยไม่เรียก claude / แสดง JSON / ที่เก็บ `results.json` |
+
+**ค่าใช้จ่าย** session ที่จบด้วยข้อความรายงานราว 0.05 ดอลลาร์ ส่วนที่ถูกหยุดที่การเรียกเครื่องมือแรกไม่รายงานค่าใช้จ่าย จึงวัดไม่ได้ budget รวมกันเป็น คำขอ x รอบ x arm x budget (แสดงก่อนเริ่ม) แต่ budget ตรวจหลังจบรอบของ model จึงเกินได้หนึ่งรอบ และ `--total-budget` หยุดไม่ให้เริ่ม session ใหม่ ตอนสร้างเครื่องมือนี้เริ่มไปราว 70 session
+
+**อ่านพร้อมข้อจำกัด** มันวัดเฉพาะการเรียกเครื่องมือแรก: model ที่สำรวจก่อนแล้วโหลด skill ในอีกรอบนับเป็นพลาด คำขอแนว "หาว่าอะไรอยู่ที่ไหน" ในโปรเจกต์เล็กตอบด้วยการค้นหาได้โดยไม่เสียหาย "พลาด" ตรงนั้นจึงเป็นข้อมูลเรื่องนิสัย ไม่จำเป็นต้องเป็นความผิดพลาด บันทึกการออกแบบ (29 ต.ค. 2026) แสดงสิ่งที่มันพบ
+
+**ไฟล์ memory ของคุณไปถึง session เว้นแต่คุณกันไว้** `--setting-sources project,local` ปิด settings ไม่ได้ปิด memory: claude อ่าน `CLAUDE.md` จากโฟลเดอร์ทำงานและทุกโฟลเดอร์ข้างบน และ `~/.claude/CLAUDE.md` บน Windows โฟลเดอร์ temp ของระบบอยู่ในโปรไฟล์ของคุณ `CLAUDE.md` ใน `C:\Users\<ชื่อคุณ>` จึงถูกอ่านโดยทุก session ที่เริ่มตรงนั้น `routing-live.mjs` เลยเลือกโฟลเดอร์ทำงานที่ไม่มีไฟล์แบบนี้อยู่ข้างบน และบอกเมื่อทำไม่ได้ `scripts/micro/run.mjs`, `scripts/micro/tune.mjs` และ `scripts/ab/run.mjs` ทำแบบเดียวกันและมี `--work-dir` เหมือนกัน แต่ละตัวพิมพ์ NOTE และบันทึก `memoryFilesRead` ในผลลัพธ์ เมื่อยังมีไฟล์ memory ไปถึง session `~/.claude/CLAUDE.md` ถูกอ่านไม่ว่า session จะรันที่ไหน จึงแสดงในรายการแต่ไม่ใช้ตัดสินโฟลเดอร์ `C:\Users\Public` กับ `/tmp` เปิดให้ทุกบัญชีบนเครื่องเขียนได้ ถ้าใช้เครื่องร่วมกัน ให้ตั้ง `--work-dir` เป็นโฟลเดอร์ที่มีแค่คุณเขียนได้ (บน Linux และ macOS โฟลเดอร์ `stack-agent-work` ที่เป็นของผู้ใช้อื่นจะไม่ถูกใช้) ดูบันทึกการออกแบบ (29 ต.ค. 2026)

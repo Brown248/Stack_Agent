@@ -28,13 +28,13 @@ const killPid = (file) => {
 
 // starts a background process that inherits the output pipes, prints, and exits at once
 const leaver = `const { spawn } = require("child_process");
-const c = spawn(process.execPath, ["-e", "require('fs').writeFileSync('left.pid', String(process.pid)); setTimeout(() => {}, 20000)"], { stdio: "inherit" });
+const c = spawn(process.execPath, ["-e", "require('fs').writeFileSync('left.pid', String(process.pid)); setTimeout(() => {}, 60000)"], { stdio: "inherit" });
 c.unref();
 setTimeout(() => { console.log("started"); process.exit(0); }, 300);
 `;
 
 // on Windows a child started with "inherit" does not keep the parent's pipe; cmd's start /b does
-const sleeper = "require('fs').writeFileSync('left.pid', String(process.pid)); setTimeout(() => {}, 20000);\n";
+const sleeper = "require('fs').writeFileSync('left.pid', String(process.pid)); setTimeout(() => {}, 60000);\n";
 const leaving =
 	process.platform === "win32"
 		? { name: "leaves", command: `start /b "" "${node}" sleeper.cjs && echo started`, timeoutSec: 8, expectOutputIncludes: "started" }
@@ -47,9 +47,9 @@ test("a command that leaves a process holding its output passes on its exit code
 		const r = await main(["--root", dir]);
 		const seconds = (Date.now() - started) / 1000;
 		assert.equal(r.code, 0, r.text);
-		// the leftover would hold the output for 20 s; well under that means verify stopped waiting (a CI runner starts
-		// PowerShell slowly, so the margin is wide)
-		assert.ok(seconds < 15, `took ${seconds}s; it waited for the background process`);
+		// the leftover would hold the output for 60 s; well under that means verify stopped waiting. A loaded CI runner took
+		// 17 s here once (PowerShell starts slowly and the other test files compete for the machine), so the margin is wide.
+		assert.ok(seconds < 40, `took ${seconds}s; it waited for the background process`);
 		const step = JSON.parse(fs.readFileSync(path.join(dir, ".stack-agent/evidence/latest.json"), "utf8")).steps[0];
 		assert.equal(step.timedOut, false);
 		assert.match(step.output, /verify: the command exited but a process it started kept running/);

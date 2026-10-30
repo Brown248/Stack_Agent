@@ -1,6 +1,6 @@
 ---
 name: add-migration
-description: For projects with a database. Use when the schema changes: a new migration, column, table, or index. Use for "add a migration", "ทำ migration", "add a column", "change the schema".
+description: For projects with a database. Use before changing the database in any way: a new migration, column, table, index, or constraint (unique, not null, default, foreign key), a change to a column's type, or dropping or renaming any of them. Also whenever a request needs a new piece of data kept for each row or record, or a stricter rule on one. Also for "store X in the database", "X must be unique", "add a migration", "ทำ migration", "add a column", "change the schema".
 ---
 
 # Add a migration

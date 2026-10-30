@@ -4,28 +4,16 @@
   "rules": [],
   "fingerprints": [
     {
-      "hash": "sha256:2009b86e027513b8ade13760cbbe601e977742452212245f420aeaa1b6bd38af",
+      "hash": "sha256:e210be28f528ec4c7e33c9e4f210ca0b0440a92272054adce516d0d595c23d80",
       "rule_id": "EA4",
       "file": "stop-verify.mjs",
-      "reason": "false positive (2026-10-27): the line is the comment explaining MAX_BLOCKS, the cap that keeps the Stop hook from looping"
+      "reason": "false positive (2026-10-27): the line is the comment explaining MAX_BLOCKS, the cap that keeps the Stop hook from looping; re-fingerprinted 2026-10-29: the hooks changed in PR #22, so the hashes of 2026-10-27 no longer matched"
     },
     {
-      "hash": "sha256:eccc8cacabaa8a55ea78002023025de9c9b1d26d57019754c3ee3d30346dd146",
+      "hash": "sha256:9ab83365c11cc481cd4f24f532456e44596634a2d1434af25134848483bc2533",
       "rule_id": "TM1",
       "file": "pre-bash.mjs",
-      "reason": "false positive (2026-10-27): --no-verify, reset --hard, and --force appear in the messages and comments of the hook that blocks or asks before them"
-    },
-    {
-      "hash": "sha256:5e782ecbb86ff37d398d6c1e8160eaa5b2b160aa3d9161a76c121ded3dab28ca",
-      "rule_id": "TM1",
-      "file": "pre-bash.mjs",
-      "reason": "false positive (2026-10-27): --no-verify, reset --hard, and --force appear in the messages and comments of the hook that blocks or asks before them"
-    },
-    {
-      "hash": "sha256:cbbae834c1e7f719949eb6d60ad53743fae20ab0da6b9c58a3913bcd4fc88100",
-      "rule_id": "TM1",
-      "file": "pre-bash.mjs",
-      "reason": "false positive (2026-10-27): --no-verify, reset --hard, and --force appear in the messages and comments of the hook that blocks or asks before them"
+      "reason": "false positive (2026-10-27): --no-verify, reset --hard, and --force appear in the messages and comments of the hook that blocks or asks before them; re-fingerprinted 2026-10-29: the hooks changed in PR #22, so the hashes of 2026-10-27 no longer matched"
     }
   ]
 }

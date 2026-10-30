@@ -2,6 +2,7 @@
 // with each target's baseline. A fake scanner stands in, so npm test needs no Python.
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { main, scanArgs, targets } from "../scripts/skill-scan.mjs";
@@ -80,6 +81,84 @@ test("a scanner that cannot start, or nothing to scan, is a usage error; this re
 	assert.throws(() => main(["--root", tempDir("stack-agent-scan-")]), /nothing to scan/);
 	const own = main(["--root", repoRoot, "--list"]).text;
 	for (const t of ["skills/debug", "skills/verify", "agents", "hooks", "scripts/hooks"]) assert.match(own, new RegExp(`^${t.replace("/", "\\/")}`, "m"));
+});
+
+// a fake that can also scan to JSON and write a baseline: the findings are the ISSUES.json next to the target
+const leftovers = () => fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("stack-agent-rebaseline-")).length;
+const fakeJson = (root) => {
+	const file = path.join(root, "fake-json-skillspector.mjs");
+	fs.writeFileSync(
+		file,
+		`import fs from "node:fs"; import path from "node:path";
+const a = process.argv.slice(2);
+const target = a[1];
+const at = (flag) => a[a.indexOf(flag) + 1];
+const issuesFile = path.join(target, "ISSUES.json");
+const issues = fs.existsSync(issuesFile) ? JSON.parse(fs.readFileSync(issuesFile, "utf8")) : [];
+if (a[0] === "scan") fs.writeFileSync(at("--output"), JSON.stringify({ issues }));
+if (a[0] === "baseline") fs.writeFileSync(at("-o"), JSON.stringify({ version: 2, scanner_version: "2.12.0", rules: [], fingerprints: issues.map((x, n) => ({ hash: "sha256:new" + n, rule_id: fs.existsSync(path.join(target, "WRONG")) ? "XX9" : x.id, file: x.location.file, reason: at("--reason") })) }));
+`,
+	);
+	return file;
+};
+
+test("--rebaseline writes the hash again when the findings are the same kinds and number, and each entry keeps its reason", () => {
+	const root = plugin();
+	const bin = fakeJson(root);
+	const baseline = path.join(root, ".github/skillspector/skill-beta.baseline.json");
+	fs.writeFileSync(
+		baseline,
+		JSON.stringify({ version: 2, scanner_version: "2.12.0", rules: [], fingerprints: [{ hash: "sha256:old0", rule_id: "TM1", file: "SKILL.md", reason: "reason one" }, { hash: "sha256:old1", rule_id: "TM1", file: "SKILL.md", reason: "reason two" }, { hash: "sha256:old2", rule_id: "LP3", file: "SKILL.md", reason: "reason three" }] }),
+	);
+	write(root, "skills/beta/ISSUES.json", JSON.stringify([{ id: "TM1", location: { file: "SKILL.md", start_line: 21 }, finding: "--skip-tests" }, { id: "LP3", location: { file: "SKILL.md", start_line: 1 } }, { id: "TM1", location: { file: "SKILL.md", start_line: 25 }, finding: "--skip-checks" }]));
+	const r = main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]);
+	assert.equal(r.code, 0, r.text);
+	assert.match(r.text, /^rebaselined {2}skills\/beta: TM1 in SKILL.md line 21 "--skip-tests"; LP3 in SKILL.md line 1 ""; TM1 in SKILL.md line 25 "--skip-checks"$/);
+	const next = JSON.parse(fs.readFileSync(baseline, "utf8"));
+	assert.deepEqual(next.fingerprints.map((x) => x.hash), ["sha256:new0", "sha256:new1", "sha256:new2"], "the hashes are the scanner's new ones");
+	assert.deepEqual(next.fingerprints.map((x) => [x.rule_id, x.reason]), [["TM1", "reason one"], ["LP3", "reason three"], ["TM1", "reason two"]], "reasons follow their rule id, in order");
+	assert.ok(fs.readFileSync(baseline, "utf8").endsWith("\n"));
+});
+
+test("--rebaseline refuses a finding the baseline does not cover, a target without a baseline, and an unknown target", () => {
+	const root = plugin();
+	const bin = fakeJson(root);
+	const baseline = path.join(root, ".github/skillspector/skill-beta.baseline.json");
+	const left = leftovers();
+	const before = JSON.stringify({ version: 2, scanner_version: "2.12.0", rules: [], fingerprints: [{ hash: "sha256:old0", rule_id: "TM1", file: "SKILL.md", reason: "r" }] });
+	fs.writeFileSync(baseline, before);
+	// one more finding than the baseline holds, or a different kind: nothing is written
+	const at = (file, id = "TM1") => ({ id, location: { file } });
+	// one more than the baseline holds, a different kind, none, or the same kind in another file: nothing is written
+	for (const issues of [[at("SKILL.md"), at("SKILL.md")], [at("SKILL.md", "PI2")], [], [at("other.md")]]) {
+		write(root, "skills/beta/ISSUES.json", JSON.stringify(issues));
+		const r = main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]);
+		assert.equal(r.code, 1);
+		assert.match(r.text, /^REFUSED {6}skills\/beta: the scan finds \[.*\] and the baseline holds \[SKILL\.md\|TM1\] \(file\|rule\); triage the difference first$/);
+		assert.equal(fs.readFileSync(baseline, "utf8"), before, "the baseline is untouched");
+	}
+	assert.throws(() => main(["--root", root, "--bin", bin, "--rebaseline", "skill-alpha"]), (e) => e instanceof ConfigError && /skill-alpha has no baseline/.test(e.message));
+	assert.throws(() => main(["--root", root, "--bin", bin, "--rebaseline", "skill-nope"]), (e) => e instanceof ConfigError && /no target skill-nope/.test(e.message));
+	// a baseline the scanner writes that does not match its own scan is not used
+	write(root, "skills/beta/ISSUES.json", JSON.stringify([at("SKILL.md")]));
+	write(root, "skills/beta/WRONG", "");
+	assert.throws(() => main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]), (e) => e instanceof ConfigError && /does not match its own scan; nothing was changed/.test(e.message));
+	assert.equal(fs.readFileSync(baseline, "utf8"), before);
+	fs.rmSync(path.join(root, "skills/beta/WRONG"));
+	// no key, a baseline that is not JSON or has no list: usage errors (exit 2), not "a new finding"
+	assert.throws(() => main(["--root", root, "--bin", bin, "--rebaseline", ""]), (e) => e instanceof ConfigError && /needs a target key/.test(e.message));
+	fs.writeFileSync(baseline, "not json");
+	assert.throws(() => main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]), (e) => e instanceof ConfigError && /cannot read/.test(e.message));
+	fs.writeFileSync(baseline, JSON.stringify({ version: 2 }));
+	assert.throws(() => main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]), (e) => e instanceof ConfigError && /no fingerprints list/.test(e.message));
+	// a run that stops on its second target still says which first targets were rewritten
+	fs.writeFileSync(baseline, before);
+	write(root, "skills/beta/ISSUES.json", JSON.stringify([at("SKILL.md")]));
+	assert.throws(
+		() => main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta,skill-nope"]),
+		(e) => e instanceof ConfigError && /no target skill-nope \(see --list\)\n.*rebaselined {2}skills\/beta: TM1 in SKILL\.md/.test(e.message),
+	);
+	assert.equal(leftovers(), left, "the scan folders made on the way are removed");
 });
 
 test("the CI job is pinned, static, and not a gate, and every baselined finding carries its reason", () => {

@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: reflect-reconcile
+description: "A baseline for the reflect skill: when a correction contradicts an older line in a project skill, the proposal should rewrite that old line too, quoting it, and wait for approval. The skill already does this without a dedicated step, so this case guards it; it does not show a gain."
+tags: [skills, reflect]
+context:
+  scaffold_script: scaffold.sh

@@ -6,6 +6,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { ConfigError } from "../scripts/lib/files.mjs";
 import { checkScenarios, fisherOneSided, parseCandidates, parseOptions, pareto } from "../scripts/micro/tune.mjs";
+import { memoryFilesAbove } from "../scripts/micro/work-dir.mjs";
 import { repoRoot, tempDir, write } from "./helpers.mjs";
 
 const script = path.join(repoRoot, "scripts", "micro", "tune.mjs");
@@ -42,7 +43,7 @@ function fakeClaude({ candidates = ["BETTER: do the thing and say pass"], replyC
 		`import fs from "node:fs";
 const argv = process.argv.slice(2);
 if (argv[0] === "--version") { console.log("9.9.9 (fake)"); process.exit(0); }
-fs.appendFileSync(${JSON.stringify(path.join(dir, "calls.jsonl"))}, JSON.stringify({ argv }) + "\\n");
+fs.appendFileSync(${JSON.stringify(path.join(dir, "calls.jsonl"))}, JSON.stringify({ argv, cwd: process.cwd() }) + "\\n");
 const prompt = argv[argv.indexOf("-p") + 1];
 const model = argv[argv.indexOf("--model") + 1];
 const made = fs.readFileSync(${JSON.stringify(path.join(dir, "calls.jsonl"))}, "utf8").trim().split("\\n").length;
@@ -241,4 +242,25 @@ test("unknown case, missing variant, and a case with one scenario are configurat
 
 test("ConfigError is what the option checks throw", () => {
 	assert.throws(() => parseOptions(["--case", "x", "--budget", "0"]), ConfigError);
+});
+
+test("each call runs in a folder whose memory files are known, and the report says which (--work-dir, or one with none above it)", () => {
+	const root = tempDir("stack-agent-work-");
+	write(root, "CLAUDE.md", "# a playbook\n");
+	const cases = caseDir();
+	const fake = fakeClaude();
+	const out = path.join(tempDir(), "out");
+	const inner = path.join(root, "inner");
+	const r = run([...base(cases), "--work-dir", inner, "--out", out], { CLAUDE_BIN: fake.bin });
+	assert.equal(r.status, 0, r.stderr + r.stdout);
+	assert.ok(fake.calls().every((c) => c.cwd.startsWith(inner)), "every call ran under --work-dir");
+	const report = JSON.parse(fs.readFileSync(path.join(out, "report.json"), "utf8"));
+	assert.equal(report.meta.workDir, inner);
+	assert.ok(report.meta.memoryFilesRead.includes(path.join(root, "CLAUDE.md")));
+	assert.match(r.stdout, /NOTE: every session also reads \d+ memory file\(s\) of yours/);
+	const fake2 = fakeClaude();
+	const out2 = path.join(tempDir(), "out");
+	assert.equal(run([...base(cases), "--out", out2], { CLAUDE_BIN: fake2.bin }).status, 0);
+	const report2 = JSON.parse(fs.readFileSync(path.join(out2, "report.json"), "utf8"));
+	for (const c of fake2.calls()) assert.deepEqual(memoryFilesAbove(c.cwd), report2.meta.memoryFilesRead);
 });

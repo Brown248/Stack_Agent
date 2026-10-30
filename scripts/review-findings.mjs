@@ -52,14 +52,27 @@ export const FIELDS = {
 };
 const ALL_OPTIONAL = [...new Set(Object.values(FIELDS).flat())];
 
-const isText = (v) => typeof v === "string" && v.trim().length > 0;
+// What shows nothing: white space, control characters, format characters (the zero-width space, the byte order mark, the
+// bidirectional controls, tag characters, variation selectors, and the code points reserved to be invisible), lone surrogates, and the blank fillers (Hangul, Braille). A field made only of
+// these is not text: it would pass as "non-empty" and say nothing. Combining marks count as nothing when no base
+// character carries them. Idea from cloudflare/security-audit-skill (MIT), whose validator requires a visible character.
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}\p{Cs}\p{Default_Ignorable_Code_Point}\sㅤ⠀ᅟᅠﾠ]/gu;
+const isText = (v) => typeof v === "string" && v.replace(INVISIBLE, "").replace(/\p{M}/gu, "").length > 0;
 const norm = (s) => String(s).replace(/\s+/g, " ").trim();
+// how much of a quote shows: its characters without the invisible ones and the spaces
+const seen = (s) => String(s).replace(INVISIBLE, "");
+// Text for a terminal or a log: a control character, a line or paragraph separator, a bidirectional control, or a tag
+// character is written as \u{..}. A finding is data from a model and quotes code, and without this its id, a field
+// name, or a quote could move the cursor, clear the screen, reorder what is shown (the bidirectional "Trojan Source"
+// trick), or carry text no one can see (tag characters). The zero-width joiner and non-joiner stay: Thai, Persian, and
+// emoji sequences need them.
+export const printable = (s) => String(s).replace(/[\p{Cc}\p{Zl}\p{Zp}؜‎‏‪-‮⁦-⁩\u{e0000}-\u{e007f}\u2065\ufff0-\ufff8\u{e0080}-\u{e0fff}]/gu, (ch) => `\\u{${ch.codePointAt(0).toString(16)}}`);
 
 function checkPlace(place, where, errors, { needDescription }) {
 	if (!place || typeof place !== "object" || Array.isArray(place)) return errors.push(`${where} must be an object with file, line, excerpt`);
 	if (!isText(place.file) || path.isAbsolute(place.file) || place.file.split(/[\\/]/).includes("..")) errors.push(`${where}.file must be a path relative to the project root`);
 	if (!Number.isInteger(place.line) || place.line < 1) errors.push(`${where}.line must be an integer of at least 1`);
-	if (!isText(place.excerpt) || norm(place.excerpt).length < 3) errors.push(`${where}.excerpt must quote at least 3 characters of the code at that line`);
+	if (!isText(place.excerpt) || seen(place.excerpt).length < 3) errors.push(`${where}.excerpt must quote at least 3 characters of the code at that line`);
 	if (needDescription && !isText(place.description)) errors.push(`${where}.description is required`);
 	const extra = Object.keys(place).filter((k) => !["file", "line", "excerpt", "description"].includes(k));
 	if (extra.length) errors.push(`${where} has unknown field(s): ${extra.join(", ")}`);
@@ -93,7 +106,7 @@ export function checkRecords(records, { stage = "final" } = {}) {
 			if (!s || typeof s !== "object" || Array.isArray(s)) errors.push(`${at}: a spec finding needs spec: { from, quote }`);
 			else {
 				if (!isText(s.from) || (s.from !== SPEC_FROM_COMMIT && (path.isAbsolute(s.from) || s.from.split(/[\\/]/).includes("..")))) errors.push(`${at}: spec.from must be ${SPEC_FROM_COMMIT} or a file relative to the project root`);
-				if (!isText(s.quote) || norm(s.quote).length < 3) errors.push(`${at}: spec.quote must quote at least 3 characters of what was asked`);
+				if (!isText(s.quote) || seen(s.quote).length < 3) errors.push(`${at}: spec.quote must quote at least 3 characters of what was asked`);
 				const extraSpec = Object.keys(s).filter((k) => !["from", "quote"].includes(k));
 				if (extraSpec.length) errors.push(`${at}: spec has unknown field(s): ${extraSpec.join(", ")}`);
 				if (s.from === SPEC_FROM_COMMIT && r.commit === "worktree") errors.push(`${at}: an uncommitted change has no commit message; save the request to a file and cite that`);
@@ -279,7 +292,7 @@ export function validateFindings(records, { stage = "final", root = process.cwd(
 	return errors;
 }
 
-const cell = (s) => String(s).replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+const cell = (s) => printable(String(s).replace(/\|/g, "\\|").replace(/\s+/g, " ").trim());
 
 // one review-log row per final finding; a repeatable finding waits for /stack-agent:correct to prove a rule
 export function logRows(records, date) {
@@ -320,7 +333,7 @@ export function main(argv) {
 		const records = readFindings(file);
 		const candidates = args.candidates === undefined ? undefined : readFindings(args.candidates);
 		const all = validateFindings(records, { stage, root: path.resolve(args.root ?? process.cwd()), ref: args.ref, candidates });
-		const errors = all.slice(0, MAX_ERRORS);
+		const errors = all.slice(0, MAX_ERRORS).map(printable);
 		const more = all.length > MAX_ERRORS ? [`... and ${all.length - MAX_ERRORS} more`] : [];
 		if (args.json) return { code: all.length ? 1 : 0, text: JSON.stringify({ ok: all.length === 0, count: Array.isArray(records) ? records.length : 0, errors: [...errors, ...more] }, null, 2) };
 		return all.length
@@ -344,7 +357,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 		process.exitCode = code;
 	} catch (err) {
 		if (!(err instanceof ConfigError)) throw err;
-		console.error(`review-findings: ${err.message}\n${USAGE}`);
+		console.error(`review-findings: ${printable(err.message)}\n${USAGE}`);
 		process.exitCode = 2;
 	}
 }

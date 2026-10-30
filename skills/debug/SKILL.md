@@ -1,6 +1,6 @@
 ---
 name: debug
-description: Use this first for any bug report or "find and fix it" request, before reading code for the cause. Covers wrong results ("returns 201 instead of 400", "says 1 instead of 2"), missing data ("never shows up"), errors, crashes, regressions, and slowness. Also for "debug this", "แก้บั๊ก", "ทำไมมันพัง".
+description: Use this first for any bug report or "find and fix it" request, before reading code for the cause. Covers wrong results or a wrong total or count ("returns 201 instead of 400", "says 1 instead of 2"), missing data ("never shows up"), errors, crashes, regressions, and slowness. Also for "debug this", "แก้บั๊ก", "ทำไมมันพัง".
 ---
 
 # Debug with a repro that goes red

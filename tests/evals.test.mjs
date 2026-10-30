@@ -21,6 +21,8 @@ test("every eval case has a case.yaml named after its folder, a prompt with allo
 		assert.match(caseYaml, /^schema_version: "1\.1"$/m, name);
 		assert.match(caseYaml, new RegExp(`^name: ${name}$`, "m"), name);
 		assert.match(caseYaml, /^ {2}scaffold_script: scaffold\.sh$/m, name);
+		// claude's YAML reader refuses a plain value holding ": ", " #", or a trailing ":", which a looser reader here would not notice
+		for (const [, key, v] of caseYaml.matchAll(/^\s*([\w-]+): (.+)$/gm)) if (!/^["'[{|>]/.test(v)) assert.ok(!v.includes(": ") && !v.includes(" #") && !v.endsWith(":"), `${name}: ${key} needs quotes around its value`);
 		const prompt = fs.readFileSync(path.join(dir, "prompt.md"), "utf8");
 		assert.match(frontmatter(prompt) ?? "", /^allowed_tools: \[.+\]$/m, `${name}: prompt.md lists its tools`);
 		const scaffoldSh = fs.readFileSync(path.join(dir, "scaffold.sh"), "utf8");
@@ -50,6 +52,18 @@ function scaffolded(name) {
 	assert.equal(r.code, 0, r.stderr);
 	return dir;
 }
+
+test("reflect-reconcile plants the older line the new correction contradicts, in a project skill the correction does not route to", () => {
+	const dir = scaffolded("reflect-reconcile");
+	assert.match(git(dir, "log", "-1", "--format=%s"), /quick-lookup keeps one-line queries in the controller/);
+	assert.equal(git(dir, "status", "--porcelain"), "");
+	const skill = fs.readFileSync(path.join(dir, ".claude/skills/quick-lookup/SKILL.md"), "utf8");
+	assert.match(skill, /^name: quick-lookup$/m);
+	assert.match(skill, /A query of one SELECT may stay in the controller/);
+	// the grader asks for exactly that line, and the prompt starts the skill by name
+	assert.match(fs.readFileSync(path.join(evalsDir, "reflect-reconcile/graders/rewrites-the-old-rule.md"), "utf8"), /quick-lookup/);
+	assert.match(fs.readFileSync(path.join(evalsDir, "reflect-reconcile/prompt.md"), "utf8"), /^\/stack-agent:reflect\b/m);
+});
 
 test("debug-blank-name plants the bug in a commit, so the fix grader fails until the agent fixes it", () => {
 	const dir = scaffolded("debug-blank-name");
