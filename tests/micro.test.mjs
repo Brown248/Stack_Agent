@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { CONTROL, checkCase, loadCase, microArgs, parseOptions, pickVariants, summarize, toScore } from "../scripts/micro/run.mjs";
 import { ConfigError } from "../scripts/lib/files.mjs";
 import { coverageMessage, importMessage } from "../scripts/hooks/stop-verify.mjs";
+import { memoryFilesAbove } from "../scripts/micro/work-dir.mjs";
 import { repoRoot, tempDir, write } from "./helpers.mjs";
 
 const runScript = path.join(repoRoot, "scripts", "micro", "run.mjs");
@@ -96,6 +97,64 @@ test("the coverage and guard cases use the Stop hook's current messages and scor
 	assert.equal(guard.score("I will move the query into the repository."), false, "a promise with no edit");
 });
 
+test("skip-excuses hands the agent the verify skill as shipped, with and without the excuses table, and scores the full run with a check", async () => {
+	const c = await loadCase("skip-excuses");
+	const shipped = fs.readFileSync(path.join(repoRoot, "skills", "verify", "SKILL.md"), "utf8");
+	assert.ok(c.variants.current.includes("The final run must be the full one with no flags") && !c.variants.current.startsWith("---"), "the skill body, without its front matter");
+	assert.ok(shipped.includes(c.variants.current.slice(0, 60)));
+	assert.ok(c.variants["with-table"].startsWith(c.variants.current) && c.variants["with-table"].includes("Excuses that do not hold"));
+	assert.equal(c.variants.control, null);
+	assert.match(c.prompt(null), /No skill is loaded/);
+	const good = "Add to verify.json a command check that calls the service with a name of 51 chars and expects 400, then run:\nnode .stack-agent/bin/verify.mjs";
+	assert.equal(c.score(good), true);
+	assert.equal(c.score(good.replace("verify.mjs", "verify.mjs --skip \"no token for the server\"")), false, "a skip is not the full run");
+	assert.equal(c.score(good.replace("verify.mjs", "verify.mjs --check long-name")), false, "one check is not the full run");
+	assert.equal(c.score(good.replace("verify.mjs", "verify.mjs --skip-tests")), false, "nor is a run without the suite");
+	assert.equal(c.score("I will read the service first."), false);
+	assert.equal(c.score("node .stack-agent/bin/verify.mjs"), false, "no check for the new rule");
+});
+
+test("skill-routing lists the skills the model may invoke as shipped, and scores the share of requests answered right", async () => {
+	const { ITEMS, parseAnswers, scoreAnswers, shippedSkills } = await import("../scripts/micro/cases/skill-routing.mjs");
+	const c = await loadCase("skill-routing");
+	const skills = shippedSkills();
+	const visible = skills.filter((s) => !s.hidden).map((s) => s.name);
+	assert.deepEqual(visible, ["add-endpoint", "add-migration", "api-map", "debug", "feature-map", "verify"], "the listing is the skills a person does not have to start");
+	for (const s of skills.filter((x) => x.hidden)) assert.ok(!c.variants.current.includes(`stack-agent:${s.name}`), `${s.name} sets disable-model-invocation, so the model is not shown it`);
+	for (const name of visible) assert.ok(c.variants.current.includes(`- stack-agent:${name}: `) && c.variants["names-only"].includes(`- stack-agent:${name}\n`.replace(/\n$/, "")), name);
+	assert.ok(!c.variants["names-only"].includes("Use when"), "names-only has no description");
+	// the crowded listings hold the same skills of ours first, then other plugins' skills
+	const { DISTRACTORS } = await import("../scripts/micro/cases/skill-routing.mjs");
+	assert.ok(DISTRACTORS.length >= 8 && DISTRACTORS.every((d) => d.name && d.description));
+	assert.ok(c.variants.crowded.startsWith(c.variants.current) && c.variants["crowded-names-only"].startsWith(c.variants["names-only"]));
+	for (const d of DISTRACTORS) assert.ok(c.variants.crowded.includes(`- ${d.name}: ${d.description}`) && c.variants["crowded-names-only"].includes(`- ${d.name}`), d.name);
+	assert.ok(!c.variants["crowded-names-only"].includes("Use when"));
+	assert.equal(c.variants.current, c.variants.current.trim());
+	// every right answer is a skill in the listing or none, every skill is asked about, and so are the near-misses
+	const allowed = new Set([...visible, "none"]);
+	for (const item of ITEMS) for (const ok of item.ok) assert.ok(allowed.has(ok), `${item.request}: ${ok}`);
+	for (const name of visible) assert.ok(ITEMS.filter((i) => i.ok.includes(name)).length >= 3, `${name} has at least three requests`);
+	assert.ok(ITEMS.filter((i) => i.ok.includes("none")).length >= 8);
+	assert.ok(c.prompt(null).includes(`Below are ${ITEMS.length} requests`) && c.prompt(null).includes("No skills are available to load."));
+	assert.ok(c.prompt("- stack-agent:debug: x").includes("- stack-agent:debug: x") && !c.prompt("- stack-agent:debug: x").includes("No skills are available"));
+
+	const perfect = ITEMS.map((item, i) => `${i + 1}: ${item.ok[0] === "none" ? "none" : `stack-agent:${item.ok[0]}`}`).join("\n");
+	assert.equal(scoreAnswers(perfect), 1);
+	assert.equal(scoreAnswers(ITEMS.map((_, i) => `${i + 1}: none`).join("\n")), ITEMS.filter((i) => i.ok.includes("none")).length / ITEMS.length, "the control's best case: right only where nothing is needed");
+	assert.equal(scoreAnswers(""), 0);
+	assert.equal(c.score(perfect), 1);
+	// a request that needs none of ours may go to another plugin's skill, but not to one of ours, and not to a made-up one
+	const firstNone = ITEMS.findIndex((i) => i.ok.includes("none")) + 1;
+	const answerFor = (answer) => perfect.split("\n").map((l) => (l.startsWith(`${firstNone}:`) ? `${firstNone}: ${answer}` : l)).join("\n");
+	assert.equal(scoreAnswers(answerFor("superpowers:test-driven-development")), 1);
+	assert.equal(scoreAnswers(answerFor("stack-agent:verify")), (ITEMS.length - 1) / ITEMS.length);
+	assert.equal(scoreAnswers(answerFor("made-up-skill")), (ITEMS.length - 1) / ITEMS.length);
+	// the shapes a reply comes in
+	assert.deepEqual(parseAnswers("1: debug\n2. **stack-agent:verify**\n3) None\n4 - add-endpoint (because it is a route)\n`5`: n/a\nsome chatter\n6: debug, verify\n1: verify"), { 1: "debug", 2: "verify", 3: "none", 4: "add-endpoint", 5: "none", 6: "debug" }, "the first answer to a number counts");
+	assert.equal(scoreAnswers(perfect.replace("1: stack-agent:debug", "1: verify")), (ITEMS.length - 1) / ITEMS.length, "a wrong skill is wrong");
+	assert.equal(scoreAnswers(perfect.replace("1: stack-agent:debug", "1: made-up-skill")), (ITEMS.length - 1) / ITEMS.length, "an unknown skill is wrong");
+});
+
 test("--rescore scores saved replies again with the current score(), without claude", () => {
 	const file = path.join(tempDir(), "results.json");
 	const refusal = "I'm not editing `.stack-agent/verify.json`. `monthlyTotals(rows)` is exported but nothing calls it.";
@@ -170,4 +229,28 @@ test("a failed call is counted as an error, not a score, and the run exits 1", (
 test("usage errors exit 2", () => {
 	assert.equal(run(["--model", "m", "--budget", "1"]).status, 2);
 	assert.equal(run(["--case", "nope", "--model", "m", "--budget", "1", "--dry-run"]).status, 2);
+});
+
+// claude reads a CLAUDE.md from the working folder and every folder above it whatever --setting-sources says; on Windows
+// the system temp folder is inside the profile, so a call started there read the user's own playbook
+test("each call runs in a folder whose memory files are known: --work-dir as given, or one chosen to have none above it", () => {
+	const root = tempDir("stack-agent-work-");
+	write(root, "CLAUDE.md", "# a playbook\n");
+	const fake = fakeClaude();
+	const out = path.join(tempDir(), "out");
+	const inner = path.join(root, "inner");
+	const r = run(["--case", "import-request", "--model", "sonnet", "--budget", "0.05", "--runs", "1", "--variant", "current", "--work-dir", inner, "--out", out], { CLAUDE_BIN: fake.bin });
+	assert.equal(r.status, 0, r.stderr + r.stdout);
+	assert.ok(fake.calls().length > 0 && fake.calls().every((c) => c.cwd.startsWith(inner)), "every call ran under --work-dir");
+	const saved = JSON.parse(fs.readFileSync(path.join(out, "results.json"), "utf8"));
+	assert.equal(saved.meta.workDir, inner);
+	assert.ok(saved.meta.memoryFilesRead.includes(path.join(root, "CLAUDE.md")));
+	assert.match(r.stdout, /NOTE: every session also reads \d+ memory file\(s\) of yours: .*CLAUDE\.md/);
+	// by default what it says it reads is what is above the folder it used, on any machine
+	const fake2 = fakeClaude();
+	const out2 = path.join(tempDir(), "out");
+	const r2 = run(["--case", "import-request", "--model", "sonnet", "--budget", "0.05", "--runs", "1", "--variant", "current", "--out", out2], { CLAUDE_BIN: fake2.bin });
+	assert.equal(r2.status, 0, r2.stderr + r2.stdout);
+	const saved2 = JSON.parse(fs.readFileSync(path.join(out2, "results.json"), "utf8"));
+	for (const c of fake2.calls()) assert.deepEqual(memoryFilesAbove(c.cwd), saved2.meta.memoryFilesRead, "the memory files recorded are the ones above the folder the call ran in");
 });

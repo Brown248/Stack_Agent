@@ -6,7 +6,7 @@ Claude Code plugin และ template ที่เปลี่ยนความ
 
 [English](README.md)
 
-หัวข้อหลัก: ทำไมต้องมี · ทำงานอย่างไร · ติดตั้งในโปรเจกต์ของคุณ · ใช้ประจำวัน · แก้ปัญหา · มีอะไรบ้าง · Preset · ตัวอย่าง · ข้อกำหนดและข้อจำกัด
+หัวข้อหลัก: ทำไมต้องมี · ทำงานอย่างไร · ติดตั้งในโปรเจกต์ของคุณ · ใช้ประจำวัน · ส่วนเสริม · แก้ปัญหา · มีอะไรบ้าง · Preset · ตัวอย่าง · ข้อกำหนดและข้อจำกัด
 
 ## ทำไมต้องมี
 
@@ -236,6 +236,12 @@ Fork หรือ clone repo แล้วแก้ได้ทุกอย่า
 
 ขั้นตอนทั้งหมดพร้อมทุกตัวเลือกอยู่ใน [docs/th/adoption.md](docs/th/adoption.md)
 
+## ส่วนเสริม
+
+- **ข้อความภาษาไทยง่ายๆ** hook พูดภาษาอังกฤษเป็นค่าเริ่มต้น ตั้ง `"language": "th"` ใน `.stack-agent/verify.json` หรือ `STACK_AGENT_LANG=th` ในสภาพแวดล้อม แล้วข้อความที่คนอ่าน คำถามขออนุญาต และคำเตือนที่ส่งให้ agent จะเป็นภาษาไทยง่ายๆ ส่วนหลักฐานที่เก็บไว้ยังเป็นภาษาอังกฤษ รายละเอียดอยู่ใน [ข้อความภาษาไทย](docs/th/adoption.md#ข้อความภาษาไทย)
+- **skill ไหนถูกใช้จริง** `node path/to/Stack_Agent/scripts/skill-usage.mjs` อ่าน transcript ที่ Claude Code เก็บไว้ในเครื่องคุณอยู่แล้ว แล้วบอกว่า skill ไหนถูกโหลดหรือถูกสั่งด้วย slash command (`--days N` กำหนดช่วงเวลา) มันแค่รายงาน ไม่ลบ skill ให้
+- **เรื่องที่คุณแก้ซ้ำ** `/stack-agent:mine-corrections` อ่าน transcript ชุดเดียวกันหาเรื่องที่คุณแก้ซ้ำในหลาย session แล้วเสนอเป็นกฎ หลังซ่อนคีย์ รหัสผ่าน และข้อมูลส่วนตัวแล้ว มันแสดงตารางพร้อมหลักฐานที่ยกมา และไม่เขียนอะไรจนกว่าคุณจะอนุมัติ
+
 ## แก้ปัญหา
 
 - **hook ไม่ทำอะไรเลย** ตรวจว่า plugin เปิดอยู่ (`claude plugin list`) ว่าเปิด session ใหม่หลังติดตั้ง และว่าโปรเจกต์มี `.stack-agent/verify.json` hook จะไม่ยุ่งกับโปรเจกต์ที่ไม่มีไฟล์นี้
@@ -287,7 +293,7 @@ Fork หรือ clone repo แล้วแก้ได้ทุกอย่า
 - hook จับ pattern ของคำสั่ง ดักทางลัดที่พบบ่อยได้ ไม่ใช่ทุกทางที่เป็นไปได้ CI คือด่านที่กันได้เสมอ
 - `claude plugin eval` ต้องใช้ Claude Code 2.1.269 ขึ้นไป case ที่ให้ agent ใช้ Bash ต้องใช้ Linux, macOS หรือ WSL2 เพราะ Windows แบบ native ไม่มี sandbox ให้
 - ทดสอบบน Windows 11 กับ Node 26 CI รันเทสและตัวอย่างทั้งห้าบน Linux และ Windows กับ Node 22 และ 24
-- hook ถูกรันจริงกับ Claude Code 2.1.299 ถึง 2.1.310 Claude Code เปลี่ยนบ่อย จึงมี workflow รายสัปดาห์ใน repo นี้ (`scripts/canary.mjs`) ที่รันปลั๊กอินกับรุ่นล่าสุดเพื่อจับความเสียหายแต่เนิ่นๆ ถ้า hook เลิกทำงานหลังอัปเดต [เปิด issue](https://github.com/Brown248/Stack_Agent/issues)
+- hook ถูกรันจริงกับ Claude Code 2.1.299 ถึง 2.1.314 Claude Code เปลี่ยนบ่อย จึงมี workflow รายสัปดาห์ใน repo นี้ (`scripts/canary.mjs`) ที่รันปลั๊กอินกับรุ่นล่าสุดเพื่อจับความเสียหายแต่เนิ่นๆ ถ้า hook เลิกทำงานหลังอัปเดต [เปิด issue](https://github.com/Brown248/Stack_Agent/issues)
 
 ## พัฒนา Stack Agent
 
@@ -300,6 +306,8 @@ claude plugin validate . --strict
 ```
 
 กติกาสำหรับการทำงานกับ repo นี้อยู่ใน [.claude/CLAUDE.md](.claude/CLAUDE.md)
+
+ถ้าจะวัดผลของการแก้คำอธิบาย skill หรือถ้อยคำของข้อความด้วยการเรียก Claude จริง (เสียเงิน แต่ละคำสั่งพิมพ์ยอดสูงสุดที่อาจใช้ก่อนเสมอ) ดู [docs/th/customizing.md](docs/th/customizing.md): `npm run micro:routing` (คำขอหนึ่งโหลด skill ที่ถูกก่อนหรือไม่), `npm run micro` กับ `npm run tune` (ถ้อยคำของข้อความหนึ่งข้อ) และ `npm run ab` (ทั้ง session)
 
 วิธีออกรุ่น: ใน pull request ให้เปลี่ยน `version` ใน `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` และ `package.json` และเปลี่ยนหัวข้อบนสุดของ changelog ทั้งสองภาษาเป็นเวอร์ชันนั้น (มีขั้นตรวจใน `.github/workflows/release.yml` รันบน pull request และบอกว่าอะไรไม่ตรง) พอ merge แล้วให้ push tag workflow เดียวกันจะตรวจ tag เทียบกับไฟล์เหล่านั้นแล้วสร้าง GitHub Release จากหัวข้อใน changelog และติดป้าย Latest เฉพาะรุ่นที่เลขสูงสุด
 

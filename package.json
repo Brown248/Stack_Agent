@@ -12,6 +12,7 @@
     "validate": "claude plugin validate . --strict",
     "ab": "node scripts/ab/run.mjs",
     "micro": "node scripts/micro/run.mjs",
+    "micro:routing": "node scripts/micro/routing-live.mjs",
     "tune": "node scripts/micro/tune.mjs",
     "sample:guard": "node scripts/guard.mjs --root examples/sample-backend",
     "sample:verify": "node scripts/verify.mjs --root examples/sample-backend",

@@ -32,6 +32,7 @@ skills/<name>/    one SKILL.md per skill, plus any scripts it calls
 scripts/          guard.mjs, verify.mjs, api-map.mjs, feature-map.mjs, init.mjs, sample-commits.mjs,
                   review-findings.mjs, review-worktree.mjs, lib/, hooks/, ab/ (A/B harness), micro/ (micro-tests),
                   skill-scan.mjs (SkillSpector over the skills and hooks; this repo's CI only, needs Python)
+                  mine-transcripts.mjs, skill-usage.mjs (read this machine's past Claude Code sessions for the mine-corrections skill, hiding secrets first; plugin-side, not vendored by init)
                   canary.mjs (does the plugin still load and its hooks still fire under the current Claude Code; this repo's CI, weekly)
                   release-notes.mjs (checks a release tag against the version files and changelogs, writes the GitHub Release notes; used by .github/workflows/release.yml)
 templates/        common/ (rules files), ci/ (workflow), presets/<name>/ (verify + guard configs)
@@ -152,7 +153,8 @@ npm run ab -- --task endpoint --task validate --arms full,none --runs 3 --model 
 | `--arms` | Comma list of `full` (the plugin as is), `none` (no plugin), `hooks-only` (a copy without `skills/`), `skills-only` (a copy without `hooks/hooks.json`), `full+superpowers` (the plugin beside obra/superpowers; needs `--superpowers DIR`, an installed superpowers folder, and counts as isolated only with exactly those two plugins). Default `full,none`. Every arm sets `SUPERPOWERS_DISABLE_TELEMETRY=1`. |
 | `--runs N` | Runs per task and arm. Default 1. |
 | `--model`, `--budget USD` | Both required. The budget is a per-run cap passed as `--max-budget-usd`; there is no default on purpose. |
-| `--plugin DIR`, `--out DIR` | Plugin to test (default: this repo) and where to write results (default: a new folder under the system temp dir). |
+| `--plugin DIR`, `--out DIR` | Plugin to test (default: this repo) and where to write results (default: a new folder under the work folder, see `--work-dir`). |
+| `--work-dir DIR` | Where the per-run folders and, by default, the results go. Chosen like the live check's: the first of the system temp folder, `C:\Users\Public`, `C:\ProgramData`, `/tmp` with no `CLAUDE.md` above it. |
 | `--no-isolate` | Do not pass `--setting-sources project,local --strict-mcp-config`. Isolation is the default (`--isolate` is accepted and changes nothing). |
 | `--disallowed-tools LIST` | Comma list passed to `claude --disallowedTools` in both arms, e.g. `"Bash(node:*)"` for an agent that cannot run Node. Hooks still run. |
 | `--judge MODEL` | Also score the task's `rubric` (criteria a script cannot check, such as "the controller only parses the request") with `agents/judge.md`, run as a second `claude` session with MODEL. The judge reads a blind copy of the run under a random name, with the change as `CHANGES.diff` and without the verify evidence, the skip record, or the Stack Agent configs (only `rules.md` stays), so it cannot tell the arm. Each criterion becomes a `judge:...` column; an unanswered one is not applicable. Off by default: it costs up to `--budget` more per run. |
@@ -187,7 +189,8 @@ npm run micro -- --case import-request --model sonnet --budget 0.05 --runs 5 --d
 | `--model`, `--budget USD` | Both required. The budget is a per-call cap passed as `--max-budget-usd`; there is no default. |
 | `--runs N` | Calls per variant, 1 to 50. Default 5. |
 | `--variant NAME` | Run only these variants (repeat it). The control always runs. |
-| `--out DIR` | Where to write `results.json` (default: a new folder under the system temp dir). |
+| `--out DIR` | Where to write `results.json` (default: a new folder under the work folder, see `--work-dir`). |
+| `--work-dir DIR` | Where the per-call folders go, chosen as for the A/B run. `results.json` records `workDir` and `memoryFilesRead`. |
 | `--dry-run` | Print every variant's prompt and the most the run can cost. Never calls `claude`. |
 | `--rescore FILE` | Score the replies saved in a `results.json` again with the case's current `score()`. Never calls `claude` and needs no `--model` or `--budget`. Read the replies before trusting a score: the first live run of `import-request` scored replies that refused as passes, because they named `verify.json` and the function; after the scorer was fixed, `--rescore` gave the right numbers for free. |
 | `--json` | Print the results as JSON. |
@@ -216,9 +219,36 @@ A strong model (opus) writes rewrites of the wording; a cheap one (haiku) screen
 | `--propose-model`, `--screen-model`, `--confirm-model` | Default opus, haiku, sonnet. Confirm on the model people run. |
 | `--call-budget USD` | `--max-budget-usd` for each call. Default 0.3. |
 | `--out DIR`, `--json`, `--dry-run` | Where `report.json` and `proposed.txt` go; the report as JSON; print the plan and the most it can cost without calling `claude`. |
+| `--work-dir DIR` | Where the per-call folders go, chosen as for the A/B run. |
 
 **Add the scenarios to a case.** Export `scenarios: [{ name, prompt(guidance), score(text) }, ...]` next to `variants`: the same task in two or more settings. Every scenario but the last is learned from; the last is held back and only looked at in the last stage, so a rewrite that only fits the learning scenarios shows. Export `keep: [...]` as well, the phrases every rewrite must still contain (a file name, a command), and a candidate that drops one is thrown away. `import-request` is the example.
 
 **Cost and time.** One real run of `import-request` (20 calls per arm and scenario, 237 calls in all) cost $5.19 and took about 36 minutes. A failing call is tried up to three times and each try counts against the budget. Run `--dry-run` first.
 
 **What it found, and what it did not.** Started from the old wording that got a direct-call check 0 times in 60, it proposed one that got it 42 times in 60, and 17 in 20 on the scenario it had not seen. The wording a person tuned by hand scores about 83% on the first scenario against the tuner's 65%, so the tuner has not beaten careful hand work; use it where you have no good wording yet, and read the reply it scores before trusting it. See the design notes, 2026-10-28.
+
+## Does a real session load the skill? (live routing check)
+
+`scripts/micro/skill-routing` asks a model, in one text call, which skill each of 34 requests would load. `scripts/micro/routing-live.mjs` asks it in real sessions: each request alone, in a project with Stack Agent set up (a copy of `examples/sample-backend`, or `sample-cli` for a request about a command line), with the plugin loaded and your own plugins and MCP servers off. The first tool the model calls decides: the Skill tool is a load of that skill, any other tool or none is "no skill". A hook refuses every tool (the tool stays in the model's list, so its choice is the one it would make), and the session is stopped at that call, so nothing the model asks for runs and a request costs about one model turn.
+
+```bash
+npm run micro:routing -- --model sonnet --budget 0.15 --runs 3 --dry-run
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--model`, `--budget USD` | Both required. The budget is a per-session cap (`--max-budget-usd`). |
+| `--runs N` | Sessions per request, 1 to 20. Default 3. |
+| `--per-skill N`, `--near-miss N` | How many of each skill's four requests (default 2) and of the ten near-misses (default 3). `--only 7,17,21` names exact requests by their number in the case instead. |
+| `--requests FILE` | Use your own requests instead of the case's 34: a JSON array of `{ "request": "...", "ok": ["verify"] }`, where `ok` lists the skills that are a right first load, or `["none"]`. Numbered from 1 in file order; replaces `--per-skill`, `--near-miss`, and `--only`. A request cannot start with `-`. Use it to test a new description on wording the case has not seen; `scripts/micro/cases/skill-routing-extra.json` holds 68 such requests. |
+| `--arms` | `full` (this plugin alone, the default) and/or `full+superpowers` (beside obra/superpowers; needs `--superpowers DIR`). A session where a plugin did not load is marked invalid and fails the run. |
+| `--project sample\|bare` | Start in a sample project (default) or an empty folder. |
+| `--work-dir DIR` | Where the per-session folders go. By default the first of the system temp folder, `C:\Users\Public`, `C:\ProgramData`, `/tmp` that has no `CLAUDE.md` above it. If one is read anyway, the run lists it. |
+| `--concurrency N`, `--timeout S`, `--total-budget USD` | Sessions at once (default 3), seconds to wait for a first tool call (default 120), and a cap on all the spending. |
+| `--dry-run`, `--json`, `--out DIR` | Print the requests and the most it can cost without calling claude; print JSON; where `results.json` goes. |
+
+**Cost.** A session that ends in text reports about $0.05; one stopped at its first tool call reports none, so the cost is not measured. The budgets add up to requests x runs x arms x budget (printed first), but a budget is checked after a model turn, so one turn can pass it; `--total-budget` stops new sessions. About 70 sessions were started while building this.
+
+**Read it with its limits.** It measures the first tool call only: a model that explores first and loads the skill a turn later counts as a miss. A request to find where something lives can be answered by a search in a small project without any harm, so a "miss" there is a finding about habit, not necessarily a fault; the design notes (2026-10-29) show what it found.
+
+**Your own memory files reach the sessions unless you keep them out.** `--setting-sources project,local` turns settings off, not memory: claude reads a `CLAUDE.md` from the working folder and every folder above it, and `~/.claude/CLAUDE.md`. On Windows the system temp folder is inside your profile, so a `CLAUDE.md` in `C:\Users\<you>` is read by every session started there; `routing-live.mjs` therefore picks a work folder with none above it and says so when it cannot. `scripts/micro/run.mjs`, `scripts/micro/tune.mjs`, and `scripts/ab/run.mjs` do the same and take the same `--work-dir`; each prints a NOTE, and records `memoryFilesRead` in its results, when a memory file still reaches the sessions. `~/.claude/CLAUDE.md` is read wherever a session runs, so it is listed but does not decide the folder. `C:\Users\Public` and `/tmp` are open to every account on the machine, so on a shared computer give `--work-dir` a folder only you can write to (on Linux and macOS a `stack-agent-work` folder owned by another user is not used). See the design notes (2026-10-29).

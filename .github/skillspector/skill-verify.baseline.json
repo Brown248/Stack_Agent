@@ -4,7 +4,7 @@
   "rules": [],
   "fingerprints": [
     {
-      "hash": "sha256:f591294c1531b688195e779bbee6e38a07e69424efbe749e13fc8fb5a0a6d4a2",
+      "hash": "sha256:f191085be7f4892bb16d0ba7e846357cda0bd46b9fae89f27a8698149ee02d59",
       "rule_id": "TM1",
       "file": "SKILL.md",
       "reason": "false positive (2026-10-27): --skip-tests is verify.mjs's own flag for iterating; the same paragraph says the final run must be the full one with no flags"

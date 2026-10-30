@@ -16,7 +16,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/mine-transcripts.mjs" --json
 
 It lists what the user wrote right after an agent reply, in sessions from the last 30 days (`--days N` for another window, `--worktrees` to include sessions run in the project's worktrees), each with the session, the time, and the end of the agent reply it answered. By default it keeps the messages that read like a correction (English and Thai cue words); if that finds fewer than about ten, rerun with `--all` and judge each message yourself. If it says there are no transcripts, tell the user where it looked and stop.
 
-Transcripts can hold secrets someone pasted. Never repeat one: write `<REDACTED>` in its place in anything you show or write.
+The script hides the keys, tokens, passwords, private keys, credentials in a URL, card numbers, Thai national IDs, and email addresses it recognizes, and says how many it replaced with `[REDACTED:...]`. Read the transcripts only through it: never open the `.jsonl` files yourself. A secret in a shape it does not know can still get through, so never repeat one: write `<REDACTED>` in its place in anything you show or write.
 
 ## 2. Group
 
@@ -30,7 +30,7 @@ For each class, pick the highest level that would have stopped it, as in `reflec
 
 - a check can enforce it: a guard rule or a test, to be built with `/stack-agent:correct`
 - it is a step in a repeated task: an edit to that skill's `SKILL.md`
-- a skill exists but was not used when it should have been: a sharper `description` for it
+- a skill exists but was not used when it should have been: a sharper `description` for it (`node "${CLAUDE_PLUGIN_ROOT}/scripts/skill-usage.mjs"` shows whether it was loaded in those sessions; give it the same `--days` and `--worktrees` as the miner so it reads the same sessions)
 - it is a preference nothing can check: a line in `.stack-agent/rules.md`
 - the agent lacked information the repo could give: a map row (`feature-map.md` or `api-map.md`), a script, or a pointer
 

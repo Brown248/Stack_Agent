@@ -6,7 +6,7 @@ It works for any kind of project. Presets cover HTTP backends, web frontends, CL
 
 [ภาษาไทย](README.th.md)
 
-- [Why](#why) · [How it works](#how-it-works) · [Install in your project](#install-in-your-project) · [Daily use](#daily-use) · [Troubleshooting](#troubleshooting)
+- [Why](#why) · [How it works](#how-it-works) · [Install in your project](#install-in-your-project) · [Daily use](#daily-use) · [Optional extras](#optional-extras) · [Troubleshooting](#troubleshooting)
 - [What you get](#what-you-get) · [Presets](#presets) · [Examples](#examples) · [Requirements and limits](#requirements-and-limits)
 
 ## Why
@@ -237,6 +237,12 @@ Commands you will use (run from the project's root):
 
 The full walkthrough, with every option, is in [docs/adoption.md](docs/adoption.md).
 
+## Optional extras
+
+- **Messages in plain Thai.** The hooks speak English. Set `"language": "th"` in `.stack-agent/verify.json`, or `STACK_AGENT_LANG=th` in the environment, and the notices and permission questions a person reads, and the agent's reminders, come in plain Thai. Stored evidence stays English. Details: [Messages in Thai](docs/adoption.md#messages-in-thai).
+- **Which skills your sessions use.** `node path/to/Stack_Agent/scripts/skill-usage.mjs` reads the transcripts Claude Code already keeps on your machine and lists which skills were loaded or run as a slash command (`--days N` sets the window). It only reports; it never removes a skill.
+- **Corrections you repeat.** `/stack-agent:mine-corrections` reads the same transcripts for things you corrected in more than one session and proposes rules for them, after hiding keys, passwords, and personal details. It shows a table with the quoted evidence and writes nothing until you approve.
+
 ## Troubleshooting
 
 - **The hooks do nothing.** Check that the plugin is enabled (`claude plugin list`), that you started a new session after installing it, and that the project has `.stack-agent/verify.json`: the hooks stay out of projects without it.
@@ -288,7 +294,7 @@ Every preset includes two universal guard rules: no merge-conflict markers and n
 - The hooks match command patterns. They catch common shortcuts, not every possible one. CI is the gate that always holds.
 - `claude plugin eval` needs Claude Code 2.1.269 or newer. Cases that let the agent use Bash need Linux, macOS, or WSL2, because native Windows has no sandbox for them.
 - Tested on Windows 11 with Node 26. CI runs the tests and all five examples on Linux and Windows with Node 22 and 24.
-- The hooks have been run for real against Claude Code 2.1.299 to 2.1.310. Claude Code changes often, so a weekly workflow in this repo (`scripts/canary.mjs`) runs the plugin against the latest release to catch a break early. If a hook stops firing after an update, [open an issue](https://github.com/Brown248/Stack_Agent/issues).
+- The hooks have been run for real against Claude Code 2.1.299 to 2.1.314. Claude Code changes often, so a weekly workflow in this repo (`scripts/canary.mjs`) runs the plugin against the latest release to catch a break early. If a hook stops firing after an update, [open an issue](https://github.com/Brown248/Stack_Agent/issues).
 
 ## Developing Stack Agent
 
@@ -301,6 +307,8 @@ claude plugin validate . --strict
 ```
 
 Rules for working on this repo are in [.claude/CLAUDE.md](.claude/CLAUDE.md).
+
+To measure a change to a skill description or a message wording with real Claude calls (they cost money; each command prints the most it can spend first), see [docs/customizing.md](docs/customizing.md): `npm run micro:routing` (does a request load the right skill first), `npm run micro` and `npm run tune` (the wording of one message), and `npm run ab` (a whole session).
 
 To release: in a pull request, bump `version` in `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `package.json`, and retitle the top section of both changelogs to that version (a check in `.github/workflows/release.yml` runs on the pull request and says what is off). After it is merged, push the tag. The same workflow then checks the tag against those files and creates the GitHub Release from the changelog section, marked Latest only if it is the highest version.
 

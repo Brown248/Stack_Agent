@@ -15,6 +15,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { claudeEnv, claudeVersion, harnessVersion, resolveClaude, spawnClaude } from "../ab/lib.mjs";
 import { ConfigError, parseArgs } from "../lib/files.mjs";
+import { memoryNote, pickWorkBase } from "./work-dir.mjs";
 import { CASES_DIR, CONTROL, checkCase, microArgs, toScore } from "./run.mjs";
 
 const USAGE = `usage: node scripts/micro/tune.mjs --case NAME --budget USD [options]
@@ -31,6 +32,8 @@ const USAGE = `usage: node scripts/micro/tune.mjs --case NAME --budget USD [opti
   --call-budget USD     --max-budget-usd for each call (default 0.3)
   --cases-dir DIR       read the case from this folder (default scripts/micro/cases)
   --out DIR             results folder (default: a new folder in the system temp folder)
+  --work-dir DIR        where each call's empty folder is made. Default: the first of the system temp folder, C:/Users/Public,
+                        C:/ProgramData, /tmp with no CLAUDE.md above it (claude reads those whatever --setting-sources says)
   --dry-run             print the plan and the most it can cost; never calls claude
   --json                print the report as JSON
 writes report.json, and proposed.txt when a wording is proposed. Nothing in the repository is changed.
@@ -46,7 +49,7 @@ const int = (value, name, min, max, fallback) => {
 export function parseOptions(argv) {
 	const args = parseArgs(argv, {
 		flags: ["dry-run", "json", "help"],
-		options: ["case", "cases-dir", "variant", "budget", "call-budget", "rounds", "candidates", "screen-runs", "confirm-runs", "propose-model", "screen-model", "confirm-model", "out"],
+		options: ["case", "cases-dir", "variant", "budget", "call-budget", "rounds", "candidates", "screen-runs", "confirm-runs", "propose-model", "screen-model", "confirm-model", "work-dir", "out"],
 	});
 	if (args.help) return { help: true };
 	if (!args.case) throw new ConfigError("--case is required");
@@ -67,6 +70,7 @@ export function parseOptions(argv) {
 		proposeModel: args["propose-model"] ?? "opus",
 		screenModel: args["screen-model"] ?? "haiku",
 		confirmModel: args["confirm-model"] ?? "sonnet",
+		workDir: args["work-dir"] ?? null,
 		out: path.resolve(args.out ?? path.join(os.tmpdir(), `stack-agent-tune-${args.case}-${Date.now()}`)),
 		dryRun: Boolean(args["dry-run"]),
 		json: Boolean(args.json),
@@ -152,8 +156,8 @@ export function proposerPrompt({ c, current, failures, count, keep }) {
 class BudgetExceeded extends Error {}
 class CallFailed extends Error {}
 
-export function newLedger(budget, callBudget) {
-	const ledger = { budget, callBudget, spent: 0, calls: 0, biggest: 0 };
+export function newLedger(budget, callBudget, base = os.tmpdir()) {
+	const ledger = { budget, callBudget, spent: 0, calls: 0, biggest: 0, base };
 	// before a call: stop if it could take the total past the budget, judging by the most expensive call so far
 	ledger.check = () => {
 		const expected = ledger.biggest || Math.min(callBudget, budget);
@@ -177,7 +181,7 @@ function ask({ claude, env, ledger, prompt, model }) {
 	let failure = "";
 	for (let attempt = 1; attempt <= TRIES; attempt++) {
 		ledger.check();
-		const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-tune-call-"));
+		const cwd = fs.mkdtempSync(path.join(ledger.base, "stack-agent-tune-call-"));
 		try {
 			const cap = Math.min(ledger.callBudget, Math.max(ledger.budget - ledger.spent, 0.001));
 			const r = spawnClaude(claude, microArgs({ prompt, model, budget: cap }), cwd, env);
@@ -222,7 +226,7 @@ export function planText(o, c, scenarios) {
 }
 
 export async function tune(o, c, scenarios, { claude, env, log }) {
-	const ledger = newLedger(o.budget, o.callBudget);
+	const ledger = newLedger(o.budget, o.callBudget, o.workBase);
 	const original = String(c.variants[o.variant]).trim();
 	const keep = Array.isArray(c.keep) ? c.keep : [];
 	const report = { case: c.name, variant: o.variant, original, best: original, verdict: "unfinished", reason: "", rounds: [], confirm: null, spent: 0, calls: 0 };
@@ -328,10 +332,18 @@ export async function main(argv) {
 	if (o.dryRun) return 0;
 	const claude = resolveClaude();
 	const { env } = claudeEnv(true);
+	let work;
+	try {
+		work = pickWorkBase({ requested: o.workDir });
+	} catch (err) {
+		throw new ConfigError(err.message);
+	}
+	o.workBase = work.base;
 	fs.mkdirSync(o.out, { recursive: true });
 	log(`out: ${o.out}`);
+	if (memoryNote(work.memory)) log(memoryNote(work.memory));
 	const report = await tune(o, c, scenarios, { claude, env, log });
-	report.meta = { harnessVersion: harnessVersion(), claudeVersion: claudeVersion(claude), options: { ...o, out: undefined, casesDir: undefined } };
+	report.meta = { harnessVersion: harnessVersion(), claudeVersion: claudeVersion(claude), options: { ...o, out: undefined, casesDir: undefined }, workDir: work.base, memoryFilesRead: work.memory };
 	fs.writeFileSync(path.join(o.out, "report.json"), JSON.stringify(report, null, 2));
 	if (report.verdict === "improved") fs.writeFileSync(path.join(o.out, "proposed.txt"), report.best + "\n");
 	if (o.json) console.log(JSON.stringify(report, null, 2));

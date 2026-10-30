@@ -91,3 +91,39 @@ test("the command prints a summary or JSON, and says where it looked when there 
 	assert.throws(() => main(["--project", tempDir("stack-agent-none-"), "--days", "1"]), /no Claude Code transcripts for/);
 	assert.throws(() => main(["--transcripts", dir, "--days", "0"]), /--days must be a positive number/);
 });
+
+// a resumed session starts with a copy of the one it continues (on one real project 4,422 of 6,942 user events were
+// repeats), which made one correction look like it came from two sessions, the bar for a class
+test("a correction in a resumed session's copy of the history is listed once, from the session it was typed in", () => {
+	const dir = tempDir("stack-agent-transcripts-");
+	const at = (n) => `2026-10-2${n}T10:00:00Z`;
+	const first = [user("start", { uuid: "u1" }), agent("done"), user("No, SQL goes in repository.js.", { uuid: "u2", at: at(1) })];
+	write(dir, "original.jsonl", first.join("\n"));
+	write(dir, "resumed.jsonl", [...first, agent("fixed"), user("Never use SELECT * either.", { uuid: "u3", at: at(2) })].join("\n"));
+	write(dir, "pure-copy.jsonl", first.join("\n"));
+	const t = (n) => new Date(Date.now() - n * 86400000);
+	for (const [name, days] of [["original.jsonl", 5], ["pure-copy.jsonl", 4], ["resumed.jsonl", 3]]) fs.utimesSync(path.join(dir, name), t(days), t(days));
+	const r = mine({ dirs: [dir], days: 30 });
+	assert.equal(r.sessions, 2, "the pure copy is not a session");
+	assert.deepEqual(r.found.map((f) => [f.session, f.text]), [["original", "No, SQL goes in repository.js."], ["resumed", "Never use SELECT * either."]]);
+});
+
+test("odd lines in a transcript are skipped, not crashed on", () => {
+	const lines = [
+		"null",
+		"42",
+		'"just a string"',
+		line({ type: "user", message: { content: [null, { type: "text", text: 5 }, { type: "text", text: "No, wrong file again." }] } }),
+		line({ type: "assistant", message: { content: "plain string content" } }),
+		line({ type: "assistant", message: { content: [null, { type: "text", text: 7 }, { type: "text", text: "Done: I put it in the controller." }] } }),
+		line({ type: "user", message: { content: [null, { type: "tool_result" }] } }),
+		user("No, SQL goes in repository.js."),
+		"{not json",
+	];
+	assert.equal(userText(JSON.parse(lines[3])), "No, wrong file again.");
+	assert.equal(userText(JSON.parse(lines[0])), null);
+	// the first user message is the task; the correction after the agent's reply is found
+	const found = correctionsIn([user("start"), ...lines].join("\n"), { all: true });
+	assert.deepEqual(found.map((f) => f.text), ["No, SQL goes in repository.js."]);
+	assert.equal(found[0].after, "Done: I put it in the controller.");
+});

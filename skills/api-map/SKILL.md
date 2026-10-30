@@ -1,6 +1,6 @@
 ---
 name: api-map
-description: For HTTP backends (backend-http preset). Read or update the repo's API map (.stack-agent/api-map.md) that says which file handles each endpoint and what it calls. Use to find where an endpoint lives before changing it, when triaging a vague bug report ("POST /orders is slow", a screenshot of an error), and after adding, removing, or moving a route.
+description: For HTTP backends (backend-http preset). Use this first, before grepping or reading code, for any question about where an endpoint lives or what it calls: "which file handles GET /x", "what does PUT /x call", "where does POST /x end up". Reads or updates the repo's API map (.stack-agent/api-map.md), which says which file handles each endpoint and what it calls. Also use when triaging a vague bug report ("POST /orders is slow", a screenshot of an error), and after adding, removing, or moving a route.
 ---
 
 # API map

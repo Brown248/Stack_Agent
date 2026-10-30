@@ -4,13 +4,13 @@
   "rules": [],
   "fingerprints": [
     {
-      "hash": "sha256:7198b4a0218dd09ade31cfe46c95adfcfae8aa1b93be6db3cb73f8c588e3e92a",
+      "hash": "sha256:c47f4d7c15f2e8b427fd93165625b059908ae7f2cf627eb449e19b9d4edd2ae1",
       "rule_id": "TM1",
       "file": "SKILL.md",
       "reason": "false positive (2026-10-27): --skip-tests / --skip-checks are verify.mjs's own flags for iterating; the skill says the final run is the full one, and the Stop hook does not accept a partial run as evidence"
     },
     {
-      "hash": "sha256:507281a1246f89d6d6353f56f14327ea5d9263fdacfe5fdbf5857d9f527f1759",
+      "hash": "sha256:0b4b86c7fe7aca16ad9f40b1faa73d41898a8b7f1d31122defe803c9ad27e638",
       "rule_id": "TM1",
       "file": "SKILL.md",
       "reason": "false positive (2026-10-27): --skip-tests / --skip-checks are verify.mjs's own flags for iterating; the skill says the final run is the full one, and the Stop hook does not accept a partial run as evidence"
