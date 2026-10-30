@@ -4,7 +4,9 @@ What changed in each release of Stack Agent. Bump `version` in `.claude-plugin/p
 
 [ภาษาไทย](CHANGELOG.th.md)
 
-## Unreleased
+## 0.6.0 (2026-10-30)
+
+No tool in `.stack-agent/bin/` changed, so there is no need to rerun `init`; the hooks and skills change when the plugin updates.
 
 ### Added
 
