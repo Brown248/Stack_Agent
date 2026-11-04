@@ -11,9 +11,11 @@ const skills = fs.readdirSync(skillsDir, { withFileTypes: true }).filter((d) => 
 const read = (name) => fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8");
 const field = (text, key) => new RegExp(`^${key}: (.*)$`, "m").exec(/^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "")?.[1] ?? null;
 
-// After a compaction Claude Code re-attaches each skill cut at 20,000 characters; the rest is gone for the session.
+// After a compaction Claude Code re-attaches each skill cut to its first 5,000 tokens (about 20,000 characters), within a
+// shared budget of 25,000 tokens; the rest is gone for the session (code.claude.com/docs/en/skills).
 const SKILL_LIMIT = 20000;
-// The Agent Skills format caps a description at this length.
+// Anthropic's skill-writing advice caps a description at this length; Claude Code's own listing is cut at 1,536
+// characters (description and when_to_use together), so staying under 1,024 stays under both.
 const DESCRIPTION_LIMIT = 1024;
 
 test("every skill is named after its folder and has a description", () => {
@@ -34,10 +36,14 @@ test("every SKILL.md fits in what survives a compaction", () => {
 
 // A description that summarizes the procedure gets followed instead of the skill (one that said "code review between
 // tasks" got one review where the skill had two). The description names when to start; the steps live in the body.
+// This is about what the model reads to choose a skill, so it holds for the skills the model may invoke; a skill only the
+// user can start (disable-model-invocation: true) is never chosen that way and its description is a menu label.
+const userOnly = (name) => /^disable-model-invocation: true$/m.test(/^---\r?\n([\s\S]*?)\r?\n---/.exec(read(name))?.[1] ?? "");
 test("descriptions say when to use a skill, not the steps it takes", () => {
 	for (const name of skills) {
 		const description = field(read(name), "description");
 		assert.ok(description.length <= DESCRIPTION_LIMIT, `${name}: description is ${description.length} characters`);
+		if (userOnly(name)) continue;
 		assert.doesNotMatch(description, /\b(then|steps?)\b/i, `${name}: the description reads as a procedure`);
 		assert.match(description, /\bUse\b/, `${name}: the description names when to use it`);
 	}

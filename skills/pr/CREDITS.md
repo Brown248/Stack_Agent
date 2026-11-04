@@ -1,0 +1,3 @@
+# Credits
+
+The idea behind the **Summary** section of `pr` (a picture of the change instead of prose: pseudocode, call tree, component tree, file tree, Mermaid, or a diff, placed next to the text it supports) comes from the [`show-me`](https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md) skill by Dex Horthy at Humanlayer, aimed here at a pull request instead of a live conversation. The text in this skill is new wording and its examples are our own. `pr` does not depend on `show-me` as a skill, so a standalone install works without it; this file is the credit that a dependency would otherwise have carried.

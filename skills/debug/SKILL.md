@@ -5,7 +5,7 @@ description: Use this first for any bug report or "find and fix it" request, bef
 
 # Debug with a repro that goes red
 
-A bug you cannot make fail on demand is a bug you are guessing about. Everything here hangs on one **repro**: a single command that goes **red** on this bug, the exact symptom the user reported, and green once it is fixed. Build it first; theories come after. Reading the code to see where to aim the repro is fine, and on a short file you may spot the cause while you do; still change nothing until the repro has gone red on the user's symptom, because a cause you spotted is a theory until then. Adapted from `diagnosing-bugs` in mattpocock/skills (MIT).
+A bug you cannot make fail on demand is a bug you are guessing about. Everything here hangs on one **repro**: a single command that goes **red** on this bug, the exact symptom the user reported, and green once it is fixed. Build it first; theories come after. Reading the code to see where to aim the repro is fine, and on a short file you may spot the cause while you do; still change nothing until the repro has gone red on the user's symptom, because a cause you spotted is a theory until then. If the project has a `GLOSSARY.md`, read it first, and the ADRs in the area you are touching. The catalogue of ways to build a repro (`LOOPS.md`) and the script for a loop a person drives (`scripts/hitl-loop.template.mjs`) come from `diagnosing-bugs` in mattpocock/skills (MIT), reworked here.
 
 Throughout, redact secrets in anything you show: write `<REDACTED>` in their place.
 
@@ -16,7 +16,7 @@ Make the repro one of the project's own checks, so verify keeps it and the again
 - a **check** in `.stack-agent/verify.json` (an HTTP request or a command, see the verify skill), or
 - a **test** in the project's test suite.
 
-Pick the narrowest one that reaches the bug: a test at the function that misbehaves, a check that sends the request the user sent, a command with the input that broke. If none reaches it yet, write a small script the check runs.
+Pick the narrowest one that reaches the bug: a test at the function that misbehaves, a check that sends the request the user sent, a command with the input that broke. If none reaches it yet, write a small script the check runs. When even that is hard (a bug in the browser, one that needs a captured request, one that appeared between two versions, one a person must trigger by hand), read `LOOPS.md`: it lists ten ways to build the repro, in the order to try them.
 
 Run it on the code as it is now: `node .stack-agent/bin/verify.mjs --skip-tests --check <name> --json` (the JSON holds an HTTP check's response body and the server log), or the single test file. Done when you have run it at least once and its output shows the user's symptom (the wrong status, the error text, the wrong output), and a second run gives the same verdict. Show the command and the relevant output lines.
 
@@ -38,7 +38,7 @@ Write 3 to 5 ranked hypotheses, each with the prediction that would confirm or r
 
 Test one prediction at a time. Prefer a debugger or a REPL; otherwise add logs at the boundaries that tell the hypotheses apart, and start every debug line with one tag, `[DEBUG-` plus four random letters or digits and `]`, the same tag for the whole session. While you work, the after-edit guard hook leaves these lines alone; the guard's `no-debug-tags` rule (run by `guard.mjs` and CI) fails on any left in code, and a grep for the tag finds them all.
 
-For a slowdown, measure instead of logging: time the repro before and after each change.
+For a slowdown, measure instead of logging: time the repro before and after each change, and see `LOOPS.md` for taking a baseline and bisecting.
 
 ## 5. Fix
 

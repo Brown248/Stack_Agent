@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: pr-body-shape
+description: "Writing a PR body should start the pr skill and produce its shape: a Summary that is a visual (a diff sketch, tree, or diagram) and not only prose, before-and-after evidence, and a Merge Danger call naming the door and the blast radius."
+tags: [skills, pr]
+context:
+  scaffold_script: scaffold.sh

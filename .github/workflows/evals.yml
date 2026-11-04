@@ -1,0 +1,76 @@
+name: evals
+
+# Runs the plugin's eval cases (evals/) with `claude plugin eval` on Linux, by hand only: a run calls the Claude API and
+# costs money (a few dollars for the whole suite at 3 runs; the case and the cost cap are inputs). It needs the
+# ANTHROPIC_API_KEY repository secret. Cases that let the agent use Bash need Linux, macOS, or WSL2, which is why they run
+# here and not on every machine. Results are uploaded as an artifact; nothing is published.
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: "One case, for example verify-before-done (empty runs every case)"
+        required: false
+        type: string
+        default: ""
+      runs:
+        description: "Runs per case and arm"
+        required: false
+        type: number
+        default: 3
+      max_cost_usd:
+        description: "Stop when the cost passes this many dollars"
+        required: false
+        type: number
+        default: 6
+      allow_tools:
+        description: "Grant Bash, Write, and Edit to the agent in cases that ask for them (without it those cases cannot pass)"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CASE: ${{ inputs.case }}
+      RUNS: ${{ inputs.runs }}
+      MAX_COST: ${{ inputs.max_cost_usd }}
+      ALLOW_TOOLS: ${{ inputs.allow_tools }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Stop if there is no API key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::add the ANTHROPIC_API_KEY repository secret (Settings, Secrets and variables, Actions), then run this again"
+            exit 1
+          fi
+      - name: Install Claude Code
+        run: npm install --global @anthropic-ai/claude-code
+      - name: Run the eval cases
+        run: |
+          claude --version
+          args=(plugin eval . --scaffold --no-publish --trust-plugin --runs "$RUNS" --max-cost-usd "$MAX_COST" --json "$RUNNER_TEMP/eval-results.json")
+          if [ -n "$CASE" ]; then args+=(--case "$CASE"); fi
+          if [ "$ALLOW_TOOLS" = "true" ]; then args+=(--allow-tools Bash Write Edit); fi
+          claude "${args[@]}"
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            ${{ runner.temp }}/eval-results.json
+            evals/results
+          if-no-files-found: ignore

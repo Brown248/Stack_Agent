@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [
+    {
+      "id": "PE3",
+      "path": "*template.sh",
+      "message": "*.env*",
+      "reason": "accepted risk (2026-10-31): template.sh reads and writes the project's .env, which holds secrets; the skill now tells the agent to check the file is ignored first; it starts only when a person types it (mattpocock/skills)"
+    },
+    {
+      "id": "LP3",
+      "path": "*SKILL.md",
+      "reason": "accepted risk (2026-10-31): the skill declares no allowed-tools; it starts only when a person types it (mattpocock/skills)"
+    }
+  ],
+  "fingerprints": []
+}

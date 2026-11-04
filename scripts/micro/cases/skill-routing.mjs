@@ -15,6 +15,10 @@ import { fileURLToPath } from "node:url";
 
 const SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "skills");
 const PLUGIN = "stack-agent";
+// the skills this case's requests are written for. The plugin ships more (mattpocock/skills, 2026-10-31); those are listed
+// to the model like the rest, and a request that loads one of them instead is scored wrong, which is how a clash with a
+// core skill shows up.
+export const CORE = ["add-endpoint", "add-migration", "api-map", "debug", "feature-map", "verify"];
 
 export function shippedSkills(dir = SKILLS_DIR) {
 	const out = [];

@@ -88,7 +88,7 @@ To add a new rule *type* (for example, imports in another language), extend `fin
 
 ### Writing the skill text
 
-An agent runs a skill the same way every time only if the text leaves it few ways to read it. These rules come from `writing-for-agents` in mattpocock/skills and `writing-skills` in obra/superpowers (both MIT), and `tests/skills.test.mjs` checks the ones a script can.
+An agent runs a skill the same way every time only if the text leaves it few ways to read it. These rules come from `writing-for-agents` (which began as a skill of mattpocock/skills) and `writing-skills` in obra/superpowers (both MIT), and from Anthropic's skill-writing advice, and `tests/skills.test.mjs` checks the ones a script can.
 
 - **The description says when, never how.** Name the situations and the phrases that should start the skill, one per distinct case, with the most telling word first. Leave the procedure out: superpowers found that an agent given a description that summarized the steps followed the summary and skipped the skill, doing one review where the skill had two. The test fails a description with "then" or "step" in it. Whether the description works is measured, not argued: the `debug` skill went from 0 of 9 to 9 of 9 bug reports picked up after its description started with "Use this first for any bug report" (design notes, 2026-10-23).
 - **Every step ends on a check the agent can see.** Write "Done when" with something observable: a command's output, a file that exists, a verdict that repeats on a second run. "Once you understand the cause" lets the agent stop early; "the repro goes red on the user's symptom twice in a row" does not. The stronger the bar ("every changed route has a check"), the more digging it forces.

@@ -88,7 +88,7 @@ tests/            ชุดเทส node:test สำหรับทุก scrip
 
 ### เขียนเนื้อหา skill
 
-agent จะทำตาม skill แบบเดิมทุกครั้งก็ต่อเมื่อข้อความเปิดช่องให้ตีความได้น้อย กฎเหล่านี้มาจาก `writing-for-agents` ของ mattpocock/skills และ `writing-skills` ของ obra/superpowers (MIT ทั้งคู่) ข้อที่ script ตรวจได้ `tests/skills.test.mjs` ตรวจให้แล้ว
+agent จะทำตาม skill แบบเดิมทุกครั้งก็ต่อเมื่อข้อความเปิดช่องให้ตีความได้น้อย กฎเหล่านี้มาจาก `writing-for-agents` (เริ่มจาก skill ของ mattpocock/skills) และ `writing-skills` ของ obra/superpowers (MIT ทั้งคู่) กับคำแนะนำการเขียน skill ของ Anthropic ข้อที่ script ตรวจได้ `tests/skills.test.mjs` ตรวจให้แล้ว
 
 - **description บอกว่าใช้เมื่อไร ไม่บอกว่าทำอย่างไร** ระบุสถานการณ์และคำที่ควรเปิด skill กรณีละหนึ่งอย่าง โดยเอาคำที่ชัดที่สุดขึ้นก่อน และไม่ต้องใส่ขั้นตอน superpowers พบว่า agent ที่ได้ description ซึ่งสรุปขั้นตอนไว้จะทำตามบทสรุปแล้วข้าม skill ไป เช่นรีวิวแค่รอบเดียวทั้งที่ skill กำหนดสองรอบ เทสจะ fail ถ้า description มีคำว่า "then" หรือ "step" ส่วน description ใช้ได้ผลหรือไม่ต้องวัด ไม่ใช่เถียงกัน skill `debug` ถูกหยิบใช้จาก bug report เพิ่มจาก 0 ใน 9 เป็น 9 ใน 9 หลังจากเปลี่ยน description ให้ขึ้นต้นด้วย "Use this first for any bug report" (design notes, 2026-10-23)
 - **ทุกขั้นจบด้วยสิ่งที่ agent มองเห็นได้** เขียน "Done when" ให้เป็นสิ่งที่สังเกตได้ เช่น output ของคำสั่ง ไฟล์ที่ต้องมีอยู่ หรือผลที่ออกเหมือนเดิมเมื่อรันซ้ำ คำว่า "เมื่อเข้าใจสาเหตุแล้ว" ทำให้ agent หยุดเร็วเกินไป แต่ "repro แดงตรงอาการที่ผู้ใช้เจอสองรอบติด" ไม่เปิดช่องนั้น ยิ่งเกณฑ์เข้ม (เช่น "ทุก route ที่แก้มี check") agent ก็ยิ่งต้องขุดลึก

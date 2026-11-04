@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: domain-modeling-terms
+description: "Settling which of three names a project should use for one concept should start the domain-modeling skill and leave a GLOSSARY.md that defines the chosen term and names the others as ones not to use. Run it with --allow-tools Write Edit."
+tags: [skills, domain-modeling]
+context:
+  scaffold_script: scaffold.sh

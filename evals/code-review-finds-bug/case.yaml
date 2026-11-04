@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: code-review-finds-bug
+description: "A request to review the last commit should start the code-review skill and report on both axes, Standards and Spec; the commit lets names of 500 characters through where its spec says 50, and the review should say so without changing any code. Needs Bash (git), so run it with --allow-tools Bash, as the evals workflow does. Not run on the machine it was written on."
+tags: [skills, code-review]
+context:
+  scaffold_script: scaffold.sh

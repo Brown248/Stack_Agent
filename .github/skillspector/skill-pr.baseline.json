@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [
+    {
+      "id": "AS3",
+      "path": "*SKILL.md",
+      "message": "*skills/show-me/SKILL.md*",
+      "reason": "false positive (2026-10-31): the match is the credits URL of the skill whose text the PR guidance reproduces (mattpocock/skills)"
+    },
+    {
+      "id": "AS3",
+      "path": "*CREDITS.md",
+      "message": "*skills/show-me/SKILL.md*",
+      "reason": "false positive (2026-11-01): the match is the credit link to the show-me skill whose idea the Summary section borrows; the link is a reference for readers and nothing is fetched or run"
+    }
+  ],
+  "fingerprints": []
+}
