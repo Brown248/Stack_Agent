@@ -63,6 +63,14 @@ HTTP checks in detail:
 
 It must print `verify: ok`. If the program needs secrets or an outside database, find a local way to run it (docker compose, a test database) first. Never fake a check to get past it.
 
+When verify stops on something about the machine rather than the code (a program that is not found, a port that is taken, a wrong working folder), or before you run it for the first time, run the readiness check:
+
+```bash
+node .stack-agent/bin/verify.mjs --doctor
+```
+
+It changes nothing and starts no server. It checks that the config loads; that the program of the test, the server, and each command check is on `PATH` (with `PATHEXT` on Windows) or is a file; that `args` does not name a script (`.cmd`, `.bat`) on Windows, where only `command` can run one; that a `cwd` exists; that the server's port is free; that Node is 22 or newer; that `git` is there when the `against` step is on (it only notes that the step will be skipped in a folder that is not a repository or has no commit yet); and that the evidence folder can be written. It prints one line per problem with what to do, and exits 0 when ready or 2 when not.
+
 ### A program that needs a database or a seeded user
 
 `server` starts one process. When the program needs more before it can answer (a database, migrations, a test user), point `server` at a small script in your repository that does those steps and then starts the program in the foreground, for example `"server": {"args": ["node", "scripts/verify-env.mjs", "serve"], ...}`. Give the test step the same database the same way if your integration tests need one. What made this work in the first real install (a Next.js app on PostgreSQL, on Windows):
@@ -116,7 +124,7 @@ By default (`"stopHook": "block"`) the Stop hook keeps the agent from finishing 
 
 ### Messages in Thai
 
-The hooks speak English. To have the messages a person reads, and the agent's replies, in plain Thai, set `"language": "th"` in `.stack-agent/verify.json` or `STACK_AGENT_LANG=th` in the environment (the environment wins; `"en"` switches back; anything else is English). It changes four things: the notice at session start that the vendored tools differ from the plugin's; the message when the Stop hook lets the agent go after its reminders ran out or after it said it could not verify; the questions in the permission prompt before a risky command or an edit to a protected file; and a note added to the agent's context saying the reader prefers short plain Thai. The Stop hook's main reminder, its coverage request, and its import request are also given to the agent in Thai, because each was measured to be followed about as well as the English one (docs/design-notes.md). The guard's messages, a denial of a command, the reason inside a reminder, the evidence files, and verify's output stay English, so nothing depends on the language. The setting is read by the hooks that ship with the plugin, so a project needs no `init` rerun to use it. Thai text costs about twice the tokens of the same English text, which is why it is opt-in.
+The hooks speak English. To have the messages a person reads, and the agent's replies, in plain Thai, set `"language": "th"` in `.stack-agent/verify.json` or `STACK_AGENT_LANG=th` in the environment (the environment wins; `"en"` switches back; anything else is English). It changes four things: the notice at session start that the vendored tools differ from the plugin's; the message when the Stop hook lets the agent go after its reminders ran out or after it said it could not verify; the questions in the permission prompt before a risky command or an edit to a protected file; and a note added to the agent's context saying the reader prefers short plain Thai. The Stop hook's main reminder, its coverage request, and its import request are also given to the agent in Thai, because each was measured to be followed about as well as the English one (docs/design-notes.md). A denial of a command, the reason inside a reminder, the evidence files, `--json` output, a guard rule's own message, and what your tests and checks print stay English, so nothing depends on the language. The one-line verdicts of the command-line tools (`verify: ok / FAIL`, `guard: ok / FAIL`, `feature-map` and `api-map: ok / DRIFT`, `verify --doctor`, and the closing lines of `init`) come in Thai too, but only when the output goes to a terminal. An agent that runs a tool through a shell reads a pipe, and CI writes a log, so both keep the English they always had. Those tools are the copies in `.stack-agent/bin/`: rerun `init` once so that `lib/cli-text.mjs` and `lib/messages.mjs` sit beside them (until then they print English). The hooks read the setting from the plugin itself, so they need no rerun. Thai text costs about twice the tokens of the same English text, which is why it is opt-in.
 
 ## 2. Guard
 
@@ -268,6 +276,8 @@ node <path-to-Stack_Agent>/scripts/init.mjs . --check
 ```
 
 Exit 0 means setup is complete. Otherwise it lists what is left.
+
+Complete is not the same as proven. `--check` also prints a line, `setup is not proven yet`, when `verify` has never run in this project, when its latest run failed, or when the latest run was partial (a flag skipped some tests or checks). A config can be complete and still name a program that is not installed, so run `node .stack-agent/bin/verify.mjs` once with no flags and fix the config until it passes; the line goes away when the latest evidence is a full pass. It is a note, not a failure: it does not change the exit code, so CI and scripts that call `--check` behave as before. The `stack-agent-init` skill runs verify and the guard once at the end of setup for this reason.
 
 `--check` also compares every file in `.stack-agent/bin/` with the plugin's current copy. A file that differs or is missing appears as `outdated: .stack-agent/bin/<file>` and counts as unfinished setup (exit 1). This tells you that your vendored guard or verify is older than the plugin and may lack recent fixes. Refresh them by rerunning `node <path-to-Stack_Agent>/scripts/init.mjs .`, which rewrites only the tools and never touches your configs. `.stack-agent/bin/VERSION` records which plugin version the tools came from. It changes with every release, so a stamp that differs on its own is not reported; it is listed only together with a tool that differs.
 

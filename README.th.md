@@ -228,6 +228,7 @@ Fork หรือ clone repo แล้วแก้ได้ทุกอย่า
 | รันทุกอย่างและเขียนหลักฐาน | `node .stack-agent/bin/verify.mjs` |
 | รัน check เดียว หรือรันแค่เทส | `node .stack-agent/bin/verify.mjs --check NAME` · `--skip-checks` |
 | ดูว่า check ที่ไม่นิ่ง fail บ่อยแค่ไหน | `node .stack-agent/bin/verify.mjs --check NAME --repeat 30` |
+| ดูว่าเครื่องนี้รัน verify ได้ไหม (โปรแกรม พอร์ต Node git) โดยไม่รันจริง | `node .stack-agent/bin/verify.mjs --doctor` |
 | บอกเหตุผลที่ verify รันไม่ได้ (15 ตัวอักษรขึ้นไป) | `node .stack-agent/bin/verify.mjs --skip "no database in this sandbox"` |
 | ตรวจกฎ | `node .stack-agent/bin/guard.mjs` |
 | ยอมรับการละเมิดวันนี้เป็น baseline | `node .stack-agent/bin/guard.mjs --update-baseline` (คนเพิ่ม `--allow-increase` เมื่อจะเพิ่ม) |
@@ -238,7 +239,7 @@ Fork หรือ clone repo แล้วแก้ได้ทุกอย่า
 
 ## ส่วนเสริม
 
-- **ข้อความภาษาไทยง่ายๆ** hook พูดภาษาอังกฤษเป็นค่าเริ่มต้น ตั้ง `"language": "th"` ใน `.stack-agent/verify.json` หรือ `STACK_AGENT_LANG=th` ในสภาพแวดล้อม แล้วข้อความที่คนอ่าน คำถามขออนุญาต และคำเตือนที่ส่งให้ agent จะเป็นภาษาไทยง่ายๆ ส่วนหลักฐานที่เก็บไว้ยังเป็นภาษาอังกฤษ รายละเอียดอยู่ใน [ข้อความภาษาไทย](docs/th/adoption.md#ข้อความภาษาไทย)
+- **ข้อความภาษาไทยง่ายๆ** hook พูดภาษาอังกฤษเป็นค่าเริ่มต้น ตั้ง `"language": "th"` ใน `.stack-agent/verify.json` หรือ `STACK_AGENT_LANG=th` ในสภาพแวดล้อม แล้วข้อความที่คนอ่าน คำถามขออนุญาต และคำเตือนที่ส่งให้ agent จะเป็นภาษาไทยง่ายๆ บรรทัดสรุปของ `verify` `guard` และแผนที่ก็เป็นไทยด้วย แต่เฉพาะเมื่อดูที่หน้าจอ terminal (agent หรือ CI ที่อ่านจาก pipe ยังได้อังกฤษ) ส่วนหลักฐานที่เก็บไว้ยังเป็นภาษาอังกฤษ รายละเอียดอยู่ใน [ข้อความภาษาไทย](docs/th/adoption.md#ข้อความภาษาไทย)
 - **skill ไหนถูกใช้จริง** `node path/to/Stack_Agent/scripts/skill-usage.mjs` อ่าน transcript ที่ Claude Code เก็บไว้ในเครื่องคุณอยู่แล้ว แล้วบอกว่า skill ไหนถูกโหลดหรือถูกสั่งด้วย slash command (`--days N` กำหนดช่วงเวลา) มันแค่รายงาน ไม่ลบ skill ให้
 - **เรื่องที่คุณแก้ซ้ำ** `/stack-agent:mine-corrections` อ่าน transcript ชุดเดียวกันหาเรื่องที่คุณแก้ซ้ำในหลาย session แล้วเสนอเป็นกฎ หลังซ่อนคีย์ รหัสผ่าน และข้อมูลส่วนตัวแล้ว มันแสดงตารางพร้อมหลักฐานที่ยกมา และไม่เขียนอะไรจนกว่าคุณจะอนุมัติ
 
