@@ -784,7 +784,7 @@ The owner asked for items 1 to 6 and 10 of a list of follow-ups, with a budget o
 - The doctor test hung once: open sockets kept the server that held the taken port alive after the test. The sockets are destroyed before the server is closed now.
 - Tuning stopped where it did because more trigger phrases would fit the test requests, not real use.
 
-**Still open.** Item 1 waits for the owner to merge PR #26 and add the `ANTHROPIC_API_KEY` repository secret; only then can `verify-before-done`, `code-review-finds-bug`, and `debug-loop-first` run on CI. There is no eval for `research`. The tracker skills were never run against GitHub or GitLab. The Thai wording of the tool output awaits the owner's approval. Haiku is better, but it still misses more than half of fresh requests for these four skills.
+**Still open.** Item 1 waits for the owner to merge PR #26 and add the `ANTHROPIC_API_KEY` repository secret; only then can `verify-before-done`, `code-review-finds-bug`, and `debug-loop-first` run on CI. There is no eval for `research`. The tracker skills were never run against GitHub or GitLab. The owner approved the Thai wording of the tool output on 2026-11-04, from a before-and-after table of ten lines. Haiku is better, but it still misses more than half of fresh requests for these four skills.
 
 ## Self-review log
 

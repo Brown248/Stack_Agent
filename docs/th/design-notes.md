@@ -784,7 +784,7 @@ autoharness, harness และ ruflo อ่านไปแล้วข้าง�
 - เทสต์ของ doctor เคยค้างหนึ่งครั้ง: socket ที่ยังเปิดอยู่ทำให้ server ที่ถือพอร์ตอยู่ไม่ปิดหลังเทสต์จบ ตอนนี้ทำลาย socket ก่อนปิด server
 - หยุดปรับแค่นี้ เพราะเพิ่มคำกระตุ้นอีกจะเข้ากับคำขอทดสอบ ไม่ใช่การใช้งานจริง
 
-**ยังเปิดอยู่** ข้อ 1 รอเจ้าของ repo merge PR #26 และเพิ่ม repository secret `ANTHROPIC_API_KEY` ถึงจะรัน `verify-before-done`, `code-review-finds-bug` และ `debug-loop-first` บน CI ได้ ยังไม่มี eval ของ `research` skill กลุ่ม tracker ไม่เคยรันกับ GitHub หรือ GitLab ถ้อยคำภาษาไทยของผลลัพธ์เครื่องมือยังรอเจ้าของ repo อนุมัติ Haiku ดีขึ้นแต่ยังพลาดมากกว่าครึ่งของคำขอใหม่สำหรับ skill สี่ตัวนี้
+**ยังเปิดอยู่** ข้อ 1 รอเจ้าของ repo merge PR #26 และเพิ่ม repository secret `ANTHROPIC_API_KEY` ถึงจะรัน `verify-before-done`, `code-review-finds-bug` และ `debug-loop-first` บน CI ได้ ยังไม่มี eval ของ `research` skill กลุ่ม tracker ไม่เคยรันกับ GitHub หรือ GitLab เจ้าของ repo อนุมัติถ้อยคำภาษาไทยของผลลัพธ์เครื่องมือแล้วเมื่อ 2026-11-04 จากตารางเทียบสิบบรรทัด Haiku ดีขึ้นแต่ยังพลาดมากกว่าครึ่งของคำขอใหม่สำหรับ skill สี่ตัวนี้
 
 ## บันทึกการตรวจงานตัวเอง
 
