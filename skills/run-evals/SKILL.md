@@ -44,12 +44,18 @@ The exit code is 0 only when every case reaches the threshold (default 1.0).
 | `add-endpoint` | `add-endpoint-delete-item` |
 | `add-migration` | `add-migration-column` |
 | `api-map` | `api-map-lookup` |
-| `feature-map` | `feature-map-lookup` (the library example, so the map is a feature map, not an API map) |
-| `debug` | `debug-blank-name` (a plain bug report; `used-debug-skill` shows whether the skill was picked up on its own) |
+| `feature-map` | `feature-map-lookup` (the library example, so the map is a feature map, not an API map) and `feature-map-repair` (a refactor moved a module and renamed a function in the CLI example; it grades that the map names the new file and function and not the old ones, and needs `--allow-tools Write Edit`) |
+| `debug` | `debug-blank-name` (a plain bug report; `used-debug-skill` shows whether the skill was picked up on its own) and `debug-loop-first` (needs Bash; it grades a failing command run before any edit, the fix in the service, and a regression test that was run) |
 | `correct` | `correct-error-body` (started by name; the planted history shows the mistake twice) |
 | `reflect` | `reflect-lessons` (started by name; the corrections are quoted in the prompt) and `reflect-reconcile` (a planted line in a project skill that the new correction contradicts) |
+| `tdd` | `tdd-test-first` (no Bash is granted: it grades that the seam is named and a test is written before any source file, and that nothing is claimed to have run) |
+| `pr` | `pr-body-shape` (the change is given in the prompt; it grades the Summary visual, before-and-after evidence, and the Merge Danger call) |
+| `domain-modeling` | `domain-modeling-terms` (a request to settle three names for one concept; it grades `GLOSSARY.md`) |
+| `code-review` | `code-review-finds-bug` (needs Bash for git; the last commit lets 500 characters through where its spec says 50; it grades that both axes are reported, the bug is named, and no code is changed) |
 
 `sample-review` has no case: it reviews each commit in a temporary checkout, and the eval sandbox cannot write any file, so the checkout cannot be made. Measure it with the A/B task `review-spec` (`scripts/ab/run.mjs`), which runs real sessions.
+
+`code-review-finds-bug` and `debug-loop-first` need git and a shell, which `claude plugin eval` grants only on Linux, macOS, or WSL2 and, on some machines, not at all (it refuses when the Docker settings folder in your home holds a symbolic link). Both were written but not run where they were written; the `evals` workflow on GitHub runs them once the `ANTHROPIC_API_KEY` secret exists (`case` input, one name per run). Read the first run's trace before trusting a score: judge the graders by the trace, not only by the score. The other imported skills (see `docs/engineering-skills.md`) have no case: they only start a conversation or write to a tracker, which an eval cannot grade well.
 
 `stack-agent-init` has no case for the same reason (it runs `init.mjs` from the shell). The A/B task `init-library` starts a real session from a library with Stack Agent taken out and grades the result with `init --check`, verify, and the guard; run its plugin arm only. `mine-corrections` has neither: it reads past Claude Code sessions from your home folder, which neither harness gives a run, so check it by hand on a repository you have worked in.
 

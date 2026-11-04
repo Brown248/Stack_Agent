@@ -74,7 +74,7 @@ node .stack-agent/bin/api-map.mjs --draft > .stack-agent/api-map.md
 
 Fill the Handler, Calls, and Owner columns from the code. Leave `TODO` where you are unsure so a human reviews it. Run `node .stack-agent/bin/api-map.mjs` until it prints `api-map: ok`.
 
-Every other preset has `.stack-agent/feature-map.md` instead. Start it with `node .stack-agent/bin/feature-map.mjs --draft` (one row per verify check), fill `Where` (`path`, `path:line`, or `path#text`) and `How a user reaches it` from the code, add rows for what users do that no check covers yet, and run `node .stack-agent/bin/feature-map.mjs` until it prints `feature-map: ok` (see the feature-map skill).
+Every other preset has `.stack-agent/feature-map.md` instead. Start it with `node .stack-agent/bin/feature-map.mjs --draft` (one row per verify check), fill `Where` (`path`, `path:line`, or `path#text`) and `How a user reaches it` from the code, add rows for what users do that no check covers yet, and run `node .stack-agent/bin/feature-map.mjs` until it prints `feature-map: ok` (see the feature-map skill). For the two or three main features, also list their cases (the ways each is refused, its limits, using it twice), so the map shows what is checked besides the normal path.
 
 ## 6. Team rules
 

@@ -27,7 +27,7 @@ test("every non-backend example has a feature map that matches its code", () => 
 	for (const name of ["sample-cli", "sample-frontend", "sample-library", "sample-generic"]) {
 		const r = featureMap(path.join(repoRoot, "examples", name));
 		assert.equal(r.code, 0, `${name}: ${r.text}`);
-		assert.match(r.text, /feature-map: ok \(\d+ feature\(s\), \d+ covered by verify checks\)/);
+		assert.match(r.text, /feature-map: ok \(\d+ feature\(s\), \d+ covered by verify checks(, \d+ case\(s\), \d+ covered by checks)?\)/);
 	}
 });
 
@@ -35,7 +35,9 @@ test("the map fails when a file, a line, an anchor, or a check it names is gone"
 	const dir = copyExample("sample-frontend");
 	write(dir, "src/client/index.html", fs.readFileSync(path.join(dir, "src/client/index.html"), "utf8").replace('<form id="split">', '<form id="bill">'));
 	const mapFile = path.join(dir, ".stack-agent/feature-map.md");
-	fs.appendFileSync(mapFile, "| Gone file | src/nope.js | x | e2e |\n| Short file | src/shared/format.js:999 | x | e2e |\n| Unknown check | src/shared/format.js | x | no-such-check |\n");
+	// rows go under the main table, above the Cases section
+	const extra = "| Gone file | src/nope.js | x | e2e |\n| Short file | src/shared/format.js:999 | x | e2e |\n| Unknown check | src/shared/format.js | x | no-such-check |\n";
+	fs.writeFileSync(mapFile, fs.readFileSync(mapFile, "utf8").replace("\n### Cases:", `${extra}\n### Cases:`));
 	const r = featureMap(dir);
 	assert.equal(r.code, 1);
 	assert.match(r.text, /Split a bill with a tip: src\/client\/index\.html no longer contains "<form id=\\"split\\">"/);

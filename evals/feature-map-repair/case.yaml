@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: feature-map-repair
+description: "After a refactor moved a module and renamed its function, and a later commit removed the code behind one row, the feature map is out of date. A request to bring it back in line should start the feature-map skill, put the new file and name in the map, leave the old ones out, keep the row whose code is gone but flag it for a human, and say plainly what it did. No shell is granted, so the tool cannot be run: the agent must follow the code. Run it with --allow-tools Write Edit."
+tags: [skills, feature-map]
+context:
+  scaffold_script: scaffold.sh
