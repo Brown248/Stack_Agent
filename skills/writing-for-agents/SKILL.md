@@ -76,6 +76,8 @@ Every step ends on a **completion criterion**: the condition that tells the agen
 
 The strongest criteria are checkable and cover everything: a command whose output proves it, a list with nothing left on it.
 
+When the document already has steps, a finish line says how the existing step ends; it does not add work. Take it from the step's own command (its exit code, its output). A check that needs a command the document did not have, a new step, or a new stop condition changes the procedure, not the wording: put it in the report as a suggestion and leave the steps as they were. The same goes for reordering steps or merging two of them.
+
 Split by sequence only when later steps tempt the agent to rush the current one; merging two sequences exposes each one's later steps to the other.
 
 ## 7. Anchor with words the model already knows
@@ -115,6 +117,7 @@ Rereading proves little, because you know what you meant. Run it:
 - Every rule has a home chosen in section 1, and no rule a script could check lives only in prose.
 - Each pointer names its cases, and no case appears twice.
 - Each step has an observable finish line.
+- A rewrite of an existing procedure changed how it is said, not what it does: no step or command was added, dropped, or reordered. Anything you think is missing is in the report as a suggestion.
 - No sentence fails the "changes the default behavior" test, and no fact is copied from the project's own files.
 - The document was run on a real task, and the behavior matched what it asks for.
 

@@ -49,7 +49,7 @@ test("every skill that another skill starts through the Skill tool exists and is
 		const files = fs.readdirSync(dir).filter((f) => f.endsWith(".md"));
 		for (const f of files) {
 			for (const m of fs.readFileSync(path.join(dir, f), "utf8").matchAll(/Skill tool[^.\n]*/g)) {
-				for (const q of m[0].matchAll(/["`]([a-z][a-z0-9-]+)["`]/g)) {
+				for (const q of m[0].matchAll(/["`](?:stack-agent:)?([a-z][a-z0-9-]+)["`]/g)) {
 					if (q[1] === "Skill" || q[1] === "name") continue;
 					found++;
 					assert.ok(folders.includes(q[1]), `${n}/${f} starts "${q[1]}", which is not in skills/`);

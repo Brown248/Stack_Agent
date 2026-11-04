@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Use when the user wants a feature or a bug fix built test-first, or wants tests that keep passing through refactors. Triggers - "tdd", "test-first", "red-green-refactor", "write the test first", "integration tests", "add tests for this", "ทำ TDD", "เขียนเทสก่อนโค้ด", "เขียนเทสให้หน่อย".
+description: Use this first, before writing any code, when the user wants a feature or a bug fix built test-first or by TDD, or wants tests that keep passing through refactors. Triggers - "tdd", "test-first", "test first please", "red-green-refactor", "write the failing test first", "add tests for this", "ทำ TDD", "เขียนเทสก่อนโค้ด", "เขียนเทสให้หน่อย".
 ---
 
 # Build it test-first, one slice at a time

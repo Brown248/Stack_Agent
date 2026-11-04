@@ -1,6 +1,6 @@
 ---
 name: research
-description: Use when the user wants a question looked up in official sources while the main work goes on, or when a skill hands over a research ticket. Use for "research this", "look up what the docs say", "check the spec for", "what does the vendor's source do", "gather facts about this API", "ไปหาข้อมูลมาให้", "ค้นดูว่าเอกสารว่ายังไง", "ไปอ่านให้หน่อย".
+description: Use this first, before searching yourself, when the user wants something looked up in official sources and written up with citations. Triggers - "research this", "find out how X works and write it up", "look up what the docs say", "investigate how others do it", "save the findings to a file", "ไปหาข้อมูลมาให้", "ค้นดูว่าเอกสารว่ายังไง", "ไปอ่านให้หน่อย". Also when a skill hands over a research ticket.
 ---
 
 # Research from primary sources, in the background

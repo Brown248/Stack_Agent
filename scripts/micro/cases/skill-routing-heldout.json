@@ -1,0 +1,14 @@
+[
+	{ "request": "Is the order service too thin? It just calls the repository. How would you restructure the interface?", "ok": ["codebase-design"] },
+	{ "request": "Design a cleaner interface for the notifications module so callers need to know less.", "ok": ["codebase-design"] },
+	{ "request": "Where's the right place to put a fake for the payment provider so tests can swap it?", "ok": ["codebase-design"] },
+	{ "request": "Find out how Redis handles key eviction and write up what you find, with sources.", "ok": ["research"] },
+	{ "request": "Look into what the official docs say about rate limits for the GitHub REST API and save the summary to a file.", "ok": ["research"] },
+	{ "request": "Investigate how other CLIs implement shell completion and summarize it with links.", "ok": ["research"] },
+	{ "request": "Add a coupon discount to checkout, test first please.", "ok": ["tdd"] },
+	{ "request": "Let's do TDD on the slug function.", "ok": ["tdd"] },
+	{ "request": "Fix the off-by-one in pagination, and write a failing test before the fix.", "ok": ["tdd", "debug"] },
+	{ "request": "Mock up two different navigation layouts in code so I can click through them.", "ok": ["prototype"] },
+	{ "request": "Build a quick throwaway version of the import wizard to see if the flow makes sense.", "ok": ["prototype"] },
+	{ "request": "I want to try a state machine for this form in a scratch file before we commit to it.", "ok": ["prototype"] }
+]

@@ -1,6 +1,6 @@
 ---
 name: codebase-design
-description: Use when designing or reshaping a module's interface, deciding where a seam goes, or turning thin pass-through code into deep modules, or when another skill needs the shared module, interface, seam and depth vocabulary. Triggers: "design the interface", "where should the seam go", "deep module", "shallow module", "deepen this", "make this easier to test", "ออกแบบ interface", "ควรแบ่งโมดูลตรงไหน", "ทำให้เทสต์ง่ายขึ้น".
+description: Use this first, before reading code or proposing changes, for any question about the shape of a module: is it too thin, what should its interface be, where does a seam or a fake go, how to make it easier to test. Triggers - "is this too thin", "design the interface", "where should the seam go", "where do I put a fake", "deep module", "shallow module", "deepen this", "ออกแบบ interface", "ควรแบ่งโมดูลตรงไหน", "ทำให้เทสต์ง่ายขึ้น". Also when another skill needs the shared module, interface, seam and depth vocabulary.
 ---
 
 # Design deep modules

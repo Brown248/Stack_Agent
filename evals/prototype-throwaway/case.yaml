@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: prototype-throwaway
+description: "A request to try two layouts should start the prototype skill, which states the question first, builds both variants as throwaway code kept apart from the real source, and says plainly that it is unverified and not to be merged as it is. No shell is granted. Run it with --allow-tools Write Edit."
+tags: [skills, prototype]
+context:
+  scaffold_script: scaffold.sh

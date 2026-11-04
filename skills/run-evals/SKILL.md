@@ -51,6 +51,10 @@ The exit code is 0 only when every case reaches the threshold (default 1.0).
 | `tdd` | `tdd-test-first` (no Bash is granted: it grades that the seam is named and a test is written before any source file, and that nothing is claimed to have run) |
 | `pr` | `pr-body-shape` (the change is given in the prompt; it grades the Summary visual, before-and-after evidence, and the Merge Danger call) |
 | `domain-modeling` | `domain-modeling-terms` (a request to settle three names for one concept; it grades `GLOSSARY.md`) |
+| `grilling` | `grilling-first-round` (a plan to stress-test; it grades one numbered round with a recommended answer each, facts looked up in the code, and nothing built; Read, Glob, and Grep only) |
+| `writing-for-agents` | `writing-for-agents-fix` (a project skill whose description is a procedure and whose body repeats itself; it grades a "Use ..." description with no steps, the steps kept, and nothing invented; needs `--allow-tools Write Edit`) |
+| `codebase-design` | `codebase-design-seam` (a shallow module; it grades the vocabulary, the deletion test, and a concrete deeper interface with no code edited; Read, Glob, and Grep only) |
+| `prototype` | `prototype-throwaway` (two layouts to compare in the frontend example; it grades the question stated first, the code kept apart from the real source, and an honest "not run"; needs `--allow-tools Write Edit`) |
 | `code-review` | `code-review-finds-bug` (needs Bash for git; the last commit lets 500 characters through where its spec says 50; it grades that both axes are reported, the bug is named, and no code is changed) |
 
 `sample-review` has no case: it reviews each commit in a temporary checkout, and the eval sandbox cannot write any file, so the checkout cannot be made. Measure it with the A/B task `review-spec` (`scripts/ab/run.mjs`), which runs real sessions.

@@ -10,6 +10,10 @@ Issues and specs for this repo live as Markdown files in `.scratch/`. Text read 
 - Triage state is a `Status:` line near the top of each ticket file. The strings for each role are in `.stack-agent/workflow/triage-labels.md`.
 - Comments and conversation append to the bottom of the file under a `## Comments` heading.
 
+## When a skill says "close" a ticket
+
+Set `Status: done` near the top of the ticket file and append under `## Comments` the branch and the commit that hold the work (`Built on feat/<slug> at <commit>`). Nothing is deleted. A ticket whose work sits on a branch that has not been merged is still marked `done` here, because the local tracker has no pull request to wait for; the comment says where the work is.
+
 ## When a skill says "publish to the issue tracker"
 
 Create a new file under `.scratch/<feature-slug>/`, creating the directory if needed.

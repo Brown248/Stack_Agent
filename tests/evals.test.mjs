@@ -126,6 +126,31 @@ test("feature-map-repair moves the module and renames the function in a commit, 
 	assert.equal(main(["--root", dir, "--suggest"]).code, 1);
 });
 
+test("writing-for-agents-fix plants a skill that is a procedure with a long, repetitive body, and its graders fail until it is fixed", () => {
+	const dir = scaffolded("writing-for-agents-fix");
+	assert.match(git(dir, "log", "-1", "--format=%s"), /add the deploy skill/);
+	assert.equal(git(dir, "status", "--porcelain"), "");
+	const file = path.join(dir, "team-skills/deploy/SKILL.md");
+	const text = fs.readFileSync(file, "utf8");
+	assert.ok(text.split("\n").length > 100, "the body is long");
+	const pattern = (g) => new RegExp(/^pattern: '(.+)'$/m.exec(fs.readFileSync(path.join(evalsDir, "writing-for-agents-fix/graders", g), "utf8"))[1]);
+	assert.doesNotMatch(text, pattern("description-starts-with-use.md"));
+	assert.doesNotMatch(text, pattern("description-has-no-procedure.md"), "the description holds 'then'");
+	assert.match(text, pattern("steps-kept.md"));
+	const fixed = text.replace(/^description: .*$/m, "description: Use when asked to deploy the app or ship a release.");
+	assert.match(fixed, pattern("description-starts-with-use.md"));
+	assert.match(fixed, pattern("description-has-no-procedure.md"));
+	assert.match(fixed, pattern("steps-kept.md"));
+});
+
+test("the cases that grade a skill's behavior without a shell grant no more than they need", () => {
+	for (const [name, tools] of [["grilling-first-round", ["Read", "Glob", "Grep", "Skill"]], ["codebase-design-seam", ["Read", "Glob", "Grep", "Skill"]]]) {
+		const front = frontmatter(fs.readFileSync(path.join(evalsDir, name, "prompt.md"), "utf8")) ?? "";
+		assert.match(front, new RegExp(`allowed_tools: \\[${tools.join(", ")}\\]`), name);
+		assert.doesNotMatch(front, /Edit|Write|Bash/, `${name} edits nothing`);
+	}
+});
+
 test("correct-error-body leaves the same mistake and its review fix twice in history, and clean code at the end", () => {
 	const dir = scaffolded("correct-error-body");
 	const log = git(dir, "log", "--format=%s").trim().split("\n");
