@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { cliLang, say } from "./lib/cli-text.mjs";
 import { ConfigError, matchesAny, parseArgs, readJson, requireStringArray, toPosix } from "./lib/files.mjs";
 import { FINGERPRINT_VERSION, SESSIONS_DIR, SKIP_FILE, changedFiles, codeFingerprint, fingerprintDiff, gitTop, ignoreList } from "./lib/fingerprint.mjs";
 
@@ -14,6 +16,8 @@ const USAGE = `usage: node verify.mjs [--root DIR] [--config FILE] [--skip-tests
        node verify.mjs --skip-checks --repeat N     run the test suite N times and report how many went red
        node verify.mjs --skip "REASON"   record why verification cannot run for the current code
        node verify.mjs --evidence-status  say whether the latest evidence is a full pass for the code as it is now (runs nothing)
+       node verify.mjs --doctor           say whether this machine is ready to run verify: the programs it needs exist, the server's port is free,
+                                          Node and git are there (runs and starts nothing; exit 2 when something is missing)
 exit codes: 0 all passed, 1 a step failed, 2 config or environment error`;
 const MIN_SKIP_REASON = 15;
 const MAX_REPEAT = 1000;
@@ -881,8 +885,8 @@ function summarize(steps) {
 	});
 }
 
-async function main(argv) {
-	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status"], options: ["root", "config", "skip", "against", "repeat"], multi: ["check"] });
+async function main(argv, opts = {}) {
+	const args = parseArgs(argv, { flags: ["skip-tests", "skip-checks", "reuse", "json", "help", "no-against", "evidence-status", "doctor"], options: ["root", "config", "skip", "against", "repeat"], multi: ["check"] });
 	if (args.help) return { code: 0, text: USAGE };
 	const repeat = args.repeat === undefined ? undefined : Number(args.repeat);
 	if (repeat !== undefined) {
@@ -897,6 +901,8 @@ async function main(argv) {
 	const config = loadVerifyConfig(configPath);
 	if (args.skip !== undefined) return writeSkip(root, config, args.skip);
 	if (args["evidence-status"]) return evidenceStatus(root, config, args.json);
+	const lang = opts.lang ?? cliLang(config);
+	if (args.doctor) return doctor(root, config, args.json, lang);
 	const before = codeFingerprint(root, fingerprintOptions(config));
 	const steps = await runVerify({ root, config, skipTests: args["skip-tests"], skipChecks: args["skip-checks"], only: args.check, reuse: args.reuse, repeat });
 	if (steps.length === 0) throw new ConfigError("nothing ran: every step was skipped");
@@ -912,9 +918,114 @@ async function main(argv) {
 	const changedByRun = fingerprintDiff(before, after);
 	const { record, file } = writeEvidence(root, config, steps, { full, flags, fingerprint: before, ignore: fingerprintOptions(config).ignore, changedByRun, against });
 	if (args.json) return { code: record.ok ? 0 : 1, text: JSON.stringify({ ...record, evidence: file }, null, 2) };
-	const scope = full ? "" : ` (partial run: ${flags.join(" ")}; run with no flags before calling the change done)`;
+	const scope = full ? "" : say(lang, "verify.partial", { flags: flags.join(" ") });
 	const wrote = changedByRun.length ? [`  note: this run changed ${changedByRun.slice(0, 5).join(", ")}${changedByRun.length > 5 ? ", ..." : ""}; gitignore files that tests or the server write`] : [];
-	return { code: record.ok ? 0 : 1, text: [...summarize(steps), ...wrote, `verify: ${record.ok ? "ok" : "FAIL"}, evidence ${file}${scope}`].join("\n") };
+	return { code: record.ok ? 0 : 1, text: [...summarize(steps), ...wrote, say(lang, record.ok ? "verify.pass" : "verify.fail", { file, scope })].join("\n") };
+}
+
+// ---- --doctor: is this machine ready to run verify? Reads and looks; it runs no command and starts no server. ----
+
+const SHELL_BUILTINS = new Set(["cd", "echo", "exit", "export", "set", "source", "test", "true", "false", "eval", "exec", ".", ":", "ulimit", "umask", "dir", "type", "copy", "del", "mkdir", "md", "rd", "rmdir", "move", "ren", "ver", "cls", "start", "call", "if", "for", "rem", "pushd", "popd"]);
+
+// The program a command string starts with, or null when it cannot be told from the text (a variable, a subshell).
+function firstProgram(command) {
+	let rest = String(command).trim();
+	for (;;) {
+		const env = /^[A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'[^']*'|\S*)\s+/.exec(rest);
+		if (!env) break;
+		rest = rest.slice(env[0].length);
+	}
+	const quoted = /^(["'])(.*?)\1/.exec(rest);
+	const word = quoted ? quoted[2] : (/^\S+/.exec(rest)?.[0] ?? "");
+	return !word || /[$%`()]/.test(word) ? null : word;
+}
+
+// Where a program would be found: a path is looked up against the folder it runs in, a bare name along PATH (and, on
+// Windows, with each PATHEXT extension, as the shell does).
+export function findProgram(program, cwd, env = process.env, directOnly = false) {
+	// `args` starts the program without a shell, and on Windows that runs only .exe and .com files, not .cmd or .bat scripts
+	const exts = process.platform === "win32" ? ["", ...(directOnly ? [".EXE", ".COM"] : (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean))] : [""];
+	const usable = (file) => {
+		for (const ext of exts) {
+			try {
+				const f = file + ext;
+				if (!fs.statSync(f).isFile()) continue;
+				if (process.platform !== "win32") fs.accessSync(f, fs.constants.X_OK);
+				return f;
+			} catch {}
+		}
+		return null;
+	};
+	if (/[\\/]/.test(program) || program.startsWith(".")) return usable(path.resolve(cwd, program));
+	for (const dir of (env.PATH ?? env.Path ?? "").split(path.delimiter).filter(Boolean)) {
+		const found = usable(path.join(dir, program));
+		if (found) return found;
+	}
+	return null;
+}
+
+function portFree(port, host) {
+	return new Promise((resolve) => {
+		const srv = net.createServer();
+		srv.once("error", () => resolve(false));
+		srv.listen(port, host, () => srv.close(() => resolve(true)));
+	});
+}
+
+export async function doctor(root, config, json = false, lang = "en") {
+	const problems = [];
+	const notes = [];
+	const major = Number(process.versions.node.split(".")[0]);
+	if (major < 22) problems.push(`Node ${process.versions.node} is too old: Stack Agent's tools need Node 22 or newer`);
+	const specs = [];
+	if (runs(config.test)) specs.push(["test", config.test]);
+	if (config.server) specs.push(["server", config.server]);
+	for (const c of config.checks ?? []) if (checkType(c) === "command") specs.push([`check ${c.name}`, c]);
+	if (config.against && typeof config.against === "object" && config.against.setup) specs.push(["against.setup", config.against.setup]);
+	for (const [label, spec] of specs) {
+		const cwd = spec.cwd ? path.resolve(root, spec.cwd) : root;
+		if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+			problems.push(`${label}: the folder ${spec.cwd} does not exist (cwd is relative to the project)`);
+			continue;
+		}
+		const program = spec.args ? spec.args[0] : firstProgram(spec.command);
+		if (!program || (!spec.args && SHELL_BUILTINS.has(program.toLowerCase()))) continue;
+		if (spec.args && !findProgram(program, cwd, process.env, true) && findProgram(program, cwd)) {
+			problems.push(`${label}: ${program} is a script, and "args" runs only .exe programs on Windows; use "command" for it`);
+			continue;
+		}
+		if (!findProgram(program, cwd)) problems.push(`${label}: ${program} was not found${/[\\/]/.test(program) || program.startsWith(".") ? ` (looked for ${toPosix(path.resolve(cwd, program))})` : " on PATH; install it, or fix the command in verify.json"}`);
+	}
+	if (config.server?.readyUrl) {
+		let url = null;
+		try {
+			url = new URL(config.server.readyUrl);
+		} catch {
+			problems.push(`server.readyUrl is not a valid URL: ${config.server.readyUrl}`);
+		}
+		if (url && ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(url.hostname)) {
+			const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+			if ((await responds(config.server.readyUrl)) || !(await portFree(port, url.hostname === "[::1]" ? "::1" : url.hostname === "localhost" ? "127.0.0.1" : url.hostname)))
+				problems.push(`port ${port} (server.readyUrl) is already in use: stop what uses it, change the port in verify.json, or run verify with --reuse to drive it as it is`);
+		}
+	}
+	if (config.against !== false) {
+		const git = spawnSync("git", ["--version"], { encoding: "utf8" });
+		if (git.status !== 0) problems.push("the against step needs git, and git was not found; install git, or set \"against\": false in verify.json");
+		else if (!gitTop(root)) notes.push("not a git repository: the against step will be skipped, and so will the Stop hook's check of what changed");
+		else if (!resolveAgainstRef(root, config, undefined)) notes.push("no commit to compare with yet: the against step will be skipped until the first commit");
+	}
+	const evidence = path.resolve(root, config.evidenceDir ?? ".stack-agent/evidence");
+	let nearest = evidence;
+	while (!fs.existsSync(nearest) && path.dirname(nearest) !== nearest) nearest = path.dirname(nearest);
+	try {
+		fs.accessSync(nearest, fs.constants.W_OK);
+	} catch {
+		problems.push(`the evidence folder ${toPosix(path.relative(root, evidence))} cannot be created: ${toPosix(nearest)} is not writable`);
+	}
+	const ready = problems.length === 0;
+	const text = json ? JSON.stringify({ ready, problems, notes }, null, 2) : [...problems.map((x) => say(lang, "doctor.problem", { text: x })), ...notes.map((x) => say(lang, "doctor.note", { text: x })), ready ? say(lang, "doctor.ready") : say(lang, "doctor.notready", { n: problems.length })].join("\n");
+	return { code: ready ? 0 : 2, text };
 }
 
 // Read-only: whether latest.json is a full passing run whose fingerprint matches the code as it is now.

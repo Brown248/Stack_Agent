@@ -21,7 +21,7 @@ This skill is a conversation, not a script. Ask one section per message (A, B, C
 Read what is there. Do not assume.
 
 - `git remote -v`: which host, which repo. A GitHub host means GitHub, `gitlab.com` or a self-hosted GitLab host means GitLab, no remote means the local option fits.
-- `.stack-agent/workflow/`: does any of the three files exist already? An existing file is never overwritten without asking (see below).
+- `.stack-agent/workflow/`: does any of the three files exist already? An existing file is never overwritten unless the person says yes (see below).
 - `.scratch/`: a sign that a local Markdown tracker is already in use.
 - `GLOSSARY.md`, `GLOSSARY-MAP.md` at the root, and `docs/adr/` plus any `src/*/docs/adr/`.
 - Monorepo signals: `pnpm-workspace.yaml`, `turbo.json`, `nx.json`, `lerna.json`, a `workspaces` field in `package.json`, or a populated `packages/*` where each package has its own `src/`. These appear only in a genuinely multi-package repo. Without them the repo is single-context, which is almost every repo.

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { projectLang, say } from "./lib/cli-text.mjs";
 import { ConfigError, matchesAny, parseArgs, projectFiles, readJson, requireStringArray } from "./lib/files.mjs";
 import { checkType } from "./verify.mjs";
 
@@ -101,10 +102,11 @@ function draftTable(routes) {
 	return lines.join("\n");
 }
 
-function main(argv) {
+function main(argv, opts = {}) {
 	const args = parseArgs(argv, { flags: ["draft", "json", "help"], options: ["root", "config"] });
 	if (args.help) return { code: 0, text: USAGE };
 	const root = path.resolve(args.root ?? process.cwd());
+	const lang = opts.lang ?? projectLang(root);
 	const config = loadMapConfig(path.resolve(root, args.config ?? ".stack-agent/api-map.json"));
 	const warnings = [];
 	const routes = routesFromCode(root, config, warnings);
@@ -123,10 +125,10 @@ function main(argv) {
 	for (const r of diff.missingFromMap) out.push(`missing from map: ${r.method} ${r.path} (defined at ${r.file}:${r.line})`);
 	for (const r of diff.staleInMap) out.push(`stale in map: ${r.method} ${r.path} (no route in code)`);
 	for (const r of diff.badHandler) out.push(`bad handler path in map: ${r.method} ${r.path} -> ${JSON.stringify(r.handler)}`);
-	for (const r of diff.unverified) out.push(`  warning: no verify check covers ${r.method} ${r.path}`);
-	for (const r of rows.filter((x) => /\bTODO\b/.test(`${x.calls} ${x.owner}`))) out.push(`  warning: ${r.method} ${r.path} still has TODO cells, a human has not reviewed it`);
-	for (const w of warnings) out.push(`  warning: ${w}`);
-	out.push(drift ? `api-map: DRIFT (${drift} problem(s))` : `api-map: ok (${routes.length} route(s) mapped, ${routes.length - diff.unverified.length} covered by verify checks)`);
+	for (const r of diff.unverified) out.push(say(lang, "map.warning", { text: `no verify check covers ${r.method} ${r.path}` }));
+	for (const r of rows.filter((x) => /\bTODO\b/.test(`${x.calls} ${x.owner}`))) out.push(say(lang, "map.warning", { text: `${r.method} ${r.path} still has TODO cells, a human has not reviewed it` }));
+	for (const w of warnings) out.push(say(lang, "map.warning", { text: w }));
+	out.push(drift ? say(lang, "api.drift", { n: drift }) : say(lang, "api.ok", { routes: routes.length, covered: routes.length - diff.unverified.length }));
 	return { code: drift ? 1 : 0, text: out.join("\n") };
 }
 

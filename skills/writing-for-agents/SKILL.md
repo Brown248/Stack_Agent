@@ -55,7 +55,7 @@ Move too little down and the top file bloats. Move too much and the agent never 
 Two rules follow from the ladder:
 
 - **Keep related material together.** A concept's definition, rules, and caveats go under one heading, so reading one part brings its neighbours along. Scattering one idea across many places is as bad as repeating it.
-- **Stop a file from sprawling.** A document that is simply too long loses attention on every line, even when every line is true and unique. Keep a `SKILL.md` under 500 lines, move reference into files one level deep (a file that points to a file that points to another is too deep), and split by case so each path carries only what it needs.
+- **Stop a file from sprawling.** A document that is simply too long loses attention on every line, even when every line is true and unique. Keep a skill's main file under 500 lines, move reference into files one level deep (a file that points to a file that points to another is too deep), and split by case so each path carries only what it needs.
 
 ## 5. Match the freedom to the risk
 

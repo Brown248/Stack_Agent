@@ -15,7 +15,7 @@ The **frontier** is every decision whose prerequisites are already settled. Thes
 
 ## 2. Look up facts yourself
 
-A fact about the environment (what the code does today, which tool is installed, what a config says, what a file contains) is your job to find, not the user's. Never ask the user something you could read.
+A fact about the environment (what the code does today, which tool is installed, what a config says, what a file contains) is your job to find, not the user's. Ask the user only for decisions; whatever you could read yourself, read.
 
 When a frontier question needs such a fact, call the `Agent` tool with a prompt that names the question and the places to look. The subagent starts with an empty context and sees none of this conversation, so the prompt must say everything it needs. Do not wait for it. A running lookup is an unsettled prerequisite: only the questions downstream of it wait; ask the rest of the frontier now.
 

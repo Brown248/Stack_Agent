@@ -1,6 +1,6 @@
 ---
 name: git-guardrails
-description: Install a hook that refuses dangerous git commands (push, reset --hard, clean -f, branch -D, checkout ., restore .) before they run. Start it by typing /stack-agent:git-guardrails.
+description: Install a hook that refuses dangerous git commands (push, reset --hard, clean -f, branch -D, checkout ., restore .) before they run. Typed as /stack-agent:git-guardrails.
 disable-model-invocation: true
 ---
 

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { projectLang, say } from "./lib/cli-text.mjs";
 import { ConfigError, gitIgnored, isSkipped, matchesAny, parseArgs, projectFiles, readJson, realPath, requireStringArray, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node guard.mjs [--root DIR] [--config FILE] [--files F...] [--json] [--strict]
@@ -520,10 +521,11 @@ export function compareWithRef(root, ref, configRel, baselineRel, config, counts
 	return { problems, notes };
 }
 
-function main(argv) {
+function main(argv, opts = {}) {
 	const args = parseArgs(argv, { flags: ["json", "strict", "update-baseline", "allow-increase", "help"], options: ["root", "config", "compare-ref"], multi: ["files"] });
 	if (args.help) return { code: 0, text: USAGE };
 	const root = realPath(args.root ?? process.cwd());
+	const lang = opts.lang ?? projectLang(root);
 	const configPath = path.resolve(root, args.config ?? ".stack-agent/guard.config.json");
 	const config = loadConfig(configPath);
 	const baselinePath = path.resolve(root, config.baseline ?? ".stack-agent/guard-baseline.json");
@@ -540,7 +542,7 @@ function main(argv) {
 		const { failing } = compareToBaseline(violations, baseline.counts ?? {}, undefined, version);
 		if (failing.length && !firstBaseline && !args["allow-increase"]) {
 			const lines = failing.map((f) => `  ${f.rule} ${f.file}: ${f.allowed} -> ${f.count}`);
-			return { code: 1, text: `refusing to raise the baseline (needs a human-approved --allow-increase):\n${lines.join("\n")}` };
+			return { code: 1, text: say(lang, "guard.refuse", { lines: lines.join("\n") }) };
 		}
 		fs.mkdirSync(path.dirname(baselinePath), { recursive: true });
 		fs.writeFileSync(baselinePath, JSON.stringify({ version: BASELINE_VERSION, counts: sortCounts(countViolations(violations)) }, null, 2) + "\n");
@@ -559,16 +561,16 @@ function main(argv) {
 	if (args.json) return { code: ok ? 0 : 1, text: JSON.stringify({ ok, failing, violations: reported, improvable, refProblems: drift.problems, notes: drift.notes, warnings }, null, 2) };
 
 	const out = [];
-	for (const v of reported) out.push(`${v.file}:${v.line}  [${v.rule}] ${v.message}\n    found: ${v.detail}\n    fix:   ${v.fix}`);
+	for (const v of reported) out.push(say(lang, "guard.violation", { file: v.file, line: v.line, rule: v.rule, message: v.message, detail: v.detail, fix: v.fix }));
 	const perName = new Set(version >= 2 ? config.rules.filter((r) => r.type !== "pattern").map((r) => r.id) : []);
 	for (const f of failing) if (f.allowed > 0) out.push(`  note: ${f.file} has ${f.count} ${f.rule} violations${perName.has(f.rule) ? " (each imported name counts)" : ""}, baseline allows ${f.allowed}. Remove the new one(s).`);
 	for (const i of improvable) out.push(`  improved: ${i.file} [${i.rule}] ${i.allowed} -> ${i.count}. Run --update-baseline to lock it in.`);
 	for (const p of drift.problems) out.push(`compared with ${args["compare-ref"]}: ${p}`);
 	for (const n of drift.notes) out.push(`  note: ${n}`);
 	for (const w of warnings) out.push(`  warning: ${w}`);
-	if (failing.length) out.push(`guard: FAIL (${failing.length} rule/file pair(s) over baseline)`);
-	else if (drift.problems.length) out.push(`guard: FAIL (guard config or baseline loosened compared with ${args["compare-ref"]}; needs human review)`);
-	else out.push(`guard: ok (${violations.length} known violation(s) within baseline)`);
+	if (failing.length) out.push(say(lang, "guard.fail.over", { n: failing.length }));
+	else if (drift.problems.length) out.push(say(lang, "guard.fail.loosened", { ref: args["compare-ref"] }));
+	else out.push(say(lang, "guard.ok", { n: violations.length }));
 	return { code: ok ? 0 : 1, text: out.join("\n") };
 }
 

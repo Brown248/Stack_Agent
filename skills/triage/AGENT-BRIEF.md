@@ -202,7 +202,7 @@ The function around line 150 has the problem.
 
 What is wrong with it:
 
-- No category and no disclaimer line.
+- The category and the AI-disclaimer line are missing.
 - A vague symptom ("broken") with no input, no observed result.
 - File paths and line numbers that go stale.
 - No acceptance criteria, so the agent cannot know when it is done.

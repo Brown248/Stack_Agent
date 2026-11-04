@@ -3,12 +3,6 @@
   "scanner_version": "2.12.0",
   "rules": [
     {
-      "id": "AE1",
-      "path": "*SKILL.md",
-      "message": "*(partial)*",
-      "reason": "false positive (2026-11-01): the scanner could not resolve the many mentions of SKILL.md, a file name this skill teaches people to write; there is no bundled file it is hiding"
-    },
-    {
       "id": "RA2",
       "path": "*SKILL.md",
       "message": "*SKILL.md*",
