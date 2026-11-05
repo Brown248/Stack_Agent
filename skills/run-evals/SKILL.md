@@ -55,6 +55,7 @@ The exit code is 0 only when every case reaches the threshold (default 1.0).
 | `writing-for-agents` | `writing-for-agents-fix` (a project skill whose description is a procedure and whose body repeats itself; it grades a "Use ..." description with no steps, the steps kept, and nothing invented; needs `--allow-tools Write Edit`) |
 | `codebase-design` | `codebase-design-seam` (a shallow module; it grades the vocabulary, the deletion test, and a concrete deeper interface with no code edited; Read, Glob, and Grep only) |
 | `prototype` | `prototype-throwaway` (two layouts to compare in the frontend example; it grades the question stated first, the code kept apart from the real source, and an honest "not run"; needs `--allow-tools Write Edit`) |
+| `handoff` | `handoff-brief` (a session summary in the prompt; it grades the user's last request copied word for word with its status, the unconfirmed assumption with a way to check it, no test or git state claimed without a command, and the unfinished work left alone; needs `--allow-tools Write`) |
 | `code-review` | `code-review-finds-bug` (needs Bash for git; the last commit lets 500 characters through where its spec says 50; it grades that both axes are reported, the bug is named, and no code is changed) |
 
 `sample-review` has no case: it reviews each commit in a temporary checkout, and the eval sandbox cannot write any file, so the checkout cannot be made. Measure it with the A/B task `review-spec` (`scripts/ab/run.mjs`), which runs real sessions.

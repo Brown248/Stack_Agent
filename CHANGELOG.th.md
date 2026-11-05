@@ -19,6 +19,7 @@
 - `init --check` พิมพ์ "setup is not proven yet" เมื่อ `verify` ไม่เคยรันในโปรเจค รอบล่าสุดไม่ผ่าน หรือรันแค่บางส่วน เป็นแค่หมายเหตุ exit code จึงไม่เปลี่ยน skill `stack-agent-init` จบด้วยการรัน `verify` เต็มหนึ่งรอบกับ `guard` หนึ่งรอบ
 - บรรทัดสรุปผลเป็นไทยง่ายๆ ของ `verify`, `guard`, `feature-map`, `api-map`, `verify --doctor` และ `init` (`scripts/lib/cli-text.mjs`) ใช้เฉพาะเมื่อ `language` เป็น `th` และผลลัพธ์ออกที่หน้าจอ terminal ส่วน pipe, log ของ CI, agent ที่รันเครื่องมือ และ `--json` ยังได้ข้อความอังกฤษเหมือนเดิมทุกตัวอักษร
 - eval case `grilling-first-round`, `codebase-design-seam`, `prototype-throwaway` และ `writing-for-agents-fix` (รันด้วย `--allow-tools Write Edit`) แต่ละเคสมีเทสต์ตรวจว่ามันวางสถานะที่จะตรวจจริง คะแนนอยู่ใน `docs/design-notes.md`
+- eval case `handoff-brief` (รันด้วย `--allow-tools Write`) กับ plugin ผ่าน 6 จาก 6 รัน ไม่มี plugin 0 จาก 6 ดู `docs/design-notes.md` ว่าส่วนต่างบอกอะไรได้และบอกอะไรไม่ได้
 - `skill-routing-heldout.json` และ `skill-routing-heldout2.json` (ไฟล์ละ 12 คำขอ) สำหรับ `routing-live.mjs --requests` ไว้วัดการเลือก skill กับคำขอที่ไม่ได้ใช้ปรับคำอธิบาย
 
 ### เปลี่ยน
@@ -30,6 +31,7 @@
 - เทสต์เลิกฝังจำนวน skill: `tests/imported-skills.test.mjs` อ่านประกาศแล้วเทียบกับโฟลเดอร์ จำนวนและคอลัมน์ "ขอหรือพิมพ์" ในคู่มือ รายการแบบพิมพ์เอง และการอ้างถึงกันระหว่าง skill กฎที่ว่าคำอธิบายขึ้นต้น "Use" และไม่มีขั้นตอนใช้กับ skill ที่ model เลือก ไม่ใช้กับตัวที่คนต้องสั่งเอง
 - คำอธิบายของ `tdd`, `codebase-design`, `research` และ `prototype` ขึ้นต้นด้วย "Use this first, before ..." และเพิ่มคำกระตุ้นภาษาอังกฤษ สำหรับ model ที่ชอบไป Grep หรือค้นเว็บก่อนดู skill กับ 12 คำขอที่เขียนหลังปรับเสร็จ Haiku เลือก skill ถูก 21 จาก 48 session จากเดิม 9 จาก 48 ส่วน Sonnet ไม่เปลี่ยน
 - `implement` กับ `implement-spec` เรียก skill ว่า `stack-agent:code-review` เพราะ `code-review` เฉยๆ อาจไปเริ่มคำสั่งของ Claude Code เอง และปิด ticket แบบ local ให้ด้วย (`Status: done` กับคอมเมนต์ที่บอก branch และ commit) ตามหัวข้อใหม่ "close a ticket" ใน `issue-tracker-local.md` ส่วน tracker ที่ปิดงานเมื่อ pull request merge เท่านั้น ticket ยังเปิดอยู่
+- skill `handoff` เขียนคำขอล่าสุดของผู้ใช้คำต่อคำพร้อมสถานะ ใส่สมมติฐานที่ต้องตรวจพร้อมคำสั่งตรวจข้อละคำสั่งกับบรรทัดความมั่นใจ และอ่านสถานะจาก `git` กับ `verify --evidence-status` แทนการเดาจากความจำ (ใส่ `not checked` เมื่อรันคำสั่งไม่ได้) ใน `THIRD_PARTY_NOTICES.md` นับเป็น rewritten ความคิดมาจาก alexknowshtml/claude-auto-handoff ซึ่งไม่ได้นำมาใช้ทั้งตัว (ดู `docs/out-of-scope.md`)
 - `writing-for-agents`: การเขียนขั้นตอนเดิมใหม่ เปลี่ยนวิธีพูด ไม่เปลี่ยนสิ่งที่ทำ เส้นชัยของแต่ละขั้นมาจากคำสั่งของขั้นนั้นเอง ส่วน check ขั้นตอน หรือเงื่อนไขหยุดที่เพิ่มใหม่ ให้ใส่ในรายงานเป็นข้อเสนอ แล้วคงขั้นตอนไว้ตามเดิม eval case `writing-for-agents-fix` พบว่า agent เพิ่มขั้นตอนและคำสั่งของตัวเองเวลาถูกขอให้แก้ skill
 - แก้ถ้อยคำแปดบรรทัดใน skill ให้ SkillSpector เลิกเตือน ลบไฟล์ baseline ของ skill-scan 5 ไฟล์ และเอากฎออก 4 ข้อ
 

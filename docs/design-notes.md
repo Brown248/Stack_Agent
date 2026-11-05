@@ -786,6 +786,21 @@ The owner asked for items 1 to 6 and 10 of a list of follow-ups, with a budget o
 
 **Still open.** Item 1 waits for the owner to merge PR #26 and add the `ANTHROPIC_API_KEY` repository secret; only then can `verify-before-done`, `code-review-finds-bug`, and `debug-loop-first` run on CI. There is no eval for `research`. The tracker skills were never run against GitHub or GitLab. The owner approved the Thai wording of the tool output on 2026-11-04, from a before-and-after table of ten lines. Haiku is better, but it still misses more than half of fresh requests for these four skills.
 
+## Three ideas from claude-auto-handoff for the `handoff` skill (2026-11-05)
+
+The owner pasted a link to alexknowshtml/claude-auto-handoff (MIT, 0.8.6). It is a Claude Code mod that replaces auto-compact: at a token threshold Haiku writes a structured brief, the mod refuses further tool calls, runs `/clear`, and seeds the new session with a pointer to the brief. The mod itself was not taken (see "A mod that hands a long session to a fresh one" in `docs/out-of-scope.md`), but its brief template has three things the `handoff` skill lacked.
+
+**What was done.** `skills/handoff/SKILL.md` now (1) copies the user's last request word for word and marks it answered, partly answered, or not answered, and says that request comes first when it is not answered; (2) lists assumptions to verify, one line each with the exact command or file that checks it, and ends with a one-line confidence; (3) reads the state from commands (`git branch --show-current`, `git status --short`, `git log --oneline -5`, `verify --evidence-status`, processes still running) and writes `not checked` where no command can run, instead of recalling it. A user-named place for the file wins over the temp folder. The skill counts as rewritten in `THIRD_PARTY_NOTICES.md`. A new eval case, `handoff-brief`, has a session summary in the prompt and no shell.
+
+**Measured** (6 runs per arm, `--allow-tools Write`). With the plugin 6 of 6 runs passed every grader (score 1.00); without it 0 of 6 (0.56). The gap is the last request copied word for word (6 of 6 against 2 of 6), the status line (6 against 0), and the state marked `not checked` (6 against 0). Three graders passed in both arms and do not tell them apart: the assumption has a way to check it, the unfinished work is left alone, and no current state is claimed. Two of the three gaps measure that the skill's own wording was followed (`Status:`, `not checked`), so only the verbatim request is a gap in substance.
+
+**Edge cases and lessons.**
+- The first run scored 0.87 with the plugin and 0.60 without, and two graders were wrong. `used-handoff-skill` (a `Skill` tool call) failed 6 of 6: a skill typed as `/stack-agent:handoff ...` is expanded into the prompt and no `Skill` call appears, which is why the other cases started by name have no such grader; it was removed. `state-not-invented` failed 4 of 6, but the documents were right: each marked the git items `not checked` and, in places, quoted the git snapshot from the start of the session, labeled as that. The judge sees only the trace, so it could not confirm a snapshot it never saw. It was replaced by a plain check that three items say `not checked` and a judge that fails only a current state stated without a label. Both graders were changed after seeing results, so the 1.00 is not a blind measure.
+- One of the first-run documents did better than the case asked: it read `controller.js`, found no `limit` code there (the scaffold has none), and told the next agent to check whether the change was ever saved before building on it.
+- A grader pattern cannot use inline flags such as `(?i)`; the regex is JavaScript.
+
+**Still open.** The mod's automation (a threshold, `/clear`, a viewer) is left to people who want to install it beside Stack Agent; verify evidence is a file tied to the code, so a fresh session still sees it, but no run of Stack Agent together with the mod was made.
+
 ## Self-review log
 
 After the first build, an independent reviewer and an independent tester (who adopted the toolkit on a fresh project following the docs) found about 15 real problems. All were fixed, each with a regression test. The main ones:

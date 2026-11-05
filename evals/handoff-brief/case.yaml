@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: handoff-brief
+description: "Typing /stack-agent:handoff with a session summary should write a document that copies the user's last request word for word and marks it not answered, lists the unconfirmed assumption with a way to check it, does not state the test or git state as fact when no command could be run, and does not do the unfinished work itself. The case grants Read, Glob, Grep, and Write only (run it with --allow-tools Write)."
+tags: [skills, handoff]
+context:
+  scaffold_script: scaffold.sh
