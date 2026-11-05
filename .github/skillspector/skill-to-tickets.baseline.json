@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [
+    {
+      "id": "TM2",
+      "path": "*SKILL.md",
+      "message": "*First expand*",
+      "reason": "false positive (2026-10-31): 'First expand' is expand-contract advice for sequencing a wide refactor into tickets, not a command (mattpocock/skills)"
+    }
+  ],
+  "fingerprints": []
+}

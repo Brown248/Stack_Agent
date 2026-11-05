@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: debug-loop-first
+description: "A bug report should start the debug skill, which builds one command that goes red on the reported symptom before any source file is edited, fixes the cause in the service, and leaves a regression test that was run. Needs Bash, so run it with --allow-tools Bash, as the evals workflow does. Not run on the machine it was written on."
+tags: [skills, debug]
+context:
+  scaffold_script: scaffold.sh

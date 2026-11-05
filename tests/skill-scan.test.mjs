@@ -120,6 +120,32 @@ test("--rebaseline writes the hash again when the findings are the same kinds an
 	assert.ok(fs.readFileSync(baseline, "utf8").endsWith("\n"));
 });
 
+test("--rebaseline leaves a baseline made of rules alone, because rules do not depend on the text", () => {
+	const root = plugin();
+	const bin = fakeJson(root);
+	const baseline = path.join(root, ".github/skillspector/skill-beta.baseline.json");
+	const body = JSON.stringify({ version: 2, scanner_version: "2.12.0", rules: [{ id: "TM1", path: "*SKILL.md", reason: "r" }], fingerprints: [] });
+	fs.writeFileSync(baseline, body);
+	write(root, "skills/beta/ISSUES.json", JSON.stringify([{ id: "TM1", location: { file: "SKILL.md", start_line: 1 } }]));
+	const r = main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]);
+	assert.equal(r.code, 0, r.text);
+	assert.match(r.text, /^unchanged {4}skills\/beta: its baseline is made of rules/);
+	assert.equal(fs.readFileSync(baseline, "utf8"), body, "the file is not touched");
+});
+
+test("--rebaseline refuses a baseline that mixes rules and fingerprints, and leaves it as it was", () => {
+	const root = plugin();
+	const bin = fakeJson(root);
+	const baseline = path.join(root, ".github/skillspector/skill-beta.baseline.json");
+	const body = JSON.stringify({ version: 2, scanner_version: "2.12.0", rules: [{ id: "TM1", path: "*SKILL.md", reason: "r" }], fingerprints: [{ hash: "sha256:old0", rule_id: "LP3", file: "SKILL.md", reason: "r" }] });
+	fs.writeFileSync(baseline, body);
+	write(root, "skills/beta/ISSUES.json", JSON.stringify([{ id: "LP3", location: { file: "SKILL.md", start_line: 1 } }]));
+	const r = main(["--root", root, "--bin", bin, "--rebaseline", "skill-beta"]);
+	assert.equal(r.code, 1);
+	assert.match(r.text, /^REFUSED {6}skills\/beta: its baseline holds both rules and fingerprints/);
+	assert.equal(fs.readFileSync(baseline, "utf8"), body);
+});
+
 test("--rebaseline refuses a finding the baseline does not cover, a target without a baseline, and an unknown target", () => {
 	const root = plugin();
 	const bin = fakeJson(root);
@@ -178,5 +204,16 @@ test("the CI job is pinned, static, and not a gate, and every baselined finding 
 		const b = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8"));
 		assert.equal(b.scanner_version, "2.12.0", `${name} was made by the pinned version`);
 		for (const f of b.fingerprints) assert.match(f.reason, /^false positive \(\d{4}-\d{2}-\d{2}\): .{40,}/, `${name}: ${f.rule_id} needs a real reason`);
+		// A rule matches on id, path, and message, so it keeps matching when the text changes. It must say what it matches,
+		// and a reason of "accepted risk" (real behavior, not a false alarm) is allowed only for a skill that a person has to start.
+		for (const r of b.rules ?? []) {
+			assert.ok(r.id && (r.message || (r.path && r.path !== "*")), `${name}: a rule names a finding id and a message or a path narrower than "*", or it hides every finding of that kind`);
+			assert.match(r.reason, /^(false positive|accepted risk) \(\d{4}-\d{2}-\d{2}\): .{40,}/, `${name}: rule ${r.id} needs a real reason`);
+			if (r.reason.startsWith("accepted risk")) {
+				const skill = path.join(repoRoot, "skills", key.replace(/^skill-/, ""), "SKILL.md");
+				assert.ok(key.startsWith("skill-") && fs.existsSync(skill), `${name}: an accepted risk belongs to a skill`);
+				assert.match(fs.readFileSync(skill, "utf8"), /^disable-model-invocation: true$/m, `${name}: an accepted risk is allowed only in a skill the model cannot start`);
+			}
+		}
 	}
 });

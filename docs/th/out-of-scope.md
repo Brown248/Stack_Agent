@@ -6,6 +6,8 @@
 
 [English](../out-of-scope.md)
 
+**ข้อยกเว้น 31 ต.ค. 2026** เจ้าของ repo นี้สั่งให้นำ skill 28 ตัวที่เริ่มจาก mattpocock/skills เข้ามาใน `skills/` และต่อมาเปลี่ยนชื่อและเขียนใหม่เป็นของตัวเอง ทั้งที่ขัดกับรายการด้านล่าง (ดู `THIRD_PARTY_NOTICES.md`) มันขวางสามหัวข้อ: "skill ที่สร้างบน issue tracker", "เครื่องมือที่ต้อง `npm install`" และ "วิธีพัฒนาแบบเดียวสำหรับทุกโปรเจค" หัวข้อเหล่านั้นยังอยู่ในฐานะเหตุผลที่ skill ที่นำเข้าเป็นความเสี่ยง ปัญหาที่ตามมาอยู่ใน `design-notes.md` ("31 skills of mattpocock/skills" และ "Making the imported skills ours") รอวางแผนแก้ แกนยังเหมือนเดิม: hook, `verify`, guard และสคริปต์ที่คัดลอกไปไม่ต้องใช้ tracker หรือติดตั้งอะไร
+
 ## prompt ตั้งต้นที่ฉีดเข้าทุก session
 
 - **ที่มา:** obra/superpowers, `skills/using-superpowers` ที่ SessionStart hook โหลดเข้ามา ("If you think there is even a 1% chance a skill might apply… you ABSOLUTELY MUST invoke")
@@ -26,7 +28,7 @@
 
 ## skill ที่ผูกกับ issue tracker
 
-- **ที่มา:** mattpocock/skills (`triage`, `to-tickets`, `to-spec`, `wayfinder`, `implement-spec`, `setup-matt-pocock-skills`) ซึ่งอ่านเขียน issue ผ่าน `gh` หรือ `glab` และเอกสาร tracker ของแต่ละ repo
+- **ที่มา:** mattpocock/skills (`triage`, `to-tickets`, `to-spec`, `wayfinder`, `implement-spec`, `setup-workflow`) ซึ่งอ่านเขียน issue ผ่าน `gh` หรือ `glab` และเอกสาร tracker ของแต่ละ repo
 - **ทำไมไม่ทำ:** Stack Agent ไม่สมมติว่ามี tracker, host หรือ CLI อื่นนอกจาก git กับ Node
 - **ทำอะไรแทน:** spec มาจาก commit message หรือไฟล์ (`sample-review` และ source แบบ `spec` ของ reviewer)
 

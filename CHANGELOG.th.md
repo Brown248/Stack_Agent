@@ -4,6 +4,24 @@
 
 [English](CHANGELOG.md)
 
+## ยังไม่ออกรุ่น
+
+### เพิ่ม
+
+- skill ด้านวิศวกรรม productivity และการตั้งค่า 28 ตัว เริ่มจาก skill ของ [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) แล้วถูกเปลี่ยนชื่อ อัปเดต และเขียนใหม่เป็นส่วนใหญ่ให้เป็นของ Stack Agent เอง `THIRD_PARTY_NOTICES.md` มีสัญญาอนุญาต รายการ และบอกว่าแต่ละตัวเขียนใหม่หรือแก้ เก้าตัวเริ่มเมื่อ Claude เจอคำขอที่ตรง (`tdd`, `code-review`, `codebase-design`, `domain-modeling`, `pr`, `prototype`, `research`, `grilling`, `writing-for-agents`) อีก 19 ตัวเริ่มเมื่อคนพิมพ์ `/stack-agent:<ชื่อ>` เท่านั้น รวมห้าตัวที่ติดตั้งแพ็กเกจ แก้ hook หรือการตั้งค่า หรือแตะ `.env` ชื่อที่เคยมีชื่อผู้เขียนคือ `which-skill`, `setup-workflow`, `re-explain`, `step-script` และ `git-guardrails` `grill-me` กับ `grill-with-docs` เป็นตัวเลือกของ `grilling` และ `diagnosing-bugs` เป็นส่วนหนึ่งของ `debug` (`debug/LOOPS.md` รวมวิธีสร้าง repro สคริปต์ให้คนช่วยทำเป็น Node) `docs/th/engineering-skills.md` (และฉบับอังกฤษ) บอกว่าแต่ละตัวเริ่มอย่างไร ต้องมีอะไร และเปลี่ยนอะไร
+- เคสย่อยต่อฟีเจอร์ใน feature map: หัวข้อเสริม `### Cases: <ฟีเจอร์>` พร้อมตาราง `Case | Expected | Check` ใต้ตารางหลัก เคสที่ช่อง check เป็น `-` เป็นคำเตือนเพื่อให้เห็นช่องว่าง เคสที่อ้าง check ที่ไม่มี เคสหรือหัวข้อซ้ำ หรือหัวข้อของฟีเจอร์ที่ไม่อยู่ในตาราง ถือว่า drift `feature-map.mjs --suggest` พิมพ์ใต้บรรทัด drift แต่ละบรรทัดว่าไฟล์หรือ anchor ที่ย้ายไปอยู่ที่ไหนและชื่อ check ที่ใกล้ที่สุดที่ยังไม่มีใครใช้ (อ่านอย่างเดียว) ตัวตรวจยังเตือนเมื่อมี verify check ที่ไม่มีแถวหรือเคสไหนอ้าง skill `feature-map` บอกวิธีหาเคสของฟีเจอร์และวิธีซ่อมแผนที่หลัง refactor (แถวที่โค้ดหายไปแล้วอยู่ต่อ ใส่ `TODO` ให้คนตัดสิน) eval case `feature-map-repair` และ `feature-map-lookup` ได้ 1.00 เมื่อมี plugin เทียบ 0.67 เมื่อไม่มี (แขนละ 6 รอบ) ส่วน `feature-map-repair` 0.97 เทียบ 0.80 รัน `init` ซ้ำในโปรเจกต์เพื่อรีเฟรชเครื่องมือใน `.stack-agent/bin/` เครื่องมือรุ่นเก่าข้ามหัวข้อใหม่
+- `setup-workflow` เขียนค่าตั้งของ tracker ป้าย triage และเอกสารโดเมนลง `.stack-agent/workflow/` skill ที่ใช้ tracker อ่านจากที่นั่น และไม่สร้าง `docs/agents/` หรือแก้ `CLAUDE.md` / `AGENTS.md` อีก
+- eval case `tdd-test-first`, `pr-body-shape` และ `domain-modeling-terms` (รันด้วย `--allow-tools Write Edit`): กับ skill ที่เขียนใหม่ มี plugin ได้ 1.00 ทุกเคส (ผ่าน 6 จาก 6 รอบ) ส่วนแขนที่ไม่มี plugin ได้ 0.63, 0.22 และ 0.00 (แขนละ 6 รอบ) `pr-body-shape` ตอนแรกได้ 0.94, 0.83 และ 0.89 หลังเขียนใหม่ แล้วแก้ด้วยสองบรรทัด เคส Bash `code-review-finds-bug` และ `debug-loop-first` เขียนไว้และเทสต์ว่าสร้างสิ่งที่ตัวตรวจจะตรวจ แต่ยังไม่ได้รันบนเครื่องที่เขียน `.github/workflows/evals.yml` รันชุด eval บน GitHub ด้วยมือเมื่อมี secret `ANTHROPIC_API_KEY` เสียเงินจึงไม่มีตัวสั่งอื่น เทสต์รันสองขั้นตอน shell ของมันด้วย `claude` ปลอมที่แค่จดอาร์กิวเมนต์
+- `skill-routing-imported.json` (30 คำขอที่เขียนสำหรับ skill เหล่านี้) ไว้ข้างไฟล์คำขออื่นสำหรับ `routing-live.mjs --requests`: Sonnet เลือกถูก 108 จาก 120 session ไม่เคยเริ่ม skill ที่ให้คนสั่งเองอย่างเดียว และ 34 คำขอของ skill ของ Stack Agent เองยังได้ 68 จาก 68
+
+### เปลี่ยน
+
+- `git-guardrails` เป็นสคริปต์ Node แทนสคริปต์ bash ที่ต้องมี `jq` คุมทั้งเครื่องมือ Bash และ PowerShell เห็น `git -C dir push` และ `bash -c "git push"` (`tests/git-guardrails.test.mjs`)
+- `skills/step-script/template.sh` ไม่ยอมเขียน `.env` ถ้า git ไม่ได้ ignore มัน และส่ง `-R owner/repo` (`WIZARD_REPO` หรือที่ `gh` หาเจอ) ให้ `gh secret set` กับ `gh variable set` พร้อมพิมพ์ชื่อ repo
+- ข้อเท็จจริงที่อัปเดตให้ทัน: Tailwind v4 browser build กับ Mermaid 12 ในรายงานสถาปัตยกรรม (ตอนนี้มีแบบออฟไลน์ด้วย), `bun.lock`, ค่าเริ่มต้นของ Prettier 3, `@total-typescript/shoehorn` เป็น dev dependency, `searchParams` ของ Next.js ที่เป็น promise, วิธีที่ `AGENTS.md` กับ `CLAUDE.md` ถูกอ่าน, `/compact` พร้อมหัวข้อโฟกัส และเครื่องมือ `Agent` สำหรับ subagent `implement` กับ `implement-spec` commit เฉพาะบน feature branch และไม่ push
+- baseline ของ skill-scan ของ skill เหล่านี้เป็น `rules` (id ของ finding, path, ข้อความ) ไม่ใช่ fingerprint การแก้ข้อความหรือรุ่นใหม่จากต้นฉบับจึงไม่เปลี่ยนมัน เหตุผล "ยอมรับความเสี่ยง" ใช้ได้เฉพาะกับ skill ที่ model เริ่มไม่ได้ และเทสต์ปฏิเสธกฎที่ระบุแค่ id กับ path `*` `skill-scan.mjs --rebaseline` ไม่แตะ baseline แบบ rules และปฏิเสธอันที่ผสม rules กับ fingerprint
+- เทสต์เลิกฝังจำนวน skill: `tests/imported-skills.test.mjs` อ่านประกาศแล้วเทียบกับโฟลเดอร์ จำนวนและคอลัมน์ "ขอหรือพิมพ์" ในคู่มือ รายการแบบพิมพ์เอง และการอ้างถึงกันระหว่าง skill กฎที่ว่าคำอธิบายขึ้นต้น "Use" และไม่มีขั้นตอนใช้กับ skill ที่ model เลือก ไม่ใช้กับตัวที่คนต้องสั่งเอง
+
 ## 0.6.0 (2026-10-30)
 
 ไม่มีเครื่องมือใน `.stack-agent/bin/` เปลี่ยน จึงไม่ต้องรัน `init` ใหม่ hook และ skill จะเปลี่ยนเมื่ออัปเดต plugin

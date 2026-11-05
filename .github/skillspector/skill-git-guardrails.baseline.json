@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [
+    {
+      "id": "TM1",
+      "path": "*",
+      "message": "*git reset --hard*",
+      "reason": "false positive (2026-10-31): the match is the list of commands the hook blocks, not commands it runs (mattpocock/skills)"
+    },
+    {
+      "id": "AS1",
+      "path": "*SKILL.md",
+      "message": "*settings.json*",
+      "reason": "accepted risk (2026-10-31): the skill can write ~/.claude/settings.json and ~/.claude/hooks, after asking project or global scope; it starts only when a person types it (mattpocock/skills)"
+    },
+    {
+      "id": "P6",
+      "path": "*block-dangerous-git.mjs",
+      "message": "*return rule*",
+      "reason": "false positive (2026-11-01): the match is the return statement of a function that gives back the name of the git rule a command broke; it prints no prompt or internal instruction"
+    },
+    {
+      "id": "TR2",
+      "path": "*SKILL.md",
+      "reason": "false positive (2026-11-01): the description says to type /stack-agent:git-guardrails to start it; the word 'start' there is plain text, not a clash with a built-in command"
+    }
+  ],
+  "fingerprints": []
+}

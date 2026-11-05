@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: tdd-test-first
+description: "A request to build a rule test-first should start the tdd skill, name the seam to test before any source file is edited, and write the test before the code. No Bash is granted, so nothing is run, and the report must not say it was. Run it with --allow-tools Write Edit."
+tags: [skills, tdd]
+context:
+  scaffold_script: scaffold.sh

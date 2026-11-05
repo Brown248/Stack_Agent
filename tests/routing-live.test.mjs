@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { ConfigError } from "../scripts/lib/files.mjs";
-import { ITEMS, shippedSkills } from "../scripts/micro/cases/skill-routing.mjs";
+import { CORE, ITEMS, shippedSkills } from "../scripts/micro/cases/skill-routing.mjs";
 import { armPlugins, bareName, firstChoice, judge, liveArgs, main, measure, parseOptions, pickItems, readRequests, runSession, summarize } from "../scripts/micro/routing-live.mjs";
 import { memoryFilesAbove, pickWorkBase } from "../scripts/micro/work-dir.mjs";
 import { repoRoot, tempDir, write } from "./helpers.mjs";
@@ -76,10 +76,10 @@ test("pickItems thins every group evenly, keeps the case's numbering, and covers
 	assert.equal(all.length, ITEMS.length);
 	const some = pickItems(ITEMS, { perSkill: 2, nearMiss: 3 });
 	assert.equal(some.length, 6 * 2 + 3);
-	for (const s of SKILLS.map(bareName)) assert.equal(some.filter((i) => i.ok[0] === s).length, 2, s);
+	for (const s of CORE) assert.equal(some.filter((i) => i.ok[0] === s).length, 2, s);
 	assert.equal(some.filter((i) => i.ok.includes("none")).length, 3);
 	for (const i of some) assert.equal(ITEMS[i.index - 1].request, i.request, "index is the request's number in the case");
-	assert.deepEqual(pickItems(ITEMS, { perSkill: 1, nearMiss: 0 }).map((i) => i.ok[0]), SKILLS.map(bareName).sort((a, b) => ITEMS.findIndex((x) => x.ok[0] === a) - ITEMS.findIndex((x) => x.ok[0] === b)));
+	assert.deepEqual(pickItems(ITEMS, { perSkill: 1, nearMiss: 0 }).map((i) => i.ok[0]), [...CORE].sort((a, b) => ITEMS.findIndex((x) => x.ok[0] === a) - ITEMS.findIndex((x) => x.ok[0] === b)));
 });
 
 test("firstChoice reads the first tool the model called: a skill by its short name, another tool as none, text as none", () => {
@@ -323,7 +323,7 @@ test("a result that is not a success (a budget cap, an error) is an error even w
 test("a plugin that loads but lists none of its skills is invalid, not a miss", async () => {
 	const r = await run(fakeClaude("noskills"), ["--runs", "1", "--only", "1"]);
 	assert.equal(r.code, 1);
-	assert.match(r.text, /INVALID \(full, request 1\): the session does not list these skills of the plugin: add-endpoint, add-migration, api-map, debug, feature-map, verify/);
+	assert.ok(r.text.includes(`INVALID (full, request 1): the session does not list these skills of the plugin: ${SKILLS.map(bareName).join(", ")}`), r.text);
 });
 
 test("a skill that only a person starts is still one of ours: loading it for a request that needs none is wrong", async () => {

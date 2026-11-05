@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [
+    {
+      "id": "AR2",
+      "path": "*AGENT-BRIEF.md",
+      "message": "*no disclaimer*",
+      "reason": "false positive (2026-11-01): the match is an example of a bad agent brief that lacks the disclaimer line, listed so the writer avoids it; it does not tell the agent to omit anything"
+    },
+    {
+      "id": "EA2",
+      "path": "*SKILL.md",
+      "message": "*without asking*",
+      "reason": "false positive (2026-11-01): the match is the definition of a triage state (an issue an agent may pick up without asking the maintainer again); it does not tell the agent to skip a user's approval"
+    }
+  ],
+  "fingerprints": []
+}

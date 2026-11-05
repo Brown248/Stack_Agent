@@ -126,3 +126,15 @@ export async function processGone(pidFile, { timeoutMs = 10000 } = {}) {
 
 // the Python examples run `python`; a machine with only `python3` (many Linux installs) skips those tests instead of failing
 export const pythonSkip = spawnSync("python", ["--version"], { encoding: "utf8" }).status === 0 ? false : "python is not on PATH";
+
+// A bash that can read the paths a test hands it, or null. On Windows a bare "bash" can be the WSL launcher, which sees
+// none of them; use the one that ships with Git.
+export const bash = (() => {
+	let found = "bash";
+	if (process.platform === "win32") {
+		const exec = spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim();
+		found = [exec && path.resolve(exec, "..", "..", "..", "bin", "bash.exe"), "C:/Program Files/Git/bin/bash.exe"].find((c) => c && fs.existsSync(c)) ?? null;
+	}
+	return found && spawnSync(found, ["-c", "exit 0"]).status === 0 ? found : null;
+})();
+export const shPath = (p) => p.split(path.sep).join("/");

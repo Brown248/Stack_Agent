@@ -78,6 +78,16 @@ export function rebaseline(root, keys, bin) {
 				throw new ConfigError(`--rebaseline: cannot read ${path.relative(root, file)}: ${err.message}`);
 			}
 			if (!Array.isArray(old.fingerprints)) throw new ConfigError(`--rebaseline: ${path.relative(root, file)} has no fingerprints list`);
+			// rules match on a finding's id, path, and message, not on a hash of the file, so an edit does not change them
+			if (!old.fingerprints.length && Array.isArray(old.rules) && old.rules.length) {
+				lines.push(`unchanged    ${target[1]}: its baseline is made of rules, which do not depend on the text of the files`);
+				continue;
+			}
+			if (old.fingerprints.length && Array.isArray(old.rules) && old.rules.length) {
+				lines.push(`REFUSED      ${target[1]}: its baseline holds both rules and fingerprints, and a scan cannot tell which finding each one covers; keep one kind`);
+				code = 1;
+				continue;
+			}
 			const dir = path.join(root, target[1]);
 			const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "stack-agent-rebaseline-"));
 			try {

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { scaffold } from "../evals/scaffold.mjs";
+import { main } from "../scripts/feature-map.mjs";
 import { git, repoRoot, runNode, tempDir } from "./helpers.mjs";
 
 const evalsDir = path.join(repoRoot, "evals");
@@ -73,6 +74,56 @@ test("debug-blank-name plants the bug in a commit, so the fix grader fails until
 	const pattern = new RegExp(/^pattern: '(.+)'$/m.exec(fs.readFileSync(path.join(evalsDir, "debug-blank-name/graders/fix-in-service.md"), "utf8"))[1]);
 	assert.doesNotMatch(service, pattern);
 	assert.match(fs.readFileSync(path.join(repoRoot, "examples/sample-backend/src/modules/items/service.js"), "utf8"), pattern, "the correct code matches");
+});
+
+test("code-review-finds-bug plants a commit whose code lets 500 characters through where its spec says 50, and the left-unchanged grader fails once it is fixed", () => {
+	const dir = scaffolded("code-review-finds-bug");
+	assert.match(git(dir, "log", "-1", "--format=%s"), /items: refuse long names/);
+	assert.equal(git(dir, "rev-list", "--count", "HEAD").trim(), "2", "a base commit and the commit under review (HEAD~1 exists)");
+	assert.equal(git(dir, "status", "--porcelain"), "");
+	assert.match(fs.readFileSync(path.join(dir, "specs/name-limit.md"), "utf8"), /longer than 50 characters/);
+	const service = fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8");
+	const pattern = new RegExp(/^pattern: '(.+)'$/m.exec(fs.readFileSync(path.join(evalsDir, "code-review-finds-bug/graders/left-code-unchanged.md"), "utf8"))[1]);
+	assert.match(service, pattern, "the planted code matches, so a review that leaves it alone passes");
+	assert.doesNotMatch(service.replace("> 500", "> 50"), pattern, "a fix would not match");
+});
+
+test("debug-loop-first starts from the same planted bug as debug-blank-name", () => {
+	const dir = scaffolded("debug-loop-first");
+	assert.match(git(dir, "log", "-1", "--format=%s"), /items: take the name as sent/);
+	assert.doesNotMatch(fs.readFileSync(path.join(dir, "src/modules/items/service.js"), "utf8"), /name\.trim\(\)/);
+	assert.equal(fs.readFileSync(path.join(evalsDir, "debug-loop-first/graders/fix-in-service.md"), "utf8"), fs.readFileSync(path.join(evalsDir, "debug-blank-name/graders/fix-in-service.md"), "utf8"));
+});
+
+test("feature-map-repair moves the module and renames the function in a commit, and leaves a map the graders reject until it is repaired", () => {
+	const dir = tempDir("stack-agent-eval-");
+	scaffold(dir, repoRoot, "sample-cli");
+	assert.equal(runNode(path.join(evalsDir, "feature-map-repair/setup.mjs"), [], { cwd: dir }).code, 0);
+	assert.match(git(dir, "log", "-1", "--format=%s"), /let an unreadable file raise/);
+	assert.match(git(dir, "log", "-2", "--format=%s"), /move the counting into counting\.py/);
+	assert.equal(git(dir, "status", "--porcelain"), "");
+	assert.doesNotMatch(fs.readFileSync(path.join(dir, "wordfreq/cli.py"), "utf8"), /cannot read/, "the code behind the Explain row is gone");
+	assert.ok(fs.existsSync(path.join(dir, "wordfreq/counting.py")) && !fs.existsSync(path.join(dir, "wordfreq/core.py")));
+	assert.match(fs.readFileSync(path.join(dir, "wordfreq/counting.py"), "utf8"), /def most_common_words/);
+	const map = fs.readFileSync(path.join(dir, ".stack-agent/feature-map.md"), "utf8");
+	const pattern = (g) => new RegExp(/^pattern: '(.+)'$/m.exec(fs.readFileSync(path.join(evalsDir, "feature-map-repair/graders", g), "utf8"))[1]);
+	assert.doesNotMatch(map, pattern("map-names-new-file.md"));
+	assert.doesNotMatch(map, pattern("map-names-new-function.md"));
+	assert.doesNotMatch(map, pattern("old-names-gone.md"), "the map still names the old file, so the old-names grader fails");
+	// the same graders pass on a repaired map, and the repaired map passes the tool
+	const fixed = map.replaceAll("wordfreq/core.py", "wordfreq/counting.py").replaceAll("def top_words", "def most_common_words");
+	assert.match(fixed, pattern("map-names-new-file.md"));
+	assert.match(fixed, pattern("map-names-new-function.md"));
+	assert.match(fixed, pattern("old-names-gone.md"));
+	fs.writeFileSync(path.join(dir, ".stack-agent/feature-map.md"), fixed);
+	const left = main(["--root", dir]);
+	assert.equal(left.code, 1, "one problem is left: the row whose code is gone");
+	assert.match(left.text, /Explain a file that cannot be read: wordfreq\/cli\.py no longer contains/);
+	assert.match(left.text, /DRIFT \(1 problem/);
+	fs.writeFileSync(path.join(dir, ".stack-agent/feature-map.md"), fixed.split("\n").filter((l) => !l.startsWith("| Explain a file")).join("\n"));
+	assert.equal(main(["--root", dir]).code, 0);
+	fs.writeFileSync(path.join(dir, ".stack-agent/feature-map.md"), map);
+	assert.equal(main(["--root", dir, "--suggest"]).code, 1);
 });
 
 test("correct-error-body leaves the same mistake and its review fix twice in history, and clean code at the end", () => {

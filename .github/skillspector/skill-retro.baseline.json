@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "scanner_version": "2.12.0",
+  "rules": [
+    {
+      "id": "RA2",
+      "path": "*SKILL.md",
+      "message": "*<REDACTED>*",
+      "reason": "false positive (2026-11-01): the match is the section on reading the person's past session transcripts for lessons; the skill sets no scheduled job, startup script, or persistent hook"
+    }
+  ],
+  "fingerprints": []
+}

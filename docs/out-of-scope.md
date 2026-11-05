@@ -6,6 +6,8 @@ Ideas from the original talks that were left out (auto-merge, browser control, c
 
 [ภาษาไทย](th/out-of-scope.md)
 
+**Exception, 2026-10-31.** The owner of this repository had 28 skills that began as mattpocock/skills imported into `skills/` anyway, and later renamed and rewritten them as their own (see `THIRD_PARTY_NOTICES.md`). They cut across three entries below: "Skills built on an issue tracker", "Tools that need `npm install`", and "One development methodology for every project". Those entries stay as the reasons the imported skills are a risk; the problems this causes are listed in `design-notes.md` ("31 skills of mattpocock/skills" and "Making the imported skills ours"), to be planned and fixed. The core is unchanged: the hooks, `verify`, the guard, and the vendored scripts still need no tracker and no install.
+
 ## A bootstrap prompt injected into every session
 
 - **Source:** obra/superpowers, `skills/using-superpowers` loaded by its SessionStart hook ("If you think there is even a 1% chance a skill might apply… you ABSOLUTELY MUST invoke").
@@ -26,7 +28,7 @@ Ideas from the original talks that were left out (auto-merge, browser control, c
 
 ## Skills built on an issue tracker
 
-- **Source:** mattpocock/skills (`triage`, `to-tickets`, `to-spec`, `wayfinder`, `implement-spec`, `setup-matt-pocock-skills`), which read and write issues through `gh` or `glab` and a per-repo tracker doc.
+- **Source:** mattpocock/skills (`triage`, `to-tickets`, `to-spec`, `wayfinder`, `implement-spec`, `setup-workflow`), which read and write issues through `gh` or `glab` and a per-repo tracker doc.
 - **Why not:** Stack Agent assumes no tracker, host, or CLI beyond git and Node.
 - **Instead:** a spec comes from the commit message or a file (`sample-review`, the reviewer's `spec` source).
 
