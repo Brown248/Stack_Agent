@@ -82,8 +82,17 @@ Fill `.stack-agent/rules.md` with soft preferences. Add `@.stack-agent/rules.md`
 
 ## 7. Finish
 
+First prove the setup once: run the whole thing together, with no flags.
+
+```bash
+node .stack-agent/bin/verify.mjs
+node .stack-agent/bin/guard.mjs
+```
+
+A wrong command, a missing program, or a port already taken only shows when the tests, the server, and the checks run together. If verify fails, fix the configuration (`verify.json`: the command, the port, the check) until it passes, and do not change the project's code to make it pass. If it cannot pass here (a program is not installed, the server needs a secret), say exactly why and leave it for the user. Report the evidence file path.
+
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/init.mjs" . --check
 ```
 
-Report the output. Exit 0 means setup is complete. An `outdated: .stack-agent/bin/<file>` line means a vendored tool differs from the plugin's copy. Rerun step 2 to refresh it; your configs are kept. A `notes` block names guard rules every preset ships that this project's `guard.config.json` lacks; pass it on to the user, who decides whether to copy each rule in or list it in `declinedRules`. Do not commit. List the files you created and let the user review them.
+Report the output, including a line starting `setup is not proven yet` if there still is one. Exit 0 means setup is complete. An `outdated: .stack-agent/bin/<file>` line means a vendored tool differs from the plugin's copy. Rerun step 2 to refresh it; your configs are kept. A `notes` block names guard rules every preset ships that this project's `guard.config.json` lacks; pass it on to the user, who decides whether to copy each rule in or list it in `declinedRules`. Do not commit. List the files you created and let the user review them.

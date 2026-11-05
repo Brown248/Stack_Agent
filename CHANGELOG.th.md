@@ -6,6 +6,8 @@
 
 ## ยังไม่ออกรุ่น
 
+เครื่องมือใน `.stack-agent/bin/` เปลี่ยน (`verify.mjs`, `guard.mjs`, `feature-map.mjs`, `api-map.mjs`, `init.mjs` และไฟล์ใหม่สองไฟล์ `lib/cli-text.mjs` กับ `lib/messages.mjs`) จึงให้รัน `init` ใหม่หนึ่งครั้งในแต่ละโปรเจคเพื่อรีเฟรช
+
 ### เพิ่ม
 
 - skill ด้านวิศวกรรม productivity และการตั้งค่า 28 ตัว เริ่มจาก skill ของ [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) แล้วถูกเปลี่ยนชื่อ อัปเดต และเขียนใหม่เป็นส่วนใหญ่ให้เป็นของ Stack Agent เอง `THIRD_PARTY_NOTICES.md` มีสัญญาอนุญาต รายการ และบอกว่าแต่ละตัวเขียนใหม่หรือแก้ เก้าตัวเริ่มเมื่อ Claude เจอคำขอที่ตรง (`tdd`, `code-review`, `codebase-design`, `domain-modeling`, `pr`, `prototype`, `research`, `grilling`, `writing-for-agents`) อีก 19 ตัวเริ่มเมื่อคนพิมพ์ `/stack-agent:<ชื่อ>` เท่านั้น รวมห้าตัวที่ติดตั้งแพ็กเกจ แก้ hook หรือการตั้งค่า หรือแตะ `.env` ชื่อที่เคยมีชื่อผู้เขียนคือ `which-skill`, `setup-workflow`, `re-explain`, `step-script` และ `git-guardrails` `grill-me` กับ `grill-with-docs` เป็นตัวเลือกของ `grilling` และ `diagnosing-bugs` เป็นส่วนหนึ่งของ `debug` (`debug/LOOPS.md` รวมวิธีสร้าง repro สคริปต์ให้คนช่วยทำเป็น Node) `docs/th/engineering-skills.md` (และฉบับอังกฤษ) บอกว่าแต่ละตัวเริ่มอย่างไร ต้องมีอะไร และเปลี่ยนอะไร
@@ -13,6 +15,12 @@
 - `setup-workflow` เขียนค่าตั้งของ tracker ป้าย triage และเอกสารโดเมนลง `.stack-agent/workflow/` skill ที่ใช้ tracker อ่านจากที่นั่น และไม่สร้าง `docs/agents/` หรือแก้ `CLAUDE.md` / `AGENTS.md` อีก
 - eval case `tdd-test-first`, `pr-body-shape` และ `domain-modeling-terms` (รันด้วย `--allow-tools Write Edit`): กับ skill ที่เขียนใหม่ มี plugin ได้ 1.00 ทุกเคส (ผ่าน 6 จาก 6 รอบ) ส่วนแขนที่ไม่มี plugin ได้ 0.63, 0.22 และ 0.00 (แขนละ 6 รอบ) `pr-body-shape` ตอนแรกได้ 0.94, 0.83 และ 0.89 หลังเขียนใหม่ แล้วแก้ด้วยสองบรรทัด เคส Bash `code-review-finds-bug` และ `debug-loop-first` เขียนไว้และเทสต์ว่าสร้างสิ่งที่ตัวตรวจจะตรวจ แต่ยังไม่ได้รันบนเครื่องที่เขียน `.github/workflows/evals.yml` รันชุด eval บน GitHub ด้วยมือเมื่อมี secret `ANTHROPIC_API_KEY` เสียเงินจึงไม่มีตัวสั่งอื่น เทสต์รันสองขั้นตอน shell ของมันด้วย `claude` ปลอมที่แค่จดอาร์กิวเมนต์
 - `skill-routing-imported.json` (30 คำขอที่เขียนสำหรับ skill เหล่านี้) ไว้ข้างไฟล์คำขออื่นสำหรับ `routing-live.mjs --requests`: Sonnet เลือกถูก 108 จาก 120 session ไม่เคยเริ่ม skill ที่ให้คนสั่งเองอย่างเดียว และ 34 คำขอของ skill ของ Stack Agent เองยังได้ 68 จาก 68
+- `verify.mjs --doctor`: ตัวเช็กความพร้อมที่อ่านอย่างเดียว ไม่เปลี่ยนอะไรและไม่เปิด server มันหาโปรแกรมของเทสต์ server และ command check แต่ละตัวใน `PATH` (บน Windows นับ `PATHEXT` ด้วย) เช็ก `.cmd` หรือ `.bat` ที่ใส่ใน `args` บน Windows, `cwd` ที่ไม่มี, พอร์ตของ server ที่ถูกใช้อยู่, Node ที่เก่ากว่า 22, `git` เมื่อเปิดขั้น `against` และโฟลเดอร์หลักฐานที่เขียนไม่ได้ พิมพ์หนึ่งบรรทัดต่อหนึ่งปัญหาพร้อมบอกว่าต้องทำอะไร ออกด้วย 0 เมื่อพร้อม และ 2 เมื่อไม่พร้อม
+- `init --check` พิมพ์ "setup is not proven yet" เมื่อ `verify` ไม่เคยรันในโปรเจค รอบล่าสุดไม่ผ่าน หรือรันแค่บางส่วน เป็นแค่หมายเหตุ exit code จึงไม่เปลี่ยน skill `stack-agent-init` จบด้วยการรัน `verify` เต็มหนึ่งรอบกับ `guard` หนึ่งรอบ
+- บรรทัดสรุปผลเป็นไทยง่ายๆ ของ `verify`, `guard`, `feature-map`, `api-map`, `verify --doctor` และ `init` (`scripts/lib/cli-text.mjs`) ใช้เฉพาะเมื่อ `language` เป็น `th` และผลลัพธ์ออกที่หน้าจอ terminal ส่วน pipe, log ของ CI, agent ที่รันเครื่องมือ และ `--json` ยังได้ข้อความอังกฤษเหมือนเดิมทุกตัวอักษร
+- eval case `grilling-first-round`, `codebase-design-seam`, `prototype-throwaway` และ `writing-for-agents-fix` (รันด้วย `--allow-tools Write Edit`) แต่ละเคสมีเทสต์ตรวจว่ามันวางสถานะที่จะตรวจจริง คะแนนอยู่ใน `docs/design-notes.md`
+- eval case `handoff-brief` (รันด้วย `--allow-tools Write`) กับ plugin ผ่าน 6 จาก 6 รัน ไม่มี plugin 0 จาก 6 ดู `docs/design-notes.md` ว่าส่วนต่างบอกอะไรได้และบอกอะไรไม่ได้
+- `skill-routing-heldout.json` และ `skill-routing-heldout2.json` (ไฟล์ละ 12 คำขอ) สำหรับ `routing-live.mjs --requests` ไว้วัดการเลือก skill กับคำขอที่ไม่ได้ใช้ปรับคำอธิบาย
 
 ### เปลี่ยน
 
@@ -21,6 +29,11 @@
 - ข้อเท็จจริงที่อัปเดตให้ทัน: Tailwind v4 browser build กับ Mermaid 12 ในรายงานสถาปัตยกรรม (ตอนนี้มีแบบออฟไลน์ด้วย), `bun.lock`, ค่าเริ่มต้นของ Prettier 3, `@total-typescript/shoehorn` เป็น dev dependency, `searchParams` ของ Next.js ที่เป็น promise, วิธีที่ `AGENTS.md` กับ `CLAUDE.md` ถูกอ่าน, `/compact` พร้อมหัวข้อโฟกัส และเครื่องมือ `Agent` สำหรับ subagent `implement` กับ `implement-spec` commit เฉพาะบน feature branch และไม่ push
 - baseline ของ skill-scan ของ skill เหล่านี้เป็น `rules` (id ของ finding, path, ข้อความ) ไม่ใช่ fingerprint การแก้ข้อความหรือรุ่นใหม่จากต้นฉบับจึงไม่เปลี่ยนมัน เหตุผล "ยอมรับความเสี่ยง" ใช้ได้เฉพาะกับ skill ที่ model เริ่มไม่ได้ และเทสต์ปฏิเสธกฎที่ระบุแค่ id กับ path `*` `skill-scan.mjs --rebaseline` ไม่แตะ baseline แบบ rules และปฏิเสธอันที่ผสม rules กับ fingerprint
 - เทสต์เลิกฝังจำนวน skill: `tests/imported-skills.test.mjs` อ่านประกาศแล้วเทียบกับโฟลเดอร์ จำนวนและคอลัมน์ "ขอหรือพิมพ์" ในคู่มือ รายการแบบพิมพ์เอง และการอ้างถึงกันระหว่าง skill กฎที่ว่าคำอธิบายขึ้นต้น "Use" และไม่มีขั้นตอนใช้กับ skill ที่ model เลือก ไม่ใช้กับตัวที่คนต้องสั่งเอง
+- คำอธิบายของ `tdd`, `codebase-design`, `research` และ `prototype` ขึ้นต้นด้วย "Use this first, before ..." และเพิ่มคำกระตุ้นภาษาอังกฤษ สำหรับ model ที่ชอบไป Grep หรือค้นเว็บก่อนดู skill กับ 12 คำขอที่เขียนหลังปรับเสร็จ Haiku เลือก skill ถูก 21 จาก 48 session จากเดิม 9 จาก 48 ส่วน Sonnet ไม่เปลี่ยน
+- `implement` กับ `implement-spec` เรียก skill ว่า `stack-agent:code-review` เพราะ `code-review` เฉยๆ อาจไปเริ่มคำสั่งของ Claude Code เอง และปิด ticket แบบ local ให้ด้วย (`Status: done` กับคอมเมนต์ที่บอก branch และ commit) ตามหัวข้อใหม่ "close a ticket" ใน `issue-tracker-local.md` ส่วน tracker ที่ปิดงานเมื่อ pull request merge เท่านั้น ticket ยังเปิดอยู่
+- skill `handoff` เขียนคำขอล่าสุดของผู้ใช้คำต่อคำพร้อมสถานะ ใส่สมมติฐานที่ต้องตรวจพร้อมคำสั่งตรวจข้อละคำสั่งกับบรรทัดความมั่นใจ และอ่านสถานะจาก `git` กับ `verify --evidence-status` แทนการเดาจากความจำ (ใส่ `not checked` เมื่อรันคำสั่งไม่ได้) ใน `THIRD_PARTY_NOTICES.md` นับเป็น rewritten ความคิดมาจาก alexknowshtml/claude-auto-handoff ซึ่งไม่ได้นำมาใช้ทั้งตัว (ดู `docs/out-of-scope.md`)
+- `writing-for-agents`: การเขียนขั้นตอนเดิมใหม่ เปลี่ยนวิธีพูด ไม่เปลี่ยนสิ่งที่ทำ เส้นชัยของแต่ละขั้นมาจากคำสั่งของขั้นนั้นเอง ส่วน check ขั้นตอน หรือเงื่อนไขหยุดที่เพิ่มใหม่ ให้ใส่ในรายงานเป็นข้อเสนอ แล้วคงขั้นตอนไว้ตามเดิม eval case `writing-for-agents-fix` พบว่า agent เพิ่มขั้นตอนและคำสั่งของตัวเองเวลาถูกขอให้แก้ skill
+- แก้ถ้อยคำแปดบรรทัดใน skill ให้ SkillSpector เลิกเตือน ลบไฟล์ baseline ของ skill-scan 5 ไฟล์ และเอากฎออก 4 ข้อ
 
 ## 0.6.0 (2026-10-30)
 

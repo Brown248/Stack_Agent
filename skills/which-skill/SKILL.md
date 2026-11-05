@@ -11,7 +11,7 @@ Nobody remembers 40 skills. This skill maps a situation to the skill or the flow
 
 ## 1. Answer from what exists
 
-The tables below were built from each skill's front matter and can go stale. Before answering, list what is really installed, and before describing what a skill does, read its `SKILL.md`. Do not describe a skill from memory.
+The tables below were built from each skill's front matter and can go stale. Before answering, list what is really installed, and before describing what a skill does, read the skill itself. Do not describe a skill from memory.
 
 ```bash
 ls skills

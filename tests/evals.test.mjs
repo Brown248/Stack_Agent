@@ -126,6 +126,51 @@ test("feature-map-repair moves the module and renames the function in a commit, 
 	assert.equal(main(["--root", dir, "--suggest"]).code, 1);
 });
 
+test("writing-for-agents-fix plants a skill that is a procedure with a long, repetitive body, and its graders fail until it is fixed", () => {
+	const dir = scaffolded("writing-for-agents-fix");
+	assert.match(git(dir, "log", "-1", "--format=%s"), /add the deploy skill/);
+	assert.equal(git(dir, "status", "--porcelain"), "");
+	const file = path.join(dir, "team-skills/deploy/SKILL.md");
+	const text = fs.readFileSync(file, "utf8");
+	assert.ok(text.split("\n").length > 100, "the body is long");
+	const pattern = (g) => new RegExp(/^pattern: '(.+)'$/m.exec(fs.readFileSync(path.join(evalsDir, "writing-for-agents-fix/graders", g), "utf8"))[1]);
+	assert.doesNotMatch(text, pattern("description-starts-with-use.md"));
+	assert.doesNotMatch(text, pattern("description-has-no-procedure.md"), "the description holds 'then'");
+	assert.match(text, pattern("steps-kept.md"));
+	const fixed = text.replace(/^description: .*$/m, "description: Use when asked to deploy the app or ship a release.");
+	assert.match(fixed, pattern("description-starts-with-use.md"));
+	assert.match(fixed, pattern("description-has-no-procedure.md"));
+	assert.match(fixed, pattern("steps-kept.md"));
+});
+
+test("the cases that grade a skill's behavior without a shell grant no more than they need", () => {
+	for (const [name, tools] of [["grilling-first-round", ["Read", "Glob", "Grep", "Skill"]], ["codebase-design-seam", ["Read", "Glob", "Grep", "Skill"]]]) {
+		const front = frontmatter(fs.readFileSync(path.join(evalsDir, name, "prompt.md"), "utf8")) ?? "";
+		assert.match(front, new RegExp(`allowed_tools: \\[${tools.join(", ")}\\]`), name);
+		assert.doesNotMatch(front, /Edit|Write|Bash/, `${name} edits nothing`);
+	}
+});
+
+test("handoff-brief grants Write for the document only, and its file graders tell a copy from a paraphrase and a status from a guess", () => {
+	const front = frontmatter(fs.readFileSync(path.join(evalsDir, "handoff-brief", "prompt.md"), "utf8")) ?? "";
+	assert.match(front, /allowed_tools: \[Read, Glob, Grep, Write, Skill\]/);
+	assert.doesNotMatch(front, /Edit|Bash/);
+	const pattern = (g) => new RegExp(/^pattern: '(.+)'$/m.exec(fs.readFileSync(path.join(evalsDir, "handoff-brief/graders", g), "utf8"))[1]);
+	const quote = "Also reject a limit above 100 with a 400, and tell me when that's done.";
+	assert.match(`**Last request:** ${quote}`, pattern("last-request-verbatim.md"));
+	assert.doesNotMatch("The user also wants limits above 100 rejected with a 400.", pattern("last-request-verbatim.md"));
+	for (const ok of ["Status: not answered", "**Status:** Not answered", "Status: `not answered`", "Status: not yet done"]) assert.match(ok, pattern("status-not-answered.md"), ok);
+	for (const bad of ["Status: answered", "Status: partly answered", "Status: done"]) assert.doesNotMatch(bad, pattern("status-not-answered.md"), bad);
+	assert.match("Branch: not checked\nFiles: not checked (git status)\nCommits: not checked", pattern("state-marked-not-checked.md"));
+	assert.doesNotMatch("Branch: not checked\nFiles: clean\nCommits: abc123", pattern("state-marked-not-checked.md"));
+	for (const g of fs.readdirSync(path.join(evalsDir, "handoff-brief/graders"))) {
+		const text = fs.readFileSync(path.join(evalsDir, "handoff-brief/graders", g), "utf8");
+		if (/^type: llm$/m.test(text)) assert.match(text, /^focus: trace$/m, `${g} reads the trace`);
+	}
+	// the prompt carries the sentence the first grader looks for, so a copy is possible and a paraphrase is a choice
+	assert.ok(fs.readFileSync(path.join(evalsDir, "handoff-brief", "prompt.md"), "utf8").includes(quote));
+});
+
 test("correct-error-body leaves the same mistake and its review fix twice in history, and clean code at the end", () => {
 	const dir = scaffolded("correct-error-body");
 	const log = git(dir, "log", "--format=%s").trim().split("\n");

@@ -229,6 +229,7 @@ Commands you will use (run from the project's root):
 | Run everything and write evidence | `node .stack-agent/bin/verify.mjs` |
 | Run one check, or only the tests | `node .stack-agent/bin/verify.mjs --check NAME` · `--skip-checks` |
 | Find out how often a flaky check fails | `node .stack-agent/bin/verify.mjs --check NAME --repeat 30` |
+| Find out whether this machine can run verify (programs, port, Node, git) without running it | `node .stack-agent/bin/verify.mjs --doctor` |
 | Say why verification cannot run (15 characters or more) | `node .stack-agent/bin/verify.mjs --skip "no database in this sandbox"` |
 | Check the rules | `node .stack-agent/bin/guard.mjs` |
 | Accept today's violations as the baseline | `node .stack-agent/bin/guard.mjs --update-baseline` (a person adds `--allow-increase` to raise it) |
@@ -239,7 +240,7 @@ The full walkthrough, with every option, is in [docs/adoption.md](docs/adoption.
 
 ## Optional extras
 
-- **Messages in plain Thai.** The hooks speak English. Set `"language": "th"` in `.stack-agent/verify.json`, or `STACK_AGENT_LANG=th` in the environment, and the notices and permission questions a person reads, and the agent's reminders, come in plain Thai. Stored evidence stays English. Details: [Messages in Thai](docs/adoption.md#messages-in-thai).
+- **Messages in plain Thai.** The hooks speak English. Set `"language": "th"` in `.stack-agent/verify.json`, or `STACK_AGENT_LANG=th` in the environment, and the notices and permission questions a person reads, and the agent's reminders, come in plain Thai. So do the verdict lines of `verify`, `guard`, and the maps, but only at a terminal (an agent or CI reading a pipe keeps English). Stored evidence stays English. Details: [Messages in Thai](docs/adoption.md#messages-in-thai).
 - **Which skills your sessions use.** `node path/to/Stack_Agent/scripts/skill-usage.mjs` reads the transcripts Claude Code already keeps on your machine and lists which skills were loaded or run as a slash command (`--days N` sets the window). It only reports; it never removes a skill.
 - **Corrections you repeat.** `/stack-agent:mine-corrections` reads the same transcripts for things you corrected in more than one session and proposes rules for them, after hiding keys, passwords, and personal details. It shows a table with the quoted evidence and writes nothing until you approve.
 

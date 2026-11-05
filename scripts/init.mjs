@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./guard.mjs";
+import { projectLang, say } from "./lib/cli-text.mjs";
 import { ConfigError, parseArgs, realPath, toPosix } from "./lib/files.mjs";
 
 const USAGE = `usage: node init.mjs [TARGET_DIR] [--preset NAME] [--shared-rules FILE] [--check] [--list-presets]
@@ -23,7 +24,7 @@ exit codes: 0 done (with --check: setup complete), 1 --check found unfinished se
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginRoot = path.resolve(here, "..");
-const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "feature-map.mjs", "lib/files.mjs", "lib/fingerprint.mjs"];
+const TOOLS = ["guard.mjs", "verify.mjs", "api-map.mjs", "feature-map.mjs", "lib/files.mjs", "lib/fingerprint.mjs", "lib/messages.mjs", "lib/cli-text.mjs"];
 const PRESETS_DIR = path.join(pluginRoot, "templates", "presets");
 const COMMON = [
 	["templates/common/rules.md", ".stack-agent/rules.md"],
@@ -153,6 +154,32 @@ export function branchNote(target) {
 	if (!branch && listed.length === 1 && listed[0] === "main")
 		return `${workflow.shown} runs on pushes to main; the default branch is not known yet (no origin/HEAD), so change "branches" if yours has another name (\`git remote set-head origin --auto\` records it once the remote exists)`;
 	return null;
+}
+
+// What --check says when verify has never passed a full run here. Setup is only proven once the tools, the checks,
+// and the server have run together once; until then a wrong command or a missing program is still hiding. A run that
+// passed on older code still counts: this is about setup, not about the code now (verify --evidence-status is that).
+// It is a line of its own, not part of the exit code.
+export function proofNote(target, lang = "en") {
+	const config = path.join(target, ".stack-agent/verify.json");
+	if (!fs.existsSync(config)) return null;
+	let dir = ".stack-agent/evidence";
+	try {
+		const c = JSON.parse(fs.readFileSync(config, "utf8"));
+		if (typeof c?.evidenceDir === "string" && c.evidenceDir) dir = c.evidenceDir;
+	} catch {
+		return null;
+	}
+	const latest = path.resolve(target, dir, "latest.json");
+	let rec = null;
+	try {
+		rec = JSON.parse(fs.readFileSync(latest, "utf8"));
+	} catch {}
+	if (rec?.ok === true && rec.full === true) return null;
+	const run = say(lang, "init.proof.run");
+	if (!rec) return say(lang, "init.proof.never", { run });
+	if (rec.ok !== true) return say(lang, "init.proof.failed", { file: toPosix(path.relative(target, latest)), run });
+	return say(lang, "init.proof.partial", { run });
 }
 
 // The project's folder and, for a project in a subfolder of a repository (a monorepo), the repository's top folder,
@@ -480,7 +507,7 @@ export function init(target, preset = "generic") {
 	return report;
 }
 
-function main(argv) {
+export function main(argv, opts = {}) {
 	const args = parseArgs(argv, { flags: ["check", "help", "list-presets"], options: ["preset", "shared-rules"] });
 	if (args.help) return { code: 0, text: USAGE };
 	if (args["list-presets"]) return { code: 0, text: listPresets().join("\n") };
@@ -489,6 +516,7 @@ function main(argv) {
 	const target = realPath(args._[0] ?? process.cwd());
 	if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) throw new ConfigError(`target is not a directory: ${target}`);
 	if (path.resolve(target) === pluginRoot) throw new ConfigError("target is the Stack Agent repo itself; run this inside the project you want to set up");
+	const lang = opts.lang ?? projectLang(target);
 	const recorded = recordedPreset(target);
 	const preset = args.preset ?? recorded ?? "generic";
 	templatesFor(preset);
@@ -500,7 +528,10 @@ function main(argv) {
 	if (sharedFrom && !args.check) lines.push(vendorSharedRules(target, sharedFrom));
 	const shared = sharedRulesStatus(target);
 	const pending = [...pendingSetup(target), ...shared.pending];
-	lines.push(pending.length ? `\nsetup unfinished in ${toPosix(target)}:\n${pending.map((p) => "  - " + p).join("\n")}` : `\nsetup complete in ${toPosix(target)}`);
+	lines.push(pending.length ? say(lang, "init.unfinished", { target: toPosix(target), list: pending.map((p) => "  - " + p).join("\n") }) : say(lang, "init.complete", { target: toPosix(target) }));
+	const proof = proofNote(target, lang);
+	if (proof) lines.push(`
+${proof}`);
 	const notes = shared.notes.map((n) => `  - ${n}`);
 	const missing = missingRules(target);
 	if (missing.length) {
@@ -508,7 +539,7 @@ function main(argv) {
 		notes.push(...missing.map((id) => `  - guard rule ${id} is in every preset but not in .stack-agent/guard.config.json; copy the rule from ${from} into it, or add "${id}" to "declinedRules" in your .stack-agent/guard.config.json to leave it out on purpose`));
 	}
 	for (const note of [branchNote(target), nodeNote(target), lintNote(target)]) if (note) notes.push(`  - ${note}`);
-	if (notes.length) lines.push(`\nnotes (do not affect the exit code):`, ...notes);
+	if (notes.length) lines.push(say(lang, "init.notes"), ...notes);
 	return { code: args.check && pending.length ? 1 : 0, text: lines.join("\n") };
 }
 

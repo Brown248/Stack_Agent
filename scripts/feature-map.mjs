@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { projectLang, say } from "./lib/cli-text.mjs";
 import { ConfigError, parseArgs, readJson } from "./lib/files.mjs";
 
 const USAGE = `usage: node feature-map.mjs [--root DIR] [--map FILE] [--draft] [--suggest] [--json]
@@ -325,11 +326,12 @@ export function suggest({ root, details, checkNames, used = new Set() }) {
 	return out;
 }
 
-export function main(argv) {
+export function main(argv, opts = {}) {
 	const args = parseArgs(argv, { flags: ["draft", "json", "help", "suggest"], options: ["root", "map"] });
 	if (args.help) return { code: 0, text: USAGE };
 	const root = path.resolve(args.root ?? process.cwd());
 	const checks = checksOf(root);
+	const lang = opts.lang ?? projectLang(root);
 	if (args.draft) return { code: 0, text: draftFeatureMap(checks) };
 	const mapRel = args.map ?? DEFAULT_MAP;
 	const mapFile = path.resolve(root, mapRel);
@@ -341,9 +343,9 @@ export function main(argv) {
 	const { problems, warnings, details, covered, cases, casesCovered, named } = diffFeatureMap({ root, rows, checkNames, sections: parseCases(mapText) });
 	const suggestions = args.suggest && problems.length ? suggest({ root, details, checkNames, used: named }) : [];
 	if (args.json) return { code: problems.length ? 1 : 0, text: JSON.stringify({ ok: problems.length === 0, features: rows.length, cases, problems, warnings, ...(args.suggest ? { suggestions } : {}) }, null, 2) };
-	const out = [...problems, ...suggestions.map((s) => `  suggestion: ${s}`), ...warnings.map((w) => `  warning: ${w}`)];
-	const tail = cases ? `, ${cases} case(s), ${casesCovered} covered by checks` : "";
-	out.push(problems.length ? `feature-map: DRIFT (${problems.length} problem(s))` : `feature-map: ok (${rows.length} feature(s), ${covered} covered by verify checks${tail})`);
+	const out = [...problems, ...suggestions.map((s) => say(lang, "map.suggestion", { text: s })), ...warnings.map((w) => say(lang, "map.warning", { text: w }))];
+	const tail = cases ? say(lang, "feature.tail", { cases, casesCovered }) : "";
+	out.push(problems.length ? say(lang, "feature.drift", { n: problems.length }) : say(lang, "feature.ok", { features: rows.length, covered, tail }));
 	return { code: problems.length ? 1 : 0, text: out.join("\n") };
 }
 

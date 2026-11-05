@@ -16,8 +16,8 @@ The upstream folders `in-progress` and `deprecated` were not taken.
 
 How far each skill has moved from upstream. *Rewritten* means the text is new, in this repository's style, with upstream's idea and structure; *edited* means upstream's text with changes:
 
-- **rewritten:** `tdd`, `code-review`, `pr`, `domain-modeling`, `codebase-design`, `prototype`, `research`, `grilling`, `writing-for-agents`, `which-skill`, `setup-workflow`, `triage`, `to-spec`, `to-tickets`, `implement`, `implement-spec`, `wayfinder`, `git-guardrails`, `re-explain`
-- **edited:** `handoff`, `retro`, `teach`, `to-questionnaire`, `improve-codebase-architecture`, `step-script`, `setup-pre-commit`, `migrate-to-shoehorn`, `scaffold-exercises`
+- **rewritten:** `tdd`, `code-review`, `pr`, `domain-modeling`, `codebase-design`, `prototype`, `research`, `grilling`, `writing-for-agents`, `which-skill`, `setup-workflow`, `triage`, `to-spec`, `to-tickets`, `implement`, `implement-spec`, `wayfinder`, `git-guardrails`, `re-explain`, `handoff`
+- **edited:** `retro`, `teach`, `to-questionnaire`, `improve-codebase-architecture`, `step-script`, `setup-pre-commit`, `migrate-to-shoehorn`, `scaffold-exercises`
 
 Renamed so that no name carries the author's: `ask-matt` is now `which-skill`, `setup-matt-pocock-skills` is `setup-workflow`, `wait-what` is `re-explain`, `wizard` is `step-script`, `git-guardrails-claude-code` is `git-guardrails`. Merged: `grill-me` and `grill-with-docs`, two wrappers that only called `grilling`, are now one option inside `grilling`. Folded in: `diagnosing-bugs` is part of Stack Agent's own `debug` (its catalogue of ways to build a repro is `debug/LOOPS.md`, and its human-in-the-loop script is `debug/scripts/hitl-loop.template.mjs`, ported from bash to Node).
 

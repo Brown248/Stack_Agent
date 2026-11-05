@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: codebase-design-seam
+description: "A question about a shallow module should start the codebase-design skill and answer with its vocabulary (module, interface, seam, depth), apply the deletion test to the module, and name a concrete deeper interface and where the seam goes, without editing code. The case grants Read, Glob, and Grep only."
+tags: [skills, codebase-design]
+context:
+  scaffold_script: scaffold.sh

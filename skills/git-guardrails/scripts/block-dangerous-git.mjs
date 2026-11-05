@@ -23,8 +23,8 @@ const RULES = {
 // Returns the name of the first rule the command breaks, or null.
 export function blocked(command) {
 	for (const match of String(command ?? "").matchAll(GIT)) {
-		const rule = RULES[match[2]];
-		if (rule.test(match[3])) return rule.name;
+		const hit = RULES[match[2]];
+		if (hit.test(match[3])) return hit.name;
 	}
 	return null;
 }

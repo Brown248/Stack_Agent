@@ -55,7 +55,7 @@ Move too little down and the top file bloats. Move too much and the agent never 
 Two rules follow from the ladder:
 
 - **Keep related material together.** A concept's definition, rules, and caveats go under one heading, so reading one part brings its neighbours along. Scattering one idea across many places is as bad as repeating it.
-- **Stop a file from sprawling.** A document that is simply too long loses attention on every line, even when every line is true and unique. Keep a `SKILL.md` under 500 lines, move reference into files one level deep (a file that points to a file that points to another is too deep), and split by case so each path carries only what it needs.
+- **Stop a file from sprawling.** A document that is simply too long loses attention on every line, even when every line is true and unique. Keep a skill's main file under 500 lines, move reference into files one level deep (a file that points to a file that points to another is too deep), and split by case so each path carries only what it needs.
 
 ## 5. Match the freedom to the risk
 
@@ -75,6 +75,8 @@ Every step ends on a **completion criterion**: the condition that tells the agen
 - **Demand.** How much the criterion requires. "Every modified model accounted for" makes the agent dig where "produce a change list" does not. Demand is not tied to steps: "every rule applied" works on a flat list of reference as well.
 
 The strongest criteria are checkable and cover everything: a command whose output proves it, a list with nothing left on it.
+
+When the document already has steps, a finish line says how the existing step ends; it does not add work. Take it from the step's own command (its exit code, its output). A check that needs a command the document did not have, a new step, or a new stop condition changes the procedure, not the wording: put it in the report as a suggestion and leave the steps as they were. The same goes for reordering steps or merging two of them.
 
 Split by sequence only when later steps tempt the agent to rush the current one; merging two sequences exposes each one's later steps to the other.
 
@@ -115,6 +117,7 @@ Rereading proves little, because you know what you meant. Run it:
 - Every rule has a home chosen in section 1, and no rule a script could check lives only in prose.
 - Each pointer names its cases, and no case appears twice.
 - Each step has an observable finish line.
+- A rewrite of an existing procedure changed how it is said, not what it does: no step or command was added, dropped, or reordered. Anything you think is missing is in the report as a suggestion.
 - No sentence fails the "changes the default behavior" test, and no fact is copied from the project's own files.
 - The document was run on a real task, and the behavior matched what it asks for.
 

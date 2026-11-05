@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: Use when the user wants a throwaway prototype to answer a design question before any real code is written. Triggers - "prototype this", "build a quick demo", "try a few UI variations", "sanity-check this state model", "does this logic feel right", "what should this look like", "ทำต้นแบบ", "ลองทำแบบร่างให้ดูหน่อย", "ขอดูหลายแบบ".
+description: Use this first, before writing any real code, when the user wants to see or feel an idea in throwaway code. Triggers - "prototype this", "mock up two layouts", "build a quick throwaway version", "try a few UI variations", "try it in a scratch file", "does this logic feel right", "what should this look like", "ทำต้นแบบ", "ลองทำแบบร่างให้ดูหน่อย", "ขอดูหลายแบบ".
 ---
 
 # Build a throwaway prototype that answers one question

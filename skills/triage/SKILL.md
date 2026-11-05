@@ -34,7 +34,7 @@ Five state roles, one per issue:
 
 - `needs-triage`: the maintainer has not evaluated it yet.
 - `needs-info`: waiting for the reporter to answer.
-- `ready-for-agent`: fully specified, an agent can do it without asking anyone.
+- `ready-for-agent`: fully specified, an agent can do it from the ticket alone.
 - `ready-for-human`: a person has to do it.
 - `wontfix`: will not be acted on.
 

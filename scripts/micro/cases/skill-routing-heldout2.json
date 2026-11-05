@@ -1,0 +1,14 @@
+[
+	{ "request": "The billing code has a class that only delegates to another class. Worth merging? What should callers see?", "ok": ["codebase-design"] },
+	{ "request": "How should I structure the interface to the email sender so I can test the rest of the app without sending mail?", "ok": ["codebase-design"] },
+	{ "request": "Our inventory module exposes twelve functions. Can it be simpler to use?", "ok": ["codebase-design"] },
+	{ "request": "What does Stripe's documentation say about idempotency keys? Give me a short report with links.", "ok": ["research"] },
+	{ "request": "Dig into how Postgres handles row-level locking and summarize what the manual says.", "ok": ["research"] },
+	{ "request": "Compare what the Node.js docs and the Deno docs say about permissions, citing both.", "ok": ["research"] },
+	{ "request": "Implement the password-strength checker using red-green-refactor.", "ok": ["tdd"] },
+	{ "request": "I'd like to build the invoice total calculator by writing the tests first.", "ok": ["tdd"] },
+	{ "request": "Write the failing test for the empty-cart case before touching the code.", "ok": ["tdd"] },
+	{ "request": "Sketch three versions of the onboarding screen in code; I just want to compare them.", "ok": ["prototype"] },
+	{ "request": "Can you whip up a disposable demo of the drag-and-drop idea?", "ok": ["prototype"] },
+	{ "request": "Let's explore the retry logic as a quick experiment before designing it properly.", "ok": ["prototype"] }
+]

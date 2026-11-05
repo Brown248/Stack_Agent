@@ -85,7 +85,7 @@ When every ticket is merged, check out the integration branch and prove it as a 
    ```
 
    Keep its evidence file path (`.stack-agent/evidence/verify-*.json`) for the report.
-3. Call the Skill tool with `name` set to `code-review`, with the commit from step 2 as the fixed point and the spec as the spec. Collect all its findings.
+3. Call the Skill tool with `name` set to `stack-agent:code-review`, with the commit from step 2 as the fixed point and the spec as the spec. Use the full name: a bare `code-review` can start Claude Code's own review command, which takes an effort level and reviews the working tree, not a fixed point. Collect all its findings.
 4. Give every real finding to one fresh implementer subagent, on its own branch, merged back through a merger as in step 5. Then repeat points 1 and 2.
 
 If a check cannot run here, say which one and why. Never report it as passing.
@@ -94,7 +94,7 @@ If a check cannot run here, say which one and why. Never report it as passing.
 
 - If the user asked for a pull request: push the integration branch (that request covers the push), open a draft pull request that closes the spec and the tickets in the way the tracker file describes, and mark it ready for review only if the user also asked for that. A pull request that was opened as a draft stays a draft until then.
 - If the user did not ask for one: leave the branch where it is, push nothing, and tell the user how to open the pull request.
-- Close the tickets the way the tracker file says. If the tracker closes work only when a pull request merges, leave them open and say so.
+- Close the tickets the way the tracker file says (in the local tracker: `Status: done` and a comment with the branch and the commit). If the tracker closes work only when a pull request merges, leave them open and say so.
 
 Then clean up. Remove every implementer worktree (`git worktree remove <path>`, then `git worktree prune`), and delete the ticket branches that are merged (`git branch -d`, never `-D`). Leave the notes folder, and say where it is.
 

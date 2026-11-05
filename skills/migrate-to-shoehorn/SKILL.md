@@ -127,7 +127,7 @@ getUser(fromAny({ body: { id: 123 } }));
    - [ ] Replace `as Type` with `fromPartial()`.
    - [ ] Replace `as unknown as Type` with `fromAny()`.
    - [ ] Add imports from `@total-typescript/shoehorn`.
-   - [ ] Run the type check (for example `npx tsc --noEmit`, or the project's `typecheck` script) and then the tests.
+   - [ ] Run the type check (the project's `typecheck` script, or `tsc --noEmit` from the project's own TypeScript) and then the tests.
    - [ ] In a project with `.stack-agent/verify.json`, run `node .stack-agent/bin/verify.mjs` before calling the work done.
 
 ## Done when

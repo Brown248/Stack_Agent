@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: grilling-first-round
+description: "A request to grill a plan should start the grilling skill and answer with one numbered round of questions, each with a recommended answer, after looking up in the code what the code can answer. Nothing is edited and nothing is built. The case grants Read, Glob, and Grep only."
+tags: [skills, grilling]
+context:
+  scaffold_script: scaffold.sh

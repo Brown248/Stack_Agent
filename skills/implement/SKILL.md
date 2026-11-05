@@ -70,7 +70,9 @@ If a check cannot run here (a missing API key, a service that is down), say whic
 
 Commit the work on the feature branch in step 2, in small commits with plain messages that say what changed and why. Do not push. Do not merge. Do not open a pull request unless the user asked.
 
-Then call the Skill tool with `name` set to `code-review`, with the commit from step 2 as the fixed point (and the spec path, if there is one). Read the findings. Fix each real one with `tdd`, run step 4 again, and commit the fix. If you disagree with a finding, say so in the report with your reason.
+Then call the Skill tool with `name` set to `stack-agent:code-review`, with the commit from step 2 as the fixed point (and the spec path, if there is one). Use the full name: a bare `code-review` can start Claude Code's own review command, which takes an effort level and reviews the working tree, not a fixed point. Read the findings. Fix each real one with `tdd`, run step 4 again, and commit the fix. If you disagree with a finding, say so in the report with your reason.
+
+Then mark the ticket done the way `.stack-agent/workflow/tracker.md` describes closing one. In the local tracker that is `Status: done` plus a comment with the branch and the commit; in a tracker that closes work only when a pull request merges, leave the ticket open and say so in the report. Skip this when the work did not come from a ticket.
 
 ## Done when
 

@@ -74,6 +74,12 @@ Ideas from the original talks that were left out (auto-merge, browser control, c
 - **Why not:** no command can say that a rewrite sounds human or a layout looks good, so verify, guard, and the hooks have nothing to hold on to; the claims they make come from a single blind test or from the authors' own demos. RAGFlow is a different product, and a list holds nothing to adopt.
 - **Instead:** nothing taken. Stack Agent's `frontend-web` preset checks that the page loads and the e2e command passes, and says so rather than judging looks.
 
+## A mod that hands a long session to a fresh one
+
+- **Source:** alexknowshtml/claude-auto-handoff (MIT, v0.8.6, https://github.com/alexknowshtml/claude-auto-handoff): a Claude Code mod (a function-hook plugin that needs a Claude Code build with mods). At a context threshold (160k tokens by default) it has Haiku write a structured brief to disk, refuses further tool calls, runs `/clear`, and seeds the new session with a line pointing at the brief. It also has a panel above the prompt, a brief viewer served on a Tailscale IP, and a status-line link.
+- **Why not:** it is a separate product about the life of a session, written in TypeScript and TSX, with a model call of its own, a web server, and a dependency on a Claude Code build feature. That breaks "plain Node ESM, no install step, generic". Running `/clear` for the user is also not a check of the work. It does not clash with Stack Agent: verify evidence is a file tied to the code, so a fresh session still sees it.
+- **Instead:** the typed-only `handoff` skill, which now takes three ideas from the mod's brief template: the user's last request copied word for word, with whether it was answered; assumptions to verify, each with the command that checks it, plus a confidence line; and a state read from commands (`git status`, `git log`, `verify --evidence-status`, running processes) with "not checked" in place of memory. Anyone who wants automatic handoffs can install the mod beside Stack Agent.
+
 ## Fixing the legacy violation in the sample backend
 
 - **Source:** anyone reading `examples/sample-backend/src/modules/reports/controller.js`.

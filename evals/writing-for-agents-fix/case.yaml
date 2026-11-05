@@ -1,0 +1,6 @@
+schema_version: "1.1"
+name: writing-for-agents-fix
+description: "A project skill whose description is a procedure (with 'then') and whose body is long and repeats itself should be fixed with the writing-for-agents skill: the description becomes a 'Use ...' line that says when to start and holds no steps, the steps stay in the body, and nothing is invented. Run it with --allow-tools Write Edit."
+tags: [skills, writing-for-agents]
+context:
+  scaffold_script: scaffold.sh
